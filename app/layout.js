@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google'
 import './globals.css'
+import prisma from '../prisma/prisma'
 
 const inter = Inter({ subsets: ['latin'] })
 
