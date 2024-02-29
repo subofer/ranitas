@@ -1,35 +1,41 @@
-import S from './ListadoProductos.module.css'
+"use server"
 import { listaProductos } from '@/prisma/consultas/productos';
 
-const Thead = ({titulos}) => (
-  <thead>
+const Thead = ({titulos, ...props}) => (
+  <thead {...props}>
     <tr>
       {titulos.map((t,i) => <th key={i}>{t}</th> )}
     </tr>
   </thead>
 )
+const Cell = ({children, ...props}) => (
+  <td className='px-2 border-r-2 border-r-slate-500' {...props}>{children}</td>
+);
 
 const RenglonProducto = async ({item}) => (
-  <tr>
-    <td>{item.categoria.nombre}</td>
-    <td>{item.codigoBarra}</td>
-    <td>{item.nombre}</td>
-    <td>{item.descripcion}</td>
-    <td>${item.precios[0]?.precio}</td>
+  <tr className='table-row odd:bg-slate-300 even:bg-slate-200'>
+    <Cell>{item.categoria?.nombre}</Cell>
+    <Cell>{item.codigoBarra}</Cell>
+    <Cell>{item.nombre}</Cell>
+    <Cell>{item.descripcion}</Cell>
+    <Cell className='text-right px-2'>${item.precios[0]?.precio}</Cell>
   </tr>
 )
 
-const ListadoProductos = async () => {
+const ListadoProductos = async (props) => {
   const titulos = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion', 'Ultimo Precio']
-  const listadoProductos = await listaProductos()
+  const productos = await listaProductos()
   return (
-    <table className={S.tableExcel}>
-      <caption>Listado Productos</caption>
-      <Thead titulos={titulos}/>
+    <table className={ `table border-2 border-slate-400 ${props.className}`} >
+      <caption className="table-caption bg-slate-200">Listado Productos</caption>
+      <Thead 
+        className='table-header-group bg-slate-400'
+        titulos={titulos}
+      />
       <tbody>
-        {listadoProductos.map(producto => 
-          <RenglonProducto key={producto.id} item={producto}/>
-        )}
+        {productos.map( (p,i) => (
+          <RenglonProducto key={i} item={p}/>
+        ))}
       </tbody>
     </table>
 

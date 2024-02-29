@@ -1,6 +1,7 @@
 'use server'
 import formToObject from "@/lib/formToObject"
 import { revalidatePath } from 'next/cache'
+
 export async function guardarProducto(formData) {
   const productObject = formToObject(formData)
   
@@ -9,17 +10,27 @@ export async function guardarProducto(formData) {
 
   delete productObject.categoriaId;
   delete productObject.precio;
-  
-  await prisma.productos.create({
-    data: {
-      ...productObject,
-      categoriaId,
-      precios: { 
-        create: [{ precio }],
-      },
+  let response = ""
+  try{
+    await prisma.productos.create({
+      data: {
+        ...productObject,
+        categoriaId,
+        precios: { 
+          create: [{ precio }],
+        },
+      }
+    })
+    response = "Producto guardado con exito"
+  } catch(e) {
+    console.log(e.code)
+    console.log(e.meta)
+    if(e.code == "P2002"){
+      console.log(`Ya existe un producto con ${e.meta.target[0]} = ${productObject[e.meta.target[0]]}`)
     }
-  })
-  
+    
+    response = (`Ya existe un producto con ${e.meta.target[0]} = ${productObject[e.meta.target[0]]}`)
+  }
   revalidatePath('/productos')
-  
+  return response
 }
