@@ -25,7 +25,7 @@ export const nuevoPrecioProducto = async (idDelProducto, nuevoPrecio) => {
   });
 }
 
-export const listaProductos = async () => await prisma.productos.findMany({
+export const getProductos = async () => await prisma.productos.findMany({
   include:{
     categoria: true,
     precios: {

@@ -1,4 +1,4 @@
-import { CargaProducto } from '../components/productos/CargaProducto'
+import { CargaProducto } from '../components/formularios/CargaProducto'
 import ListadoProductos from '../components/productos/ListadoProductos'
 
 export default function Home() {

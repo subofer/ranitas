@@ -1,21 +1,13 @@
-"use server"
 import { getCategorias } from "@/prisma/consultas/categorias"
-import Select from "../forms/Select";
+import FilterSelect from "../formComponents/FilterSelect";
 
-const SelectCategoria = async (props) => {
-  const opciones =await getCategorias()
-  
-  return(
-    <Select 
-      {...props}
-      defaultText={"Seleccione una categoría"}
-      defaultValue={0}
-      options={opciones}
-      valueField={"id"}
-      textField={"nombre"}
-      type={"number"}
-    />
-  )
-};
-    
+const SelectCategoria = async (props) => (
+  <FilterSelect
+    options={await getCategorias()}
+    valueField={"id"}
+    textField={"nombre"}
+    {...props}
+  />
+)
+
 export default SelectCategoria;

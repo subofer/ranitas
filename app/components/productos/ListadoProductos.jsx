@@ -1,5 +1,5 @@
 "use server"
-import { listaProductos } from '@/prisma/consultas/productos';
+import { getProductos } from '@/prisma/consultas/productos';
 
 const Thead = ({titulos, ...props}) => (
   <thead {...props}>
@@ -24,7 +24,7 @@ const RenglonProducto = async ({item}) => (
 
 const ListadoProductos = async (props) => {
   const titulos = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion', 'Ultimo Precio']
-  const productos = await listaProductos()
+  const productos = await getProductos()
   return (
     <table className={ `table border-2 border-slate-400 ${props.className}`} >
       <caption className="table-caption bg-slate-200">Listado Productos</caption>

@@ -1,8 +1,7 @@
-"use server"
 import prisma from "../prisma";
 
 export const getCategorias = async () => (
-  await prisma.categorias.findMany()
+  await prisma.categorias.findMany({orderBy: [{nombre: 'asc'}]})
 );
 
 export const getCategoria = async (idCategoria) => (
