@@ -11,7 +11,6 @@ export async function guardarProducto(formData) {
 
   delete productObject.categoriaId;
   delete productObject.precio;
-  delete productObject.ignore;
   delete productObject.filterSelect;
   let response = ""
   try{

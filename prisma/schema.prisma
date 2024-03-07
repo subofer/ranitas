@@ -8,22 +8,22 @@ generator client {
 }
 
 model Productos {
-  id          Int        @id @default(autoincrement())
-  nombre      String
-  codigoBarra String @unique
-  descripcion String?
-  createdAt  DateTime  @default(now())
-  categoriaId Int?
-  categoria   Categorias? @relation(fields: [categoriaId], references: [id])
-  precioActual Float      @default(0)
-  precios     Precios[]
+  id            Int         @id @default(autoincrement())
+  nombre        String
+  codigoBarra   String      @unique
+  descripcion   String?
+  createdAt     DateTime    @default(now())
+  categoriaId   Int?
+  categoria     Categorias? @relation(fields: [categoriaId], references: [id])
+  precioActual  Float       @default(0)
+  precios       Precios[]
 }
 
 model Categorias {
-  id       Int         @id @default(autoincrement())
-  createdAt  DateTime  @default(now())
-  nombre   String
-  products Productos[]
+  id          Int         @id @default(autoincrement())
+  createdAt   DateTime    @default(now())
+  nombre      String      @unique
+  products    Productos[]
 }
 
 model Precios {
