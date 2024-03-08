@@ -1,0 +1,20 @@
+NEXT_PUBLIC_API_BASE_URL="http://localhost:3000"
+DATABASE_URL="postgresql://postgres@localhost:5432/las_ranitas?schema=public"
+
+version Node v21.5.0
+Docker version 25.0.4, build 1a576c5
+
+
+Primsa: {
+  prisma                  : 5.9.1
+  @prisma/client          : 5.9.1
+  Computed binaryTarget   : debian-openssl-3.0.x
+  Operating System        : linux
+  Architecture            : x64
+  Node.js                 : v21.5.0
+  Query Engine (Node-API) : libquery-engine 23fdc5965b1e05fc54e5f26ed3de66776b93de64 (at node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node)
+  Schema Engine           : schema-engine-cli 23fdc5965b1e05fc54e5f26ed3de66776b93de64 (at node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x)
+  Schema Wasm             : @prisma/prisma-schema-wasm 5.9.0-32.23fdc5965b1e05fc54e5f26ed3de66776b93de64
+  Default Engines Hash    : 23fdc5965b1e05fc54e5f26ed3de66776b93de64
+  Studio                  : 0.497.0
+}

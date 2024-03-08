@@ -32,11 +32,34 @@ const tiposBotones ={
     hover:bg-red-300
     hover:ring-red-400
   `,
+  azul: `
+    bg-blue-500
+    hover:bg-blue-700
+    text-white
+    font-bold
+    py-2
+    ring-0
+    rounded
+    focus:outline-none
+    focus:shadow-outline
+  `,
+  rojo:`
+    bg-red-300
+    hover:bg-red-400
+    text-white
+    font-bold
+    py-2
+    ring-0
+    rounded
+    focus:outline-none
+    focus:shadow-outline
+  `
 };
 
 const Button = ({children, className, tipo = "default", ...props}) => (
   <button className={`
-      ${tiposBotones.basic}
+
+      ${tiposBotones.basic }
       ${tiposBotones[tipo]}
       ${className ? className : " " }
     ` }
