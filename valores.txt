@@ -2,6 +2,8 @@ NEXT_PUBLIC_API_BASE_URL="http://localhost:3000"
 DATABASE_URL="postgresql://postgres@localhost:5432/las_ranitas?schema=public"
 
 version Node v21.5.0
+version Npm v10.2.4
+
 Docker version 25.0.4, build 1a576c5
 
 
