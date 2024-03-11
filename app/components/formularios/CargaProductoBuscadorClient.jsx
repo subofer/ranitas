@@ -47,7 +47,7 @@ export const CargaProductoBuscadorClient = () => {
     props: {
       id: "FormCargarProducto",
       title: "Cargar Producto",
-      //action: guardarProducto,
+      action: guardarProducto,
     },
     inputs: [
       { Component: Input, name: "codigoBarra", label: "Codigo De Barras", placeholder: "Codigo de barras", onChange: handleInputChange },
