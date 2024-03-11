@@ -32,9 +32,9 @@ export const CargaProductoBuscadorClient = () => {
         const r = resultado.resultadosDeLaBusqueda[1]
         const newData= {
           codigoBarra: formData.codigoBarra,
-          nombre: r.titulo,
-          descripcion: r.titulo,
-          precio: r.precio.valor,
+          nombre: r?.titulo,
+          descripcion: r?.titulo,
+          precio: r?.precio?.valor,
           categoriaId: ''
         }
         setFormData(newData);
