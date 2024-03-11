@@ -2,6 +2,7 @@ import { guardarProducto } from "@/prisma/serverActions/productos"
 import SelectCategoria from "../categorias/SelectCategoria"
 import Input from "../formComponents/Input"
 import { FormCard } from "../formComponents/FormCard"
+import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 
 const cargarProductos = {
   props: {
@@ -10,7 +11,7 @@ const cargarProductos = {
     action: guardarProducto,
   },
   inputs: [
-    {Component: Input, name: "codigoBarra", label: "Codigo De Barras", placeholder:"Codigo de barras"},
+    {Component: Input, name: "codigoBarra", label: "Codigo De Barras", placeholder: "Codigo de barras"},
     {Component: Input, name: "nombre", label: "Nombre", placeholder:"Nombre"},
     {Component: Input, name: "descripcion" , label:"Descripcion", placeholder:"Descripcion"},
     {Component: Input, name: "precio" , label: "Precio", type: "number", min:0, placeholder:0},

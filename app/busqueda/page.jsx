@@ -1,33 +1,42 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from 'react';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
-import { closeBrowserInstance, getBrowserInstance } from '@/lib/puppeteerSession';
-import { buscarPorCodigoDeBarrasEnGoogle } from '@/lib/fetchGoogleResults';
-import Producto from '../components/productos/DetalleProducto';
+import buscarPorCodigoDeBarrasEnGoogle from '@/lib/fetchGoogleResults';
+import ResultadoBusqueda from '../components/productos/ResultadoBusqueda';
+import { closeBrowserInstance } from '@/lib/puppeteerSession';
 import Button from '../components/formComponents/Button';
-import getOrganicData from '@/lib/otraGoogle';
 
 
 export default function Home() {
   const inputRef = useRef(null)
   const [codigo, setCodigo] = useState('');
+  const [precodigo, setPrecodigo] = useState('');
+  const [html, setHtml] = useState('');
   const [productos, setProductos] = useState([]);
   const [yaSeBusco, setYaSeBusco] = useState(false);
 
   const handleSearch = useCallback(async () => {
-    //setProductos(await buscarPorCodigoDeBarras(codigo));
-    const pepe = await buscarPorCodigoDeBarrasEnGoogle(codigo)
-    //const pepes = await getOrganicData(codigo)
-    
+    const { resultadosDeLaBusqueda, html: htmlText }  = await buscarPorCodigoDeBarras(codigo)
+    setProductos(resultadosDeLaBusqueda)
+    setHtml(htmlText)
     setYaSeBusco(true)
   },[codigo])
+
+  const handleSearchCherrio = useCallback(async () => {
+    const { resultadosDeLaBusqueda, html: htmlText } = await buscarPorCodigoDeBarrasEnGoogle(codigo)
+    setProductos(resultadosDeLaBusqueda)
+    setHtml(htmlText)
+    setYaSeBusco(true)
+  },[codigo])
+
 
   useEffect(() => {
     const handleKeyDown = async (e) => {
       if ("0123456789".includes(e.key)) {
-        setCodigo(yaSeBusco ? e.key : (prev) => prev + e.key);
+        setPrecodigo(yaSeBusco ? e.key : (prev) => prev + e.key);
         setYaSeBusco(false)
       } else if (e.key === 'Enter') {
+        setCodigo(precodigo)
         await handleSearch()
       }
     };
@@ -35,6 +44,7 @@ export default function Home() {
     return async () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleSearch, yaSeBusco]);
 
 
@@ -56,6 +66,12 @@ export default function Home() {
             Buscar
           </Button>
 
+          <Button tipo="azul" className="mt-2"
+            onClick={() => handleSearchCherrio()}
+          >
+            Buscar con Cherio
+          </Button>
+
           <Button tipo="rojo" className="mt-2"
             onClick={() => closeBrowserInstance()}
           >
@@ -64,22 +80,15 @@ export default function Home() {
         </div>
       </div>
       {
-        productos.map((producto, index) => (
-          <Producto key={index} {...producto} />
+        productos?.map((producto, index) => (
+          <ResultadoBusqueda key={index} resultado={producto} />
         ))
       }
       {codigo !="" && productos.length == 0 &&
-        <Producto
-        titulo={"No se encontro ningun producto"}
-        descripcion={"sin producto"}
-        hasImagen={false}
-        precio={0}
-        incidencia={0}
-        nombreLocal={"No hay"}
-        url={""}
-        />
+        "Buscando"
       }
-
     </main>
   );
 }
+
+  //<div dangerouslySetInnerHTML={{ __html: html }}></div>
