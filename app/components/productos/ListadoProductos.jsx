@@ -1,13 +1,7 @@
 "use server"
 import { getProductos } from '@/prisma/consultas/productos';
+import Tabla from '../formComponents/Tabla';
 
-const Thead = ({titulos, ...props}) => (
-  <thead {...props}>
-    <tr>
-      {titulos.map((t,i) => <th key={i}>{t}</th> )}
-    </tr>
-  </thead>
-)
 const Cell = ({children, ...props}) => (
   <td className='px-2 border-r-2 border-r-slate-500' {...props}>{children}</td>
 );
@@ -23,24 +17,19 @@ const RenglonProducto = async ({item}) => (
 )
 
 const ListadoProductos = async (props) => {
-  const titulos = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion', 'Ultimo Precio']
+  const columnas = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion', 'Ultimo Precio']
   const productos = await getProductos()
   return (
-    <table className={ `table border-2 border-slate-400 ${props.className}`} >
-      <caption className="table-caption bg-slate-200">Listado Productos</caption>
-      <Thead 
-        className='table-header-group bg-slate-400'
-        titulos={titulos}
-      />
-      <tbody>
-        {productos.map( (p,i) => (
-          <RenglonProducto key={i} item={p}/>
-        ))}
-      </tbody>
-    </table>
-
+    <Tabla
+      columnas={columnas}
+      titulo={"Productos"}
+      {...props}
+    >
+      {productos.map((p,i) => (
+        <RenglonProducto key={i} item={p}/>
+      ))}
+    </Tabla>
   )
 };
-
 
 export default ListadoProductos;

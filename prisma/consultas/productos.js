@@ -1,3 +1,5 @@
+import prisma from "../prisma";
+
 export const ultimoPrecioDelProducto = async (idDelProducto) => await prisma.precios.findFirst({
   where: {
     productoId: idDelProducto,

@@ -54,7 +54,7 @@ export const CargaProductoBuscadorClient = () => {
       { Component: Input, name: "nombre", label: "Nombre", placeholder: "Nombre" , onChange: handleInputChange },
       { Component: Input, name: "descripcion", label: "Descripcion", placeholder: "Descripcion" , onChange: handleInputChange },
       { Component: Input, name: "precio", label: "Precio", type: "number", min: 0, placeholder: 0 , onChange: handleInputChange },
-      //{ Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange  }
+      { Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange  }
     ],
   };
 

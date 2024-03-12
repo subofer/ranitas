@@ -31,7 +31,7 @@ export const FormCard = ({children, props:{title, buttons, action}, ...props}) =
     >
       { title && <FormTitle>{title}</FormTitle> }
       { children }
-      { buttons !== false && <FormButtons order={props?.inputs?.length + 1}/> }
+      { buttons !== false && <FormButtons order={props?.inputs?.length + 1 || props?.formlength || 0}/> }
       { result?.error && result?.msg }
     </form>
   )

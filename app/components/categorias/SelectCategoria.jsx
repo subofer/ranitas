@@ -1,4 +1,3 @@
-
 import { getCategorias } from "@/prisma/consultas/categorias"
 import FilterSelect from "../formComponents/FilterSelect";
 

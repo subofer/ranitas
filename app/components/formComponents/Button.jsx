@@ -8,6 +8,10 @@ const tiposBotones ={
     transition duration-150 ease-in-out
     ring-2
   `,
+  icono:`
+    px-0
+    transition duration-150 ease-in-out
+  `  ,
   default: `
     bg-slate-200
     ring-slate-300
@@ -58,14 +62,13 @@ const tiposBotones ={
 
 const Button = ({children, className, tipo = "default", ...props}) => (
   <button className={`
-
       ${tiposBotones.basic }
       ${tiposBotones[tipo]}
-      ${className ? className : " " }
+      ${className}
     ` }
     { ...props }
   >
-    { children }
+    {children}
   </button>
 );
 
