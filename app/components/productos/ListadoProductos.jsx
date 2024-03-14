@@ -1,23 +1,24 @@
 "use server"
 import { getProductos } from '@/prisma/consultas/productos';
-import Tabla from '../formComponents/Tabla';
+import { Tabla, Tr, Td } from '../Tablas';
+import { BotonEliminarProducto } from './BotonEliminarProducto';
 
-const Cell = ({children, ...props}) => (
-  <td className='px-2 border-r-2 border-r-slate-500' {...props}>{children}</td>
-);
+const RenglonProducto = ({item}) => (
+  <Tr>
+    <Td className={"w-40 text-center"}>{item.categoria?.nombre}</Td>
+    <Td className={"w-40 text-center"}>{item.codigoBarra}</Td>
+    <Td>{item.nombre}</Td>
+    <Td>{item.descripcion}</Td>
+    <Td className={"flex justify-end w-auto"}>{item.size} {item.unidad}</Td>
+    <Td className='text-right px-2'>${item.precios[0]?.precio}
+      <BotonEliminarProducto className={"pl-1 pr-0"} item={item}/>
+    </Td>
 
-const RenglonProducto = async ({item}) => (
-  <tr className='table-row odd:bg-slate-300 even:bg-slate-200'>
-    <Cell>{item.categoria?.nombre}</Cell>
-    <Cell>{item.codigoBarra}</Cell>
-    <Cell>{item.nombre}</Cell>
-    <Cell>{item.descripcion}</Cell>
-    <Cell className='text-right px-2'>${item.precios[0]?.precio}</Cell>
-  </tr>
+  </Tr>
 )
 
 const ListadoProductos = async (props) => {
-  const columnas = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion', 'Ultimo Precio']
+  const columnas = ['Categoria', 'Codigo de Barras', 'Nombre', 'Descripcion','Tamaño', 'Ultimo Precio']
   const productos = await getProductos()
   return (
     <Tabla

@@ -1,43 +1,57 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from 'react';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
-import buscarPorCodigoDeBarrasEnGoogle from '@/lib/fetchGoogleResults';
-import ResultadoBusqueda from '../components/productos/ResultadoBusqueda';
-import { closeBrowserInstance } from '@/lib/puppeteerSession';
 import Button from '../components/formComponents/Button';
-
+import ResultadoBusqueda from '../components/productos/ResultadoBusqueda';
+import { getProductoPorCodigoBarra } from '@/prisma/consultas/productos';
 
 export default function Home() {
   const inputRef = useRef(null)
   const [codigo, setCodigo] = useState('');
-  const [precodigo, setPrecodigo] = useState('');
-  const [html, setHtml] = useState('');
+  const [error, setError] = useState("");
   const [productos, setProductos] = useState([]);
+  const [producto, setProducto] = useState({});
   const [yaSeBusco, setYaSeBusco] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleSearch = useCallback(async () => {
-    const { resultadosDeLaBusqueda, html: htmlText }  = await buscarPorCodigoDeBarras(codigo)
-    setProductos(resultadosDeLaBusqueda)
-    setHtml(htmlText)
-    setYaSeBusco(true)
+    setError("")
+    if(codigo.length >= 8){
+      setLoading(true)
+      const producto = await getProductoPorCodigoBarra(codigo)
+      setProducto(producto)
+      const { resultadosDeLaBusqueda } = await buscarPorCodigoDeBarras(codigo)
+      setProductos(resultadosDeLaBusqueda)
+      setLoading(false)
+    } else {
+      setYaSeBusco(true)
+      setError(`
+        ${codigo == ""
+        ? "No ingreso ningun Codigo" :
+        `${codigo} <- Formato de codigo incorrecto`}
+      `)
+    }
   },[codigo])
 
-  const handleSearchCherrio = useCallback(async () => {
-    const { resultadosDeLaBusqueda, html: htmlText } = await buscarPorCodigoDeBarrasEnGoogle(codigo)
-    setProductos(resultadosDeLaBusqueda)
-    setHtml(htmlText)
-    setYaSeBusco(true)
-  },[codigo])
+  const handleReset = useCallback(async () => {
+    setLoading(true)
+    setProductos([])
+    setCodigo("")
+    setLoading(false)
+    setError("")
+  },[])
 
 
   useEffect(() => {
-    const handleKeyDown = async (e) => {
-      if ("0123456789".includes(e.key)) {
-        setPrecodigo(yaSeBusco ? e.key : (prev) => prev + e.key);
-        setYaSeBusco(false)
-      } else if (e.key === 'Enter') {
-        setCodigo(precodigo)
-        await handleSearch()
+    const handleKeyDown = (e) => {
+      if (e.key === 'Enter') {
+        setYaSeBusco(true)
+        handleSearch()
+      } else {
+        if("1234567890".includes(e.key)){
+          setCodigo((prev) => yaSeBusco ? e.key : prev + e.key);
+          setYaSeBusco(false)
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -59,36 +73,43 @@ export default function Home() {
           value={codigo}
           onChange={(e) => setCodigo(e.target.value)}
         />
+
+        <div className="flex items-center text-red-700 h-4 mt-1">
+          <span>{error}</span>
+        </div>
+
         <div className='flex flex-row gap-4'>
           <Button tipo="azul" className="mt-2"
             onClick={() => handleSearch()}
+            loading={loading}
           >
             Buscar
           </Button>
 
-          <Button tipo="azul" className="mt-2"
-            onClick={() => handleSearchCherrio()}
-          >
-            Buscar con Cherio
-          </Button>
-
           <Button tipo="rojo" className="mt-2"
-            onClick={() => closeBrowserInstance()}
+            onClick={() => handleReset()}
           >
-            Reiniciar motor
+            Borrar
           </Button>
         </div>
       </div>
+      <div className=''>
+        {
+          !loading && producto && JSON.stringify(producto)
+        }
+      </div>
+      <div className=''>
+        {
+          !loading && productos[0] && <ResultadoBusqueda resaltado={true} resultado={productos[0] || {}} />
+        }
+      </div>
+      <div className='grid grid-cols-2'>
       {
-        productos?.map((producto, index) => (
+        !loading && productos?.map((producto, index) =>
           <ResultadoBusqueda key={index} resultado={producto} />
-        ))
+        )
       }
-      {codigo !="" && productos.length == 0 &&
-        "Buscando"
-      }
+      </div>
     </main>
   );
 }
-
-  //<div dangerouslySetInnerHTML={{ __html: html }}></div>

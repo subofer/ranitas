@@ -14,6 +14,8 @@ model Productos {
   descripcion   String?
   createdAt     DateTime    @default(now())
   categoriaId   Int?
+  size          Int?
+  unidad        String?
   categoria     Categorias? @relation(fields: [categoriaId], references: [id])
   precioActual  Float       @default(0)
   precios       Precios[]

@@ -1,47 +1,56 @@
 "use client"
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { guardarProducto } from "@/prisma/serverActions/productos";
 import SelectCategoria from "../categorias/SelectCategoria";
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
 import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 import { CargaProductoBuscador } from './CargaProductoBuscador';
+import { textos } from '@/lib/manipularTextos';
 
 export const CargaProductoBuscadorClient = () => {
-  const [formData, setFormData] = useState({
-    codigoBarra: '',
-    nombre: '',
-    descripcion: '',
-    precio: '',
-    categoriaId: ''
-  });
+  const blankForm = {codigoBarra: '',nombre: '',descripcion: '',precio: '',categoriaId: ''}
+  const [formData, setFormData] = useState(blankForm);
+
+
+  const formDataSeter = (key, value) => setFormData(prev => ({ ...prev, [key]: value }))
+
+  const handleSetFormData = useCallback((newData) => {
+    console.log(newData)
+    Object.keys(newData).forEach(key => {
+      newData[key] != undefined
+      ? formDataSeter(key, newData[key])
+      : null
+    })
+  },[])
 
   // Actualiza el estado del formulario
-  const handleInputChange = ({target: {name, value }}) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const handleInputChange = ({target: { name, value }}) => (
+    formDataSeter(name, value)
+  );
+
+  //Reset formData
+  const handleReset = () => handleSetFormData(blankForm);
 
   // Busca por código de barras cuando el campo correspondiente cambia
   useEffect(() => {
     const buscarProducto = async () => {
-      if (formData.codigoBarra) {
-        const resultado = await buscarPorCodigoDeBarras(formData.codigoBarra);
-        // Actualizar estado basado en la búsqueda
-        //setFormData(...resultado.resultadosDeLaBusqueda[1]);
-        console.log(resultado.resultadosDeLaBusqueda[1])
-        const r = resultado.resultadosDeLaBusqueda[1]
-        const newData= {
+      if (formData.codigoBarra.length > 8) {
+        const { primerResultado: r,
+          resultadosDeLaBusqueda } = await buscarPorCodigoDeBarras(formData.codigoBarra);
+        console.log('Primer Resultado',r)
+        console.log('todos Resultados',resultadosDeLaBusqueda)
+        const newData = {
           codigoBarra: formData.codigoBarra,
-          nombre: r?.titulo,
-          descripcion: r?.titulo,
+          nombre: r?.detalles?.nombre ? textos.mayusculas.primeras(r?.detalles?.nombre): undefined,
+          descripcion: r?.titulo ? textos.mayusculas.primeras(r?.titulo): undefined,
           precio: r?.precio?.valor,
-          categoriaId: ''
         }
-        setFormData(newData);
+        handleSetFormData(newData)
       }
     };
     buscarProducto();
-  }, [formData.codigoBarra]);
+  }, [formData.codigoBarra, handleSetFormData]);
 
   const cargarProductos = {
     props: {
@@ -54,12 +63,12 @@ export const CargaProductoBuscadorClient = () => {
       { Component: Input, name: "nombre", label: "Nombre", placeholder: "Nombre" , onChange: handleInputChange },
       { Component: Input, name: "descripcion", label: "Descripcion", placeholder: "Descripcion" , onChange: handleInputChange },
       { Component: Input, name: "precio", label: "Precio", type: "number", min: 0, placeholder: 0 , onChange: handleInputChange },
-      { Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange  }
+      //{ Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange }
     ],
   };
 
   return (
-    <FormCard {...cargarProductos}>
+    <FormCard {...cargarProductos.props} formlength={cargarProductos.inputs.length}>
       <CargaProductoBuscador inputs={cargarProductos.inputs} formData={formData}/>
     </FormCard>
   );

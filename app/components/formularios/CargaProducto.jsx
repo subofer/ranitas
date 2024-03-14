@@ -1,8 +1,8 @@
+"use server"
 import { guardarProducto } from "@/prisma/serverActions/productos"
 import SelectCategoria from "../categorias/SelectCategoria"
 import Input from "../formComponents/Input"
 import { FormCard } from "../formComponents/FormCard"
-import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 
 const cargarProductos = {
   props: {
@@ -21,7 +21,7 @@ const cargarProductos = {
 
 export const CargaProducto = () => {
   return (
-    <FormCard {...cargarProductos.props}>
+    <FormCard {...cargarProductos.props} formlength={cargarProductos.inputs.length}>
       {cargarProductos.inputs.map(( {Component, ...props},i ) => <Component tabIndex={i + 1} key={i} {...props}/> )}
     </FormCard>
   )

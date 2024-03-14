@@ -1,3 +1,4 @@
+"use server"
 import prisma from "../prisma";
 
 export const ultimoPrecioDelProducto = async (idDelProducto) => await prisma.precios.findFirst({
@@ -38,3 +39,21 @@ export const getProductos = async () => await prisma.productos.findMany({
     }
   }
 })
+
+export const getProductoPorCodigoBarra = async (codigoBarra) => (
+  await prisma.productos.findUnique({
+    where: {
+      codigoBarra: codigoBarra,
+    },
+    include: {
+      categoria: true,
+      precios: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 1,
+      },
+    },
+  })
+)
+

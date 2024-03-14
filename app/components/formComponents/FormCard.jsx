@@ -10,7 +10,7 @@ const FormButtons = ({submitButtonText, resetButtonText, order}) => (
   </div>
 )
 
-export const FormCard = ({children, props:{title, buttons, action}, ...props}) => {
+export const FormCard = ({children, title, buttons, action, ...props}) => {
   const {
     result,
     ...formControl

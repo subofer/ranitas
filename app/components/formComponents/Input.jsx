@@ -1,3 +1,4 @@
+"use client"
 import Label from "./Label";
 
 const Input = ({ label,...props }) => (

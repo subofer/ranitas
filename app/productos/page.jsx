@@ -1,5 +1,4 @@
 import { CargaProductoBuscadorClient } from '../components/formularios/CargaProductoBuscadorClient'
-import { CargarCategoria } from '../components/formularios/CargarCategoria'
 import ListadoProductos from '../components/productos/ListadoProductos'
 
 export default function Home() {
@@ -11,5 +10,3 @@ export default function Home() {
     </main>
   )
 }
-
-//<CargarCategoria/>

@@ -1,7 +1,7 @@
 'use server'
 import prisma from "../prisma";
 import formToObject from "@/lib/formToObject"
-import { texto } from "@/lib/manipularTextos";
+import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
 
 // Las categorias se guardaran con la primer letra en mayusculas.
@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache'
 export async function guardarCategoria(formData) {
   const categoryObject = formToObject(formData)
   console.log("aca" + categoryObject.nombre)
-  categoryObject.nombre = texto.mayusculas.primeras(categoryObject.nombre)
+  categoryObject.nombre = textos.mayusculas.primeras(categoryObject.nombre)
   delete categoryObject.filterSelect;
 
   let response = ""

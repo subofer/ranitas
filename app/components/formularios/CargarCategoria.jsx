@@ -14,7 +14,7 @@ const cargarCategorias = {
       valueField: "nombre",
       name: "nombre",
       label: "Categoria",
-      placeholder: "Elija Categoria",
+      placeholder: "Escriba una Categoria",
       save: true,
     }
   ],
@@ -23,13 +23,8 @@ const cargarCategorias = {
 export const CargarCategoria = () => {
   return (
     <FormCard props={cargarCategorias.props} formlength={cargarCategorias.inputs.length}>
-      {cargarCategorias.inputs.map(({ Component, name, ...props }, i) => (
-        <Component
-          name={name}
-          tabIndex={i + 1}
-          key={i}
-          {...props}
-        />
+      {cargarCategorias.inputs.map(({ Component, ...props }, i) => (
+        <Component key={i} tabIndex={i + 1} {...props}/>
       ))}
     </FormCard>
   )

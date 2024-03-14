@@ -1,3 +1,4 @@
+"use client"
 export const CargaProductoBuscador = ({inputs, formData}) => {
   return (
     inputs.map(({ Component, name, ...props }, i) => (
