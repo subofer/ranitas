@@ -1,5 +1,6 @@
+import NavBar from '../components/Navegacion/NavBar'
 import './globals.css'
-import NavBar from './components/Navegacion/NavBar'
+
 
 export const metadata = {
   title: 'Gestion Productos',

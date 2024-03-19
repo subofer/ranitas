@@ -1,6 +1,7 @@
+"use client"
 import { useRef, useState } from "react";
 
-const useFormControl = (action) => {
+const useFormControl = (setedAction) => {
   const inputErrorClassName = 'bg-red-300'
 
   const ref = useRef(null)
@@ -31,7 +32,7 @@ const useFormControl = (action) => {
     ref,
     onReset: resetForm,
     action: async (formData) => {
-      const actionReturn = await action(formData)
+      const actionReturn = await setedAction(formData)
       handleAction(actionReturn)
     },
   }

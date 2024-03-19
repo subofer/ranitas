@@ -1,22 +1,34 @@
 "use client"
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { guardarProducto } from "@/prisma/serverActions/productos";
 import SelectCategoria from "../categorias/SelectCategoria";
+import { textos } from '@/lib/manipularTextos';
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
-import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 import { CargaProductoBuscador } from './CargaProductoBuscador';
-import { textos } from '@/lib/manipularTextos';
+import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
+import debounce from '@/lib/debounce';
+import ResultadoBusqueda from '../productos/ResultadoBusqueda';
 
 export const CargaProductoBuscadorClient = () => {
-  const blankForm = {codigoBarra: '',nombre: '',descripcion: '',precio: '',categoriaId: ''}
-  const [formData, setFormData] = useState(blankForm);
+  const blankForm = useMemo(() => ({
+    codigoBarra: '',
+    nombre: '',
+    descripcion: '',
+    size:'',
+    unidad:'',
+    precioActual: '',
+    categoriaId: '',
+  }),[])
 
+  const [formData, setFormData] = useState(blankForm);
+  const [resultado, setResultado] = useState({});
+  const [buscado, setBuscado] = useState(false);
+  const [buscando, setBuscando] = useState(false);
 
   const formDataSeter = (key, value) => setFormData(prev => ({ ...prev, [key]: value }))
 
-  const handleSetFormData = useCallback((newData) => {
-    console.log(newData)
+  const handleSetFormData = useCallback((newData, seter) => {
     Object.keys(newData).forEach(key => {
       newData[key] != undefined
       ? formDataSeter(key, newData[key])
@@ -29,47 +41,54 @@ export const CargaProductoBuscadorClient = () => {
     formDataSeter(name, value)
   );
 
-  //Reset formData
-  const handleReset = () => handleSetFormData(blankForm);
+  const handleReset = useCallback(() => {
+    setBuscado(false)
+    setBuscando(false)
+    setResultado({})
+    handleSetFormData(blankForm);
+  },[blankForm, handleSetFormData])
 
-  // Busca por código de barras cuando el campo correspondiente cambia
+  const buscarProductoDebounced = useMemo(() => debounce(async (code) => {
+    setBuscando(true)
+    if (code.length > 8) {
+      const { resultadosDeLaBusqueda: [{ prismaObject = {} }] = [] } = await buscarPorCodigoDeBarras(code);
+      const { resultadosDeLaBusqueda: [primer] = [] } = await buscarPorCodigoDeBarras(code);
+      handleSetFormData(prismaObject);
+      setResultado(primer)
+      setBuscado(!!prismaObject.codigoBarra);
+    }
+    setBuscando(false)
+  }, 500), [handleSetFormData]);
+
   useEffect(() => {
-    const buscarProducto = async () => {
-      if (formData.codigoBarra.length > 8) {
-        const { primerResultado: r,
-          resultadosDeLaBusqueda } = await buscarPorCodigoDeBarras(formData.codigoBarra);
-        console.log('Primer Resultado',r)
-        console.log('todos Resultados',resultadosDeLaBusqueda)
-        const newData = {
-          codigoBarra: formData.codigoBarra,
-          nombre: r?.detalles?.nombre ? textos.mayusculas.primeras(r?.detalles?.nombre): undefined,
-          descripcion: r?.titulo ? textos.mayusculas.primeras(r?.titulo): undefined,
-          precio: r?.precio?.valor,
-        }
-        handleSetFormData(newData)
-      }
-    };
-    buscarProducto();
-  }, [formData.codigoBarra, handleSetFormData]);
+    !buscado && buscarProductoDebounced(formData.codigoBarra);
+    buscado && formData.codigoBarra == "" && handleReset()
+  }, [formData.codigoBarra, buscarProductoDebounced, buscado, handleReset]);
 
   const cargarProductos = {
     props: {
       id: "FormCargarProducto",
       title: "Cargar Producto",
       action: guardarProducto,
+      handleReset,
     },
     inputs: [
       { Component: Input, name: "codigoBarra", label: "Codigo De Barras", placeholder: "Codigo de barras", onChange: handleInputChange },
       { Component: Input, name: "nombre", label: "Nombre", placeholder: "Nombre" , onChange: handleInputChange },
       { Component: Input, name: "descripcion", label: "Descripcion", placeholder: "Descripcion" , onChange: handleInputChange },
-      { Component: Input, name: "precio", label: "Precio", type: "number", min: 0, placeholder: 0 , onChange: handleInputChange },
-      //{ Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange }
+      { Component: Input, name: "size", label: "Tamaño", placeholder: "tamaño" , onChange: handleInputChange },
+      { Component: Input, name: "unidad", label: "Unidad", placeholder: "g/kg/ml/cc/etc.." , onChange: handleInputChange },
+      { Component: Input, name: "precioActual", label: "Precio", type: "number", min: 0, placeholder: 0 , onChange: handleInputChange },
+      { Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange }
     ],
   };
 
   return (
-    <FormCard {...cargarProductos.props} formlength={cargarProductos.inputs.length}>
-      <CargaProductoBuscador inputs={cargarProductos.inputs} formData={formData}/>
-    </FormCard>
+    <div className='flex flex-row'>
+      <FormCard loading={buscando} {...cargarProductos.props} formlength={cargarProductos.inputs.length}>
+        <CargaProductoBuscador inputs={cargarProductos.inputs} formData={formData}/>
+      </FormCard>
+      <ResultadoBusqueda resultado={resultado} />
+    </div>
   );
 };

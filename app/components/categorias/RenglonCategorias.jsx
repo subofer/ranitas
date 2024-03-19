@@ -11,9 +11,7 @@ export const RenglonCategoria = ({item}) => (
       {fechas.fecha(item?.createdAt)}
     </Td>
     <Td className="flex flex-row justify-between pl-1">
-      {"("}{item?._count?.products}{")"}
-      {' '}
-      {item?.nombre}
+      id: ({item?.id}) Cantidad: ({item?._count?.products}) Nombre: {item?.nombre}
       <div>
         <Icon className='pr-1 ' icono={"salvar"} />
         <Icon className='pr-1 pl-2' icono={"editar"} />

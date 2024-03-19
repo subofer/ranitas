@@ -82,7 +82,6 @@ const Button = ({children, loading = false, className, tipo = "default", ...prop
       {children}
     {loading && <Spinner />}
   </button>
-  
 );
 
 export default Button;

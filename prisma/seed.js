@@ -2,7 +2,7 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
-async function main() {
+async function main() {/*
   const contacto = await prisma.contacto.upsert({
     where: { id: 1},
     update:{},
@@ -11,6 +11,7 @@ async function main() {
     },
   });
   console.log(contacto);
+  */
 }
 
 main()

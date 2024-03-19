@@ -6,8 +6,10 @@ import { revalidatePath } from 'next/cache'
 export async function guardarProducto(formData) {
   const productObject = formToObject(formData)
 
-  const categoriaId = parseInt(productObject.categoriaId);
-  const precio = parseFloat(productObject.precio) || 0;
+  const categoriaId = parseInt(productObject.categoriaId) || 0;
+  productObject.size = parseInt(productObject.size) || 0;
+  const precio = parseFloat(productObject.precioActual) || 0;
+  productObject.precioActual = precio
 
   delete productObject.categoriaId;
   delete productObject.precio;
@@ -23,7 +25,7 @@ export async function guardarProducto(formData) {
         },
       }
     })
-    response = {meta:e.meta, error: false, msg:"Producto guardado con exito"}
+    response = {error: false, msg:"Producto guardado con exito"}
   } catch(e) {
     console.log(e)
     console.log(e.code)
@@ -41,9 +43,6 @@ export async function guardarProducto(formData) {
 export async function guardarProductoBuscado(productObject) {
   const categoriaId = parseInt(productObject.categoriaId);
   const precio = parseFloat(productObject.precioActual) || 0;
-
-  console.log('precio ', precio)
-  console.log('precioActual ', productObject.precioActual)
   let response = ""
   try{
     await prisma.productos.create({
@@ -57,9 +56,6 @@ export async function guardarProductoBuscado(productObject) {
     })
     response = {error: false, msg:"Producto guardado con exito"}
   } catch(e) {
-    console.log(e)
-    console.log(e.code)
-    console.log(e.meta)
     if(e.code == "P2002"){
       response = { meta: e.meta, error:true, msg:`Ya existe un producto con ${e.meta.target[0]} = ${productObject[e.meta.target[0]]}`}
       console.log(response)

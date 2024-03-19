@@ -1,3 +1,4 @@
+"use client"
 const HighlightMatch = ({text, filter, largo}) => {
   const startIndex = text.toLowerCase().indexOf(filter.toLowerCase());
   if (startIndex === -1) return text; // Si no hay coincidencia, devuelve el texto original

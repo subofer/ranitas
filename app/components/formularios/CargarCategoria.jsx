@@ -1,3 +1,4 @@
+"use server"
 import SelectCategoria from "../categorias/SelectCategoria"
 import { guardarCategoria } from "@/prisma/serverActions/categorias";
 import { FormCard } from "../formComponents/FormCard"
@@ -22,7 +23,7 @@ const cargarCategorias = {
 
 export const CargarCategoria = () => {
   return (
-    <FormCard props={cargarCategorias.props} formlength={cargarCategorias.inputs.length}>
+    <FormCard {...cargarCategorias.props} formlength={cargarCategorias.inputs.length}>
       {cargarCategorias.inputs.map(({ Component, ...props }, i) => (
         <Component key={i} tabIndex={i + 1} {...props}/>
       ))}

@@ -1,9 +1,9 @@
-"use client"
+'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Label from "./Label";
 import HighlightMatch from '../HiglightMatch';
 
-const FilterSelect = ({ save, options, valueField, textField, label, ...props }) => {
+const FilterSelect = ({ save, options = [], valueField, textField, label, ...props }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [opcion, setOpcion] = useState(null);
   const [filtro, setFiltro] = useState('');
@@ -40,15 +40,17 @@ const FilterSelect = ({ save, options, valueField, textField, label, ...props })
   const resetInput = () => phase(null, '', false, -1);
 
   useEffect(() => {
+    const formulario = refPadre.current.closest('form');
+    setForm(formulario)
+  }, []);
+
+  useEffect(() => {
     const handleReset = () => phase(null, '', false, -1);
-    const form = refPadre.current.closest('form');
-    setForm(form)
     if (form) {
       form.addEventListener('reset', handleReset);
     }
-
     return () => { if (form) form.removeEventListener('reset', handleReset)};
-  }, []);
+  }, [form]);
 
   useEffect(() => {
     const checkIfClickedOutside = (e) => {
