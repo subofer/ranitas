@@ -1,18 +1,14 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from 'react';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
-import { getProductoPorCodigoBarra } from '@/prisma/consultas/productos';
 import Button from '@/app/components/formComponents/Button';
 import ResultadoBusqueda from '@/app/components/productos/ResultadoBusqueda';
 
 export default function PageBusquedaProductosEnGoogle() {
   const inputRef = useRef(null)
-  const [productosEncontrados, setProductosEncontrados] = useState([])
   const [codigo, setCodigo] = useState('');
   const [error, setError] = useState({});
-  const [total, setTotal] = useState(0)
   const [productosGoogle, setProductosGoogle] = useState([]);
-  const [productoLocal, setProductoLocal] = useState({});
   const [yaSeBusco, setYaSeBusco] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +16,6 @@ export default function PageBusquedaProductosEnGoogle() {
     setError({})
     setLoading(true)
     if(code.length >= 8){
-      setProductoLocal(await getProductoPorCodigoBarra(code))
       setProductosGoogle({...await buscarPorCodigoDeBarras(code)}.mejoresResultados)
     } else {
       setYaSeBusco(true)
@@ -51,11 +46,10 @@ export default function PageBusquedaProductosEnGoogle() {
   const handleReset = useCallback(async () => {
     setLoading(true)
     setProductosGoogle([])
-    setProductoLocal(null)
+    setProductoLocal({})
     setCodigo("")
     setLoading(false)
     setError("")
-    setTotal(0)
   },[])
 
   useEffect(() => {
@@ -65,22 +59,6 @@ export default function PageBusquedaProductosEnGoogle() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
-
-  useEffect(() => {
-    Object.keys(productoLocal).length > 1 &&
-    setProductosEncontrados((productos) => [
-      ...productos,
-      productoLocal,
-    ])
-
-  }, [productoLocal]);
-
-  useEffect(() => {
-    const totales = productosEncontrados.reduce((acum, { precioActual }) => acum + precioActual, 0) || 0
-    console.log("totales", totales)
-    setTotal(totales)
-    console.log("productosEncontrados", productosEncontrados)
-  }, [productosEncontrados]);
 
   return (
     <main className='container mx-auto p-4'>
@@ -106,7 +84,7 @@ export default function PageBusquedaProductosEnGoogle() {
 
         <div>
           <div className='flex flex-row gap-4'>
-            <Button 
+            <Button
               tipo="azul"
               onClick={() => handleSearch(codigo)}
               loading={loading}

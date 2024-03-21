@@ -21,7 +21,9 @@ const useFormControl = (setedAction) => {
 
   const resetForm = () => {
     [...ref.current.elements].forEach(
-      (e) => e.classList.remove(inputErrorClassName)
+      (e) => {
+        e.classList.remove(inputErrorClassName)
+      }
     );
     ref.current.reset();
     setResult(defaultResult)

@@ -1,7 +1,7 @@
 "use client"
 import Label from "./Label";
 
-const Input = ({ label,...props }) => (
+const Input = ({ label,...props }) => 
   <div className="flex w-full flex-row justify-between gap-4">
     <Label htmlFor={props.name}> { label }</Label>
     <input className="
@@ -17,6 +17,6 @@ const Input = ({ label,...props }) => (
       {...props}
     />
   </div>
-);
+;
 
 export default Input;

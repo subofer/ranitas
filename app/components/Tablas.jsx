@@ -1,5 +1,5 @@
 "use client"
-export const Tabla = ({columnas, children, titulo, ...props}) => (
+export const Tabla = ({columnas, children, titulo, ...props}={}) => (
   <div className="overflow-x-auto relative shadow-md sm:rounded-lg">
 
   <table className={`w-full table border-2 border-slate-400 ${props.className}`} >
@@ -22,13 +22,13 @@ export const Tabla = ({columnas, children, titulo, ...props}) => (
   </div>
 )
 
-export const Tr = ({children, ...props}) => (
+export const Tr = ({children, ...props}={}) => (
   <tr className={`w-full table-row odd:bg-slate-300 even:bg-slate-200 ${props.className}`}>
     {children}
   </tr>
 );
 
-export const Td = ({children, className, ...props}) => (
+export const Td = ({children, className, ...props}={}) => (
   <td
     className={`px-2 border-r-2 border-r-slate-500 ${className}` }
     {...props}

@@ -10,11 +10,12 @@ const FormButtons = ({submitButtonText, resetButtonText, order, handleReset, loa
   </div>
 )
 
-export const FormCard = ({children, loading, title, buttons, action, handleReset, ...props}) => {
+export const FormCard = ({children, title, loading, buttons, action, handleReset, ...props}) => {
   const {
-    result,
+    result: state,
     ...formControl
   } = useFormControl(action);
+
   return(
     <form
       className="
@@ -33,7 +34,7 @@ export const FormCard = ({children, loading, title, buttons, action, handleReset
       { children }
       { buttons !== false && <FormButtons loading={loading} handleReset={handleReset} order={props?.inputs?.length + 1 || props?.formlength || 0}/> }
       <div className="mt-2 h-2">
-        { result?.error && result?.msg }
+        { state?.error && state?.msg }
       </div>
     </form>
   )

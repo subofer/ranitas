@@ -1,4 +1,5 @@
-'use client';
+"use client";
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Label from "./Label";
 import HighlightMatch from '../HiglightMatch';
@@ -13,14 +14,16 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
   const inputRef = useRef(null);
   const optionRefs = useRef([]);
 
-  const filteredOptions = options.filter((option) =>
-    option[textField].toLowerCase().includes(filtro?.toLowerCase())
+  const filteredOptions = options?.filter((option) =>
+    option[textField]?.toLowerCase()?.includes(filtro?.toLowerCase())
   );
 
   const phase = (opcion, filtro, abierto, index) => {
-    setOpcion(opcion);setFiltro(filtro);
-    setIsOpen(abierto);setHgIndex(index);
-  }
+    setOpcion(opcion);
+    setFiltro(filtro);
+    setIsOpen(abierto);
+    setHgIndex(index);
+  };
 
   const nextIndex = useCallback((i, dir = 1) => {
     const endOfList = filteredOptions.length - 1;
@@ -43,6 +46,7 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
     const formulario = refPadre.current.closest('form');
     setForm(formulario)
   }, []);
+
 
   useEffect(() => {
     const handleReset = () => phase(null, '', false, -1);
@@ -107,7 +111,7 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
         <input readOnly hidden name={props.name} value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value: undefined) || 0)}/>
         <input
           ref={inputRef}
-          name={"ignore"}
+          name={"$ACTION_IGNORE_INPUT"}
           className="input[type='search'] w-full form-select rounded border-2 border-slate-200 text-right p-0 pr-8"
           placeholder={props.placeholder}
           value={opcion ? opcion[textField] : filtro}
@@ -115,9 +119,10 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
           onClick={() => setIsOpen(!isOpen)}
           onKeyDown={handleKeyDown}
           tabIndex={props.tabIndex}
+          autoComplete="off"
         />
         {isOpen && (
-          <ul className="text-right absolute z-10 w-full max-h-60 overflow-auto">
+          <ul className="text-right absolute rounded z-10 w-full max-h-60 overflow-auto">
             {filteredOptions.map((option, index) => (
               <li
                 key={option[valueField]}

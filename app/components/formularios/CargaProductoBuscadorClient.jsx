@@ -1,8 +1,7 @@
 "use client"
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { guardarProducto } from "@/prisma/serverActions/productos";
-import SelectCategoria from "../categorias/SelectCategoria";
-import { textos } from '@/lib/manipularTextos';
+import SelectCategoriaClient from "../categorias/SelectCategoriaClient";
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
 import { CargaProductoBuscador } from './CargaProductoBuscador';
@@ -10,7 +9,8 @@ import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 import debounce from '@/lib/debounce';
 import ResultadoBusqueda from '../productos/ResultadoBusqueda';
 
-export const CargaProductoBuscadorClient = () => {
+export const CargaProductoBuscadorClient = ({categorias}) => {
+
   const blankForm = useMemo(() => ({
     codigoBarra: '',
     nombre: '',
@@ -22,19 +22,18 @@ export const CargaProductoBuscadorClient = () => {
   }),[])
 
   const [formData, setFormData] = useState(blankForm);
+
   const [resultado, setResultado] = useState({});
+
   const [buscado, setBuscado] = useState(false);
   const [buscando, setBuscando] = useState(false);
 
-  const formDataSeter = (key, value) => setFormData(prev => ({ ...prev, [key]: value }))
+  const formDataSeter = (key, value) => setFormData(prev => ({ ...prev, [key]: value }));
 
-  const handleSetFormData = useCallback((newData, seter) => {
-    Object.keys(newData).forEach(key => {
-      newData[key] != undefined
-      ? formDataSeter(key, newData[key])
-      : null
-    })
-  },[])
+  const handleSetFormData = useCallback((data) =>(
+    Object.keys(data).forEach(k =>
+      data[k] != undefined && formDataSeter(k, data[k])
+  )),[])
 
   // Actualiza el estado del formulario
   const handleInputChange = ({target: { name, value }}) => (
@@ -79,7 +78,14 @@ export const CargaProductoBuscadorClient = () => {
       { Component: Input, name: "size", label: "Tamaño", placeholder: "tamaño" , onChange: handleInputChange },
       { Component: Input, name: "unidad", label: "Unidad", placeholder: "g/kg/ml/cc/etc.." , onChange: handleInputChange },
       { Component: Input, name: "precioActual", label: "Precio", type: "number", min: 0, placeholder: 0 , onChange: handleInputChange },
-      { Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria", onChange: handleInputChange }
+      { Component: SelectCategoriaClient,
+        valueField:"id",
+        textField:"nombre",
+        options: categorias,
+        name: "categoriaId",
+        label: "Categoria",
+        placeholder: "Elija Categoria"
+      }
     ],
   };
 

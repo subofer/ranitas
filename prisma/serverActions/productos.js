@@ -1,16 +1,18 @@
 'use server'
 import prisma from "../prisma";
 import formToObject from "@/lib/formToObject"
+import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
 
-export async function guardarProducto(formData) {
-  const productObject = formToObject(formData)
+export async function guardarProducto(prevState, formData) {
+  //Compatible para useFormState
+  const productObject = formData ? formToObject(formData) : formToObject(prevState)
 
   const categoriaId = parseInt(productObject.categoriaId) || 0;
   productObject.size = parseInt(productObject.size) || 0;
   const precio = parseFloat(productObject.precioActual) || 0;
   productObject.precioActual = precio
-
+  productObject.nombre = textos.mayusculas.primeras(productObject.nombre)
   delete productObject.categoriaId;
   delete productObject.precio;
   delete productObject.filterSelect;
@@ -27,7 +29,6 @@ export async function guardarProducto(formData) {
     })
     response = {error: false, msg:"Producto guardado con exito"}
   } catch(e) {
-    console.log(e)
     console.log(e.code)
     console.log(e.meta)
     if(e.code == "P2002"){

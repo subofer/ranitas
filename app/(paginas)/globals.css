@@ -4,7 +4,15 @@
 
 :root{
   background-color: dimgrey;
+  box-sizing: border-box;
 }
+html{
+  box-sizing: border-box;
+}
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
 .scroll-custom {
   scrollbar-width: thin;
 }

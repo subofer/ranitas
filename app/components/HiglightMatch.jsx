@@ -1,18 +1,12 @@
 "use client"
-const HighlightMatch = ({text, filter, largo}) => {
-  const startIndex = text.toLowerCase().indexOf(filter.toLowerCase());
-  if (startIndex === -1) return text; // Si no hay coincidencia, devuelve el texto original
+const hl = (t, e, u) => t.split(e).filter(Boolean).map((p, i) =>
+  <span key={i}
+    className={`rounded py-0.5 ${ e.test(p) && `bg-${ u ? "green" : "blue" }-200` }`}
+  > { p } </span>
+);
 
-  const endIndex = startIndex + filter.length;
-  const highlightClass = largo === 1 ? "bg-green-200" : "bg-blue-200"; // Clase verde para coincidencia exacta y única
-
-  return (
-    <>
-      {text.substring(0, startIndex)}
-      <span className={highlightClass}>{text.substring(startIndex, endIndex)}</span>
-      {text.substring(endIndex)}
-    </>
-  );
-};
+const HighlightMatch = ({ text:t, filter:f, largo:l }) => (
+  !!f.trim() ? hl(t, new RegExp(`(${f})`, 'gi'), l === 1) : t
+);
 
 export default HighlightMatch;

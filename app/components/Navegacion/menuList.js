@@ -3,7 +3,7 @@ const menuList = {
   "Venta" : "/venta",
   "Productos" : "/productos",
   "Categorias" : "/categorias",
-  "Busqueda" : "/busqueda",
+  "Busqueda" : "/buscarEnGoogle",
 }
 
 export default menuList;
