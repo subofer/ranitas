@@ -8,6 +8,7 @@ import { CargaProductoBuscador } from './CargaProductoBuscador';
 import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 import debounce from '@/lib/debounce';
 import ResultadoBusqueda from '../productos/ResultadoBusqueda';
+import CheckBox from '../formComponents/CheckBox';
 
 export const CargaProductoBuscadorClient = ({categorias}) => {
 
@@ -22,6 +23,7 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
   }),[])
 
   const [formData, setFormData] = useState(blankForm);
+  const [mustSearch, setMustSearch] = useState(true);
 
   const [resultado, setResultado] = useState({});
 
@@ -49,7 +51,7 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
 
   const buscarProductoDebounced = useMemo(() => debounce(async (code) => {
     setBuscando(true)
-    if (code.length > 8) {
+    if (code.length > 8 && mustSearch) {
       const { resultadosDeLaBusqueda: [{ prismaObject = {} }] = [] } = await buscarPorCodigoDeBarras(code);
       const { resultadosDeLaBusqueda: [primer] = [] } = await buscarPorCodigoDeBarras(code);
       handleSetFormData(prismaObject);
@@ -57,7 +59,7 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
       setBuscado(!!prismaObject.codigoBarra);
     }
     setBuscando(false)
-  }, 500), [handleSetFormData]);
+  }, 500), [handleSetFormData, mustSearch]);
 
   useEffect(() => {
     !buscado && buscarProductoDebounced(formData.codigoBarra);
@@ -92,6 +94,7 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
   return (
     <div className='flex flex-row'>
       <FormCard loading={buscando} {...cargarProductos.props} formlength={cargarProductos.inputs.length}>
+        <CheckBox checked={mustSearch} label="Buscar al escribir?" name="$ACTION_activarOpcion" seter={setMustSearch} />
         <CargaProductoBuscador inputs={cargarProductos.inputs} formData={formData}/>
       </FormCard>
       <ResultadoBusqueda resultado={resultado} />

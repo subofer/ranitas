@@ -1,8 +1,15 @@
 "use client"
+
 const hl = (t, e, u) => t.split(e).filter(Boolean).map((p, i) =>
   <span key={i}
-    className={`rounded py-0.5 ${ e.test(p) && `bg-${ u ? "green" : "blue" }-200` }`}
-  > { p } </span>
+    className={`
+      rounded
+      py-0.5
+      ${ e.test(p) && (u ?"bg-green-200":"bg-blue-200")}
+    `}
+  >
+    {p}
+  </span>
 );
 
 const HighlightMatch = ({ text:t, filter:f, largo:l }) => (

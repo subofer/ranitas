@@ -1,11 +1,12 @@
-import { obtenerValorPorRuta } from './PartesTablaListaProductos';
+import { textos as tx } from '@/lib/manipularTextos';
+import { obtenerValorPorRuta as vr } from './tablaProductosData';
 
 export const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
-  if (!filtro) return productos;
-  return productos.filter(producto => {
-      return Object.keys(columnasNames).some(clave => {
-      const { texto } = obtenerValorPorRuta(producto, clave);
-      return texto && texto.toString().toLowerCase().includes(filtro.toLowerCase());
-    });
-  });
-};
+  const filtros = tx.preparar(filtro);
+  return productos.filter(producto =>
+    Object.keys(columnasNames).some(clave => {
+      const palabras = tx.preparar(vr(producto, clave)?.texto)
+      return filtros.every(filtro => palabras.some(t => t.includes(filtro)))
+    })
+  )
+}

@@ -9,6 +9,33 @@ generator client {
   provider = "prisma-client-js"
 }
 
+model Proveedores {
+  id        Int                @id @default(autoincrement())
+  nombre    String             @unique
+  telefono  String?            @default("0")
+  email     String?
+  createdAt DateTime           @default(now())
+  productos ProductoProveedor[]
+  facturas Facturas[]
+}
+
+model ProductoProveedor {
+  id          Int       @id @default(autoincrement())
+  productoId  Int
+  proveedorId Int
+  codigo      String    // Código específico del producto para este proveedor
+  cantidad    Int       // Cantidad recibida en la última factura
+  precio      Float     // Precio por unidad en la última factura
+  createdAt   DateTime  @default(now())
+
+  producto   Productos  @relation(fields: [productoId], references: [id])
+  proveedor  Proveedores @relation(fields: [proveedorId], references: [id])
+  detalles   DetalleFactura[]
+
+  @@unique([productoId, proveedorId, codigo]) // Asegura que la combinación de producto-proveedor-código sea única
+}
+
+
 model Productos {
   id            Int         @id @default(autoincrement())
   nombre        String
@@ -21,6 +48,7 @@ model Productos {
   categoria     Categorias? @relation(fields: [categoriaId], references: [id])
   precioActual  Float       @default(0)
   precios       Precios[]
+  proveedores   ProductoProveedor[]
 }
 
 model Categorias {
@@ -28,6 +56,28 @@ model Categorias {
   createdAt   DateTime    @default(now())
   nombre      String      @unique
   products    Productos[]
+}
+
+model Facturas {
+  id              Int             @id @default(autoincrement())
+  proveedorId     Int
+  numeroFactura   String          // Identificador único de la factura
+  fecha           DateTime
+  tieneImpuestos  Boolean         @default(false)
+  detalles        DetalleFactura[]
+  proveedor       Proveedores     @relation(fields: [proveedorId], references: [id])
+
+  @@unique([proveedorId, numeroFactura]) // Asegura que cada factura sea única por proveedor
+}
+
+model DetalleFactura {
+  id              Int                @id @default(autoincrement())
+  facturaId       Int
+  productoProvId  Int
+  cantidad        Int
+  precioUnitario  Float
+  factura         Facturas          @relation(fields: [facturaId], references: [id])
+  productoProv    ProductoProveedor @relation(fields: [productoProvId], references: [id])
 }
 
 model Precios {

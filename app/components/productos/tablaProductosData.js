@@ -42,3 +42,21 @@ export const tablaListaProductosColumnasNames = {
     Component: BotonEliminarProducto,
   },
 }
+
+export const obtenerValorPorRuta = (item, clave) => {
+  const {key, className, titulo, Component, decorador} = tablaListaProductosColumnasNames[clave]
+  const keys = Array.isArray(key) ? key : [key];
+  const texto = keys?.map(subclave =>
+    subclave?.split('.')?.reduce((resultado, clave) => {
+        return resultado ? resultado[clave] : undefined;
+      }, item)
+    ).join(" ");
+
+  return {
+    titulo,
+    texto,
+    className,
+    Component,
+    decorador: decorador ? decorador : (a) => a,
+  }
+};
