@@ -1,14 +1,20 @@
 "use client"
 import { useEffect, useRef } from "react";
 
-const TituloFiltrero = ({titulo, seter}) => {
+const TituloFiltrero = ({titulo, seter, children}) => {
   const inputRef = useRef();
 
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.ctrlKey && event.key === 'f') {
+        event.stopPropagation();
         event.preventDefault();
         inputRef.current && inputRef.current.focus();
+      }
+      if (event.ctrlKey && event.key === 'q') {
+        event.stopPropagation();
+        event.preventDefault();
+        seter('');
       }
       if (event.key === 'Escape' && document.activeElement === inputRef.current) {
         event.preventDefault();
@@ -37,6 +43,7 @@ const TituloFiltrero = ({titulo, seter}) => {
       onChange={(e) => seter(e.target.value)}
       className="input border my-1 self-center border-gray-400 rounded-xl"
       />
+      {children}
     </span>
   )
 }

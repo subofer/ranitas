@@ -22,11 +22,20 @@ export const Tabla = ({columnas, children, titulo, ...props}={}) => (
   </div>
 )
 
-export const Tr = ({children, ...props}={}) => (
-  <tr className={`w-full table-row odd:bg-slate-300 even:bg-slate-200 ${props.className}`}>
+export const Tr = ({children, className, ...props}={}) => {
+  return(
+  <tr
+    className={`
+      w-full
+      table-row
+      ${!className ? "odd:bg-slate-300 even:bg-slate-200" : ""}
+      ${className}
+    `}
+    {...props}
+  >
     {children}
   </tr>
-);
+)};
 
 export const Td = ({children, className, ...props}={}) => (
   <td

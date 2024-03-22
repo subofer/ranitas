@@ -1,26 +1,58 @@
 "use client"
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Tabla } from '../Tablas';
-import { RenglonTablaProducto } from './PartesTablaListaProductos';
-import { tablaListaProductosColumnasNames } from './tablaProductosData';
+import TbodyTablaProducto from './TbodyTablaProducto';
 import TituloFiltrero from './TituloFiltreoInput';
-import { filtrarProductosPorClave } from './filtrarPorClave';
+import useFiltrarProductosPorValor from '@/app/hooks/useFiltrarProductosPorValor';
+import SelectAllToggle from './SelectAllToggle';
+import CopyToClipBoard from './CopyToClipBoard';
 
 const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props } = {}) => {
-  const cols = columnas?.map((x) => tablaListaProductosColumnasNames[x]?.titulo)
-  const [filtro, setFiltro] = useState("");
+  const [
+    cols,
+    productosFiltrados,
+    setFiltro
+  ] = useFiltrarProductosPorValor(productos, columnas)
 
-  const productosFiltrados = filtrarProductosPorClave(productos, filtro, tablaListaProductosColumnasNames);
+  const [seleccionados, setSeleccionados] = useState([]);
+
+  const toggleSeleccion = (id) => {
+    setSeleccionados((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSeleccionButton = useCallback(() => {
+    const idsProductosFiltrados = productosFiltrados.map(({id}) => id);
+
+    idsProductosFiltrados.every(id => seleccionados.includes(id))
+      ? setSeleccionados([])
+      : setSeleccionados(idsProductosFiltrados);
+  }, [productosFiltrados, seleccionados]);
 
   return (
     <Tabla
       columnas={cols}
-      titulo={<TituloFiltrero titulo={titulo} seter={setFiltro}/>}
+      titulo={
+        <TituloFiltrero titulo={titulo} seter={setFiltro}>
+          <SelectAllToggle seter={toggleSeleccionButton}>
+          {
+            seleccionados.length == productosFiltrados.length
+              ? "Borrar seleccion"
+              : "Selecionar todos"
+          }
+          </SelectAllToggle>
+          <CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>
+        </TituloFiltrero>
+      }
       {...props}
     >
-      {productosFiltrados && productosFiltrados.length > 0 && productosFiltrados.map((p,i) => (
-        <RenglonTablaProducto key={i} item={p} columnas={columnas}/>
-      ))}
+      <TbodyTablaProducto
+        items={productosFiltrados}
+        columnas={columnas}
+        seleccionados={seleccionados}
+        onToggleSeleccion={toggleSeleccion}
+      />
     </Tabla>
   )
 };
