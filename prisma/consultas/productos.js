@@ -40,8 +40,8 @@ export const getProductos = async () => await prisma.productos.findMany({
   }
 })
 
-export const getProductoPorCodigoBarra = async (codigoBarra) => (
-  await prisma.productos.findUnique({
+export const getProductoPorCodigoBarra = async (codigoBarra) => {
+  const producto = await prisma.productos.findUnique({
     where: {
       codigoBarra: codigoBarra,
     },
@@ -54,6 +54,10 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => (
         take: 1,
       },
     },
-  })
-)
+  });
 
+  // Aquí puedes definir el objeto por defecto que deseas retornar si no se encuentra el producto
+  const respuestaPorDefecto = {error: "producto no encontrado"}; // Ajusta esto según lo que necesites
+
+  return producto || respuestaPorDefecto;
+}
