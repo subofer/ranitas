@@ -10,6 +10,8 @@ const tiposBotones ={
     active:drop-shadow
     transition duration-150 ease-in-out
     ring-2
+    disabled:bg-slate-400
+    disabled:cursor-not-allowed
     `,
   icono:`
     px-0
@@ -38,7 +40,7 @@ const tiposBotones ={
     hover:ring-green-400
   `,
   borrar: `
-    px-6  
+    px-6
     bg-red-200
     ring-red-300
     hover:bg-red-300
@@ -87,7 +89,7 @@ const Button = ({children, loading = false, className, tipo = "default", ...prop
     className={`
       ${tiposBotones.basic}
       ${tiposBotones[tipo]}
-      ${className}
+      ${className ? className : ""}
     ` }
     { ...props }
     disabled={loading}

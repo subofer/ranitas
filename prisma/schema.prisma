@@ -10,10 +10,13 @@ generator client {
 }
 
 model Proveedores {
-  id        Int                @id @default(autoincrement())
+  id        String             @id @default(uuid())
+  cuit      String             @unique
   nombre    String             @unique
-  telefono  String?            @default("0")
-  email     String?
+  persona   String?
+  iva       String?
+  telefono  String?            @default("0800-completar-telefono")
+  email     String?            @default("completar@email.com")
   createdAt DateTime           @default(now())
   productos ProductoProveedor[]
   facturas Facturas[]
@@ -22,7 +25,7 @@ model Proveedores {
 model ProductoProveedor {
   id          Int       @id @default(autoincrement())
   productoId  Int
-  proveedorId Int
+  proveedorId String
   codigo      String    // Código específico del producto para este proveedor
   cantidad    Int       // Cantidad recibida en la última factura
   precio      Float     // Precio por unidad en la última factura
@@ -45,6 +48,7 @@ model Productos {
   categoriaId   Int?
   size          Int?
   unidad        String?
+  imagen        String?     @db.Text
   categoria     Categorias? @relation(fields: [categoriaId], references: [id])
   precioActual  Float       @default(0)
   precios       Precios[]
@@ -60,7 +64,7 @@ model Categorias {
 
 model Facturas {
   id              Int             @id @default(autoincrement())
-  proveedorId     Int
+  proveedorId     String
   numeroFactura   String          // Identificador único de la factura
   fecha           DateTime
   tieneImpuestos  Boolean         @default(false)

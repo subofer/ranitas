@@ -1,6 +1,8 @@
+import Image from 'next/image';
 import { textos } from '@/lib/manipularTextos';
 import { BotonEditarProducto } from './BotonEditarProducto';
 import { BotonEliminarProducto } from './BotonEliminarProducto';
+import ImagenProducto from './ImagenProducto';
 
 export const tablaListaProductosColumnasNames = {
   edit:{
@@ -36,15 +38,23 @@ export const tablaListaProductosColumnasNames = {
     className: "text-right px-2",
     decorador: textos.moneda,
   },
-  eliminar:{
+  imagen: {
+    titulo:"Img",
+    size: 20,
+    key:"imagen",
+    Component: ImagenProducto,
+    componentclassname: "mx-auto",
+  },
+  eliminar: {
     titulo: "",
     className: "text-center px-0",
     Component: BotonEliminarProducto,
+    componentclassname: "p-0 m-0",
   },
 }
 
 export const obtenerValorPorRuta = (item, clave) => {
-  const {key, className, titulo, Component, decorador} = tablaListaProductosColumnasNames[clave]
+  const {key, decorador, ...resto} = tablaListaProductosColumnasNames[clave]
   const keys = Array.isArray(key) ? key : [key];
   const texto = keys?.map(subclave =>
     subclave?.split('.')?.reduce((resultado, clave) => {
@@ -53,10 +63,8 @@ export const obtenerValorPorRuta = (item, clave) => {
     ).join(" ");
 
   return {
-    titulo,
     texto,
-    className,
-    Component,
     decorador: decorador ? decorador : (a) => a,
+    ...resto
   }
 };

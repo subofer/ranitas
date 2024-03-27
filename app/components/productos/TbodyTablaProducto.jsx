@@ -8,7 +8,7 @@ export const TbodyTablaProducto = ({items, columnas, seleccionados, onToggleSele
       item={p}
       columnas={columnas}
       seleccionado={seleccionados.includes(p.id)}
-      onToggleSeleccionado={() => onToggleSeleccion(p.id)}
+      onToggleseleccionado={() => onToggleSeleccion(p.id)}
     />
   ))
   };

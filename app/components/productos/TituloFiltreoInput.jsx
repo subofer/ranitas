@@ -37,6 +37,7 @@ const TituloFiltrero = ({titulo, seter, children}) => {
         {titulo}:
       </span>
     <input
+      name={"InputFiltrero"}
       ref={inputRef}
       type="text"
       placeholder="Filtrar..."

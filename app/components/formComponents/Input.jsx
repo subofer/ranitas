@@ -1,22 +1,27 @@
 "use client"
+import { useRef } from "react";
 import Label from "./Label";
 
-const Input = ({ label,...props }) => 
-  <div className="flex w-full flex-row justify-between gap-4">
-    <Label htmlFor={props.name}> { label }</Label>
-    <input className="
-        form-input
-        w-3/5
-        rounded
-        border-2
-        border-slate-200
-        pr-1
-        p-0
-        text-right
-      "
-      {...props}
-    />
-  </div>
-;
-
+const Input = ({ label, className, ...props }) => {
+  return (
+  <Label className={`grid grid-cols-[max-content,1fr] items-center gap-2 ${className}`}>
+      <span className={"pl-2 items-center"} >
+        { label }
+      </span>
+      <input
+        className="
+          h-8
+          form-input
+          rounded
+          border-2
+          border-slate-200
+          text-gray-700
+          w-full
+          disabled:bg-slate-200
+        "
+        {...props}
+      />
+    </Label>
+  )
+}
 export default Input;

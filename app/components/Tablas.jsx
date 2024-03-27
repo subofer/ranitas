@@ -39,7 +39,16 @@ export const Tr = ({children, className, ...props}={}) => {
 
 export const Td = ({children, className, ...props}={}) => (
   <td
-    className={`px-2 border-r-2 border-r-slate-500 ${className}` }
+    className={`
+      whitespace-nowrap min-w-max
+      ml-2
+      pl-2
+      pr-2
+      py-0.5
+      border-r-2
+      border-r-slate-500
+      ${className}
+    `}
     {...props}
   >
     {children}

@@ -105,8 +105,8 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
   };
 
   return (
-    <div ref={refPadre} className="flex w-full flex-row justify-between">
-      <Label htmlFor={props.name}>{label}</Label>
+    <div ref={refPadre} >
+      <Label className="flex w-full flex-row justify-between" >{label}
       <div className="w-3/5 relative">
         <input readOnly hidden name={props.name} value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value: undefined) || 0)}/>
         <input
@@ -144,6 +144,7 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
           </ul>
         )}
       </div>
+      </Label>
     </div>
   );
 };

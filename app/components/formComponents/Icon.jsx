@@ -9,7 +9,7 @@ const icons = (icono) => {
   }
 }
 
-const Icon = ({className,children, icono, ...props}) => (
+const Icon = ({className, children, icono, ...props}) => (
   <Button
     className={`bg-transparent ring-transparent ${className}`}
     tipo="icono"

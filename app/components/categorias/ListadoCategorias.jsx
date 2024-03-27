@@ -4,7 +4,7 @@ import { RenglonCategoria } from "./RenglonCategorias";
 import { Tabla } from "../Tablas";
 
 const ListadoCategorias = async (props) => {
-  const columnas = ['Creada', 'Nombre']
+  const columnas = ['id', 'Creada','Cantidad', 'Nombre']
   const categorias = await getCategoriasConteo()
 
   return (

@@ -3,12 +3,15 @@ import useFormControl from "@/app/hooks/useFormControl";
 import Button from "./Button"
 import FormTitle from "./Title"
 
-const FormButtons = ({submitButtonText, resetButtonText, order, handleReset, loading}) => (
+const FormButtons = ({submitButtonText, resetButtonText, order, handleReset, loading}) => {
+
+ return (
   <div className="flex flex-row w-full pt-4 justify-around">
     <Button loading={loading} tabIndex={order} type="submit" tipo={"enviar"}>{ submitButtonText || "Guardar" }</Button>
     <Button onClick={handleReset} tabIndex={order + 1} type="reset" tipo={"neutro"}>{ resetButtonText || "Reset" }</Button>
   </div>
-)
+  )
+}
 
 export const FormCard = ({children, title, loading, buttons, action, handleReset, ...props}) => {
   const {

@@ -1,5 +1,5 @@
-const Label = ({ children,className, ...props }) => (
-  <label className={`font-sans text-base ${className}`} {...props}>
+const Label = ({ children, className, ...props }) => (
+  <label className={`font-sans ${className}`} {...props}>
     {children}
   </label>
 );

@@ -6,16 +6,22 @@ import Icon from "../formComponents/Icon";
 
 
 export const RenglonCategoria = ({item}) => (
-  <Tr>
-    <Td className="w-1/5">
+  <Tr >
+    <Td className="w-px">
+      {item?.id}
+    </Td>
+    <Td className="w-px">
       {fechas.fecha(item?.createdAt)}
     </Td>
+    <Td className="w-px text-center">
+      {item?._count?.products}
+    </Td>
     <Td className="flex flex-row justify-between pl-1">
-      id: ({item?.id}) Cantidad: ({item?._count?.products}) Nombre: {item?.nombre}
-      <div>
-        <Icon className='pr-1 ' icono={"salvar"} />
-        <Icon className='pr-1 pl-2' icono={"editar"} />
-        <Icon className='pr-2 pl-2' icono={"eliminar"} onClick={() => borrarCategoria(item.id)} />
+      {item?.nombre}
+      <div className="flex flex-row justify-normal gap-3 mr-2">
+        <Icon  icono={"salvar"} />
+        <Icon icono={"editar"} />
+        <Icon icono={"eliminar"} onClick={() => borrarCategoria(item.id)} />
       </div>
     </Td>
   </Tr>

@@ -9,6 +9,7 @@ import buscarPorCodigoDeBarras from "@/lib/buscarPorCodigoDeBarras";
 import debounce from '@/lib/debounce';
 import ResultadoBusqueda from '../productos/ResultadoBusqueda';
 import CheckBox from '../formComponents/CheckBox';
+import ImagenProducto from '../productos/ImagenProducto';
 
 export const CargaProductoBuscadorClient = ({categorias}) => {
 
@@ -20,6 +21,7 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
     unidad:'',
     precioActual: '',
     categoriaId: '',
+    imagen:'',
   }),[])
 
   const [formData, setFormData] = useState(blankForm);
@@ -38,9 +40,11 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
   )),[])
 
   // Actualiza el estado del formulario
-  const handleInputChange = ({target: { name, value }}) => (
+  const handleInputChange = (e) => {
+    const {target: {name, value}} = e
+    e.preventDefault();
     formDataSeter(name, value)
-  );
+  };
 
   const handleReset = useCallback(() => {
     setBuscado(false)
@@ -52,8 +56,10 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
   const buscarProductoDebounced = useMemo(() => debounce(async (code) => {
     setBuscando(true)
     if (code.length > 8 && mustSearch) {
-      const { resultadosDeLaBusqueda: [{ prismaObject = {} }] = [] } = await buscarPorCodigoDeBarras(code);
-      const { resultadosDeLaBusqueda: [primer] = [] } = await buscarPorCodigoDeBarras(code);
+      const resultado = await buscarPorCodigoDeBarras(code);
+
+      const { resultadosDeLaBusqueda: [{ prismaObject = {} }] = [] } = resultado;
+      const { resultadosDeLaBusqueda: [primer] = [] } = resultado;
       handleSetFormData(prismaObject);
       setResultado(primer)
       setBuscado(!!prismaObject.codigoBarra);
@@ -87,7 +93,8 @@ export const CargaProductoBuscadorClient = ({categorias}) => {
         name: "categoriaId",
         label: "Categoria",
         placeholder: "Elija Categoria"
-      }
+      },
+      {Component: Input, name: "imagen", label: "", placeholder: "Elija Categoria", onChange: handleInputChange, hide: true}
     ],
   };
 

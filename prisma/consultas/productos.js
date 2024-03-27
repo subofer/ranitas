@@ -17,7 +17,7 @@ export const nuevoPrecioProducto = async (idDelProducto, nuevoPrecio) => {
       productoId: idDelProducto,
     },
   });
-  
+
   await prisma.productos.update({
     where: {
       id: idDelProducto,

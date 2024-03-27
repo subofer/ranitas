@@ -4,6 +4,8 @@ const menuList = {
   "Productos" : "/productos",
   "Categorias" : "/categorias",
   "Busqueda" : "/buscarEnGoogle",
+  "Compras" : "/compras",
+  "Proveedores" : "/proveedores",
 }
 
 export default menuList;

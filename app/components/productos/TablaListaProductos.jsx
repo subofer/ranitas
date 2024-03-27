@@ -14,10 +14,10 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
     setFiltro
   ] = useFiltrarProductosPorValor(productos, columnas)
 
-  const [seleccionados, setSeleccionados] = useState([]);
+  const [seleccionados, setseleccionados] = useState([]);
 
   const toggleSeleccion = (id) => {
-    setSeleccionados((prev) =>
+    setseleccionados((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
@@ -26,8 +26,8 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
     const idsProductosFiltrados = productosFiltrados.map(({id}) => id);
 
     idsProductosFiltrados.every(id => seleccionados.includes(id))
-      ? setSeleccionados([])
-      : setSeleccionados(idsProductosFiltrados);
+      ? setseleccionados([])
+      : setseleccionados(idsProductosFiltrados);
   }, [productosFiltrados, seleccionados]);
 
   return (

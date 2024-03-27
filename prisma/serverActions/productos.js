@@ -7,7 +7,7 @@ import { revalidatePath } from 'next/cache'
 export async function guardarProducto(prevState, formData) {
   //Compatible para useFormState
   const productObject = formData ? formToObject(formData) : formToObject(prevState)
-
+  
   const categoriaId = parseInt(productObject.categoriaId) || 0;
   productObject.size = parseInt(productObject.size) || 0;
   const precio = parseFloat(productObject.precioActual) || 0;
@@ -16,6 +16,7 @@ export async function guardarProducto(prevState, formData) {
   delete productObject.categoriaId;
   delete productObject.precio;
   delete productObject.filterSelect;
+  console.log("ACa el console", productObject)
   let response = ""
   try{
     await prisma.productos.create({
@@ -28,6 +29,7 @@ export async function guardarProducto(prevState, formData) {
       }
     })
     response = {error: false, msg:"Producto guardado con exito"}
+    console.log('se guarda o no?', response)
   } catch(e) {
     console.log(e.code)
     console.log(e.meta)
@@ -35,7 +37,7 @@ export async function guardarProducto(prevState, formData) {
       response = { meta: e.meta, error:true, msg:`Ya existe un producto con ${e.meta.target[0]} = ${productObject[e.meta.target[0]]}`}
       console.log(response)
     }
-
+    console.log('se guarda o no catchear?', e)
   }
   revalidatePath('/productos')
   return response

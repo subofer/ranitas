@@ -3,6 +3,7 @@ import { guardarProducto } from "@/prisma/serverActions/productos"
 import SelectCategoria from "../categorias/SelectCategoria"
 import Input from "../formComponents/Input"
 import { FormCard } from "../formComponents/FormCard"
+import ImagenProducto from "../productos/ImagenProducto"
 
 const cargarProductos = {
   props: {
@@ -15,7 +16,8 @@ const cargarProductos = {
     {Component: Input, name: "nombre", label: "Nombre", placeholder:"Nombre"},
     {Component: Input, name: "descripcion" , label:"Descripcion", placeholder:"Descripcion"},
     {Component: Input, name: "precio" , label: "Precio", type: "number", min:0, placeholder:0},
-    {Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria"}
+    {Component: SelectCategoria, name: "categoriaId", label: "Categoria", placeholder: "Elija Categoria"},
+    {Component: ImagenProducto, name: "imagen", label: "imagen", placeholder: "Elija Categoria"}
   ],
 };
 
