@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import {  usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback } from "react";
 
@@ -25,7 +26,10 @@ export const useMyParams = () => {
     push(pathname)
   },[push, pathname])
 
+  const recarga = () => deleteParam("253j4n")
+
   return {
+    recarga,
     searchParams,
     pathname,
     clearParams,

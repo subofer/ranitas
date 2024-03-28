@@ -3,11 +3,15 @@ import { textos } from '@/lib/manipularTextos';
 import { BotonEditarProducto } from './BotonEditarProducto';
 import { BotonEliminarProducto } from './BotonEliminarProducto';
 import ImagenProducto from './ImagenProducto';
+import useMyParams from '@/app/hooks/useMyParams';
+import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
 
 export const tablaListaProductosColumnasNames = {
   edit:{
     titulo:"",
     Component: BotonEditarProducto,
+    onClick: ({codigoBarra}) => ({action:"addParam", key:"codigoBarra", value: codigoBarra, isParams: true}),
+    className:"w-px text-center",
   },
   cat: {
     titulo: "Categoria",
@@ -30,26 +34,28 @@ export const tablaListaProductosColumnasNames = {
   size:{
     titulo: "Tamaño",
     key:["size","unidad"],
-    className:"flex justify-end w-auto",
+    className:"text-right w-px",
+    decorador: textos.unidades,
 },
   precioActual:{
-    titulo: "Ultimo Precio",
+    titulo: "Precio",
     key: "precioActual",
-    className: "text-right px-2",
+    className: "text-right w-px",
     decorador: textos.moneda,
   },
   imagen: {
     titulo:"Img",
-    size: 20,
+    size: 28,
     key:"imagen",
     Component: ImagenProducto,
     componentclassname: "mx-auto",
   },
   eliminar: {
     titulo: "",
-    className: "text-center px-0",
+    className: "text-center w-px",
     Component: BotonEliminarProducto,
     componentclassname: "p-0 m-0",
+    onClick: ({id}) => eliminarProductoConPreciosPorId(id),
   },
 }
 

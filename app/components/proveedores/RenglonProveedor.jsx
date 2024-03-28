@@ -6,18 +6,20 @@ import Icon from "../formComponents/Icon"
 import { textos } from "@/lib/manipularTextos"
 import useMyParams from "@/app/hooks/useMyParams"
 import { useCallback } from "react"
+import { alertaBorrarProveedor } from "../alertas/alertaBorrarProveedor"
 
 export const RenglonProveedor = ({item: proveedor}) => {
-  const { addParam } = useMyParams();
+  const { addParam, recarga } = useMyParams();
 
   const editar = useCallback(() => {
     addParam("cuit", proveedor.cuit)
   },[addParam, proveedor.cuit])
 
   const handleDelete = () => {
-    if(confirm('Esta seguro que quiere borrar??')){
+    alertaBorrarProveedor(() => {
       deleteProveedor(proveedor?.id)
-    }
+      recarga()
+    })
   }
 
   return (

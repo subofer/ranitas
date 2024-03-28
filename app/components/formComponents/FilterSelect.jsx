@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Label from "./Label";
 import HighlightMatch from '../HiglightMatch';
 
-const FilterSelect = ({ save, options = [], valueField, textField, label, ...props }) => {
+const FilterSelect = ({ value, save, options = [], valueField, textField, label, ...props }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [opcion, setOpcion] = useState(null);
   const [filtro, setFiltro] = useState('');
@@ -70,6 +70,16 @@ const FilterSelect = ({ save, options = [], valueField, textField, label, ...pro
   useEffect(() => {
     optionRefs.current = optionRefs.current.slice(0, filteredOptions.length);
   }, [filteredOptions]);
+
+  useEffect(() => {
+    if (value) {
+      const seleccionInicial = options.find((option) => option[valueField] == value);
+      if (seleccionInicial) {
+        setOpcion(seleccionInicial);
+        setFiltro(seleccionInicial[textField]);
+      }
+    }
+  }, [value, options, valueField, textField]);
 
   const handleKeyDown = (e) => {
     const {key: tecla} = e;

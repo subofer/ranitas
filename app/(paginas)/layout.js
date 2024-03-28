@@ -14,7 +14,7 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
       </head>
       <body className="flex w-screen h-screen min-w-[900px]">
-        <NavBar className='w-fit md:w-64 h-auto md:h-screen'/>
+        <NavBar className='flex w-fit md:w-64 md:h-screen h-screen'/>
         <div className='flex-grow overflow-y-auto scroll-custom px-4 pt-2 min-w-[500px]'>
           {children}
         </div>

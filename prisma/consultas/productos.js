@@ -57,7 +57,7 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
   });
 
   // Aquí puedes definir el objeto por defecto que deseas retornar si no se encuentra el producto
-  const respuestaPorDefecto = {error: "producto no encontrado"}; // Ajusta esto según lo que necesites
+  const respuestaPorDefecto = {error: true, msg: "producto no encontrado"}; // Ajusta esto según lo que necesites
 
   return producto || respuestaPorDefecto;
 }

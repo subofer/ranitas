@@ -46,7 +46,7 @@ model Productos {
   descripcion   String?
   createdAt     DateTime    @default(now())
   categoriaId   Int?
-  size          Int?
+  size          Float?
   unidad        String?
   imagen        String?     @db.Text
   categoria     Categorias? @relation(fields: [categoriaId], references: [id])
