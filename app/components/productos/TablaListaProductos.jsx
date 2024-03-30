@@ -1,17 +1,20 @@
 "use client"
 import { useCallback, useState } from 'react';
-import { Tabla } from '../Tablas';
+
 import TbodyTablaProducto from './TbodyTablaProducto';
 import TituloFiltrero from './TituloFiltreoInput';
 import useFiltrarProductosPorValor from '@/app/hooks/useFiltrarProductosPorValor';
 import SelectAllToggle from './SelectAllToggle';
 import CopyToClipBoard from './CopyToClipBoard';
+import { Tabla } from '../Tablas ';
 
 const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props } = {}) => {
   const [
     cols,
     productosFiltrados,
-    setFiltro
+    setFiltro,
+    cantidadTotal,
+    cantidadFiltrada
   ] = useFiltrarProductosPorValor(productos, columnas)
 
   const [seleccionados, setseleccionados] = useState([]);
@@ -34,7 +37,7 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
     <Tabla
       columnas={cols}
       titulo={
-        <TituloFiltrero titulo={titulo} seter={setFiltro}>
+        <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}}titulo={titulo} seter={setFiltro}>
           <SelectAllToggle seter={toggleSeleccionButton}>
           {
             seleccionados.length == productosFiltrados.length

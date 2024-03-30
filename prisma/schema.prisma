@@ -67,19 +67,7 @@ model Unidades {
   nombre        String          @unique
   simbolo       String          @unique
   createdAt     DateTime        @default(now())
-  conversionesA Conversion[]    @relation("ConversionOrigen")
-  conversionesDe Conversion[]   @relation("ConversionDestino")
 }
-
-model Conversion {
-  id            String    @id @default(uuid())
-  factor        Float     // Factor de conversión de la unidad origen a la unidad destino
-  origenId      String    // UUID de la unidad origen
-  destinoId     String    // UUID de la unidad destino
-  origen        Unidades  @relation(name: "ConversionOrigen", fields: [origenId], references: [id])
-  destino       Unidades  @relation(name: "ConversionDestino", fields: [destinoId], references: [id])
-}
-
 
 
 model Facturas {

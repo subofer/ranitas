@@ -1,9 +1,9 @@
 "use client"
-import imagenTransparente, {imagenRanita} from '@/lib/imagenTransparente';
+import {imagenRanita} from '@/lib/imagenTransparente';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 
-const SelectorImagenes = ({ imagenes, proceder }) => {
+const SelectorImagenes = ({ imagenes, proceder, ...props}) => {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [img, setImg] = useState({})
 
@@ -15,9 +15,9 @@ const SelectorImagenes = ({ imagenes, proceder }) => {
   const cambiarImagen = (direccion) => {
     setCurrentIndex((prev) => (prev + direccion) % imagenes.length)
   };
-
+//style={{ height: '320px', width: '320px', position: 'relative' }}
   return (
-    <div className='relative bg-slate-200 rounded-2xl' style={{ height: '320px', width: '320px', position: 'relative' }}>
+    <div className='relative bg-slate-200 rounded-2xl h-full w-full'>
       <Image
         src={img?.imagen?.src || imagenRanita.imagen.src}
         alt={img?.imagen?.alt || imagenRanita.imagen.alt}

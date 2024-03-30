@@ -15,6 +15,7 @@ const tiposBotones ={
     `,
   icono:`
     px-0
+    
     transition duration-150 ease-in-out
   `  ,
   default: `

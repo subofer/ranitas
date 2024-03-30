@@ -89,12 +89,9 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
 
   return (
     <div className='flex flex-row m-0'>
-      <div className='py-[44px] px-[12px] rounded-l-2xl w-[344px] h-[408px] items-center bg-slate-400'>
-        <SelectorImagenes imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
-      </div>
-      <FormCard className={"grid grid-cols-1 max-w-[600px] gap-2 rounded-none rounded-r"} handleReset={handleReset} loading={buscando} action={handleSave}>
+      <FormCard className={"grid grid-cols-1 max-w-[600px] gap-2 rounded-none rounded-l-2xl"} handleReset={handleReset} loading={buscando} action={handleSave}>
         <FormTitle
-            textClass={"text-2xl font-bold text-slate-500"}
+            textClass={"text-3xl font-bold text-slate-500"}
             className={`col-span-full text-center`}
           >
               {`${ local ? "Editar" : "Cargar"} Producto`}
@@ -174,6 +171,9 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
 
         <Input className={"col-span-1"}type={"hidden"} name={"imagen"} value={formData.imagen} onChange={handleInputChange}/>
       </FormCard>
+      <div className='p-4 rounded-r-2xl h-auto w-[400px] items-center bg-slate-400'>
+        <SelectorImagenes imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
+      </div>
     </div>
   );
 };

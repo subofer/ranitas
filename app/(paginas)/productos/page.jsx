@@ -6,9 +6,9 @@ import { getCategorias } from "@/prisma/consultas/categorias"
 export default async function PageCargarProductos() {
   const categorias = await getCategorias()
   return (
-    <main className='container w-full max-w-full'>
+    <main className='container flex flex-col gap-4 w-full max-w-full h-screen overflow-hidden'>
       <CargaProductoBuscadorClient categorias={categorias}/>
-      <ListadoProductos className='w-full mt-6'/>
+      <ListadoProductos/>
     </main>
   )
 }

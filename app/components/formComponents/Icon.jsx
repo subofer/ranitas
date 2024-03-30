@@ -15,7 +15,7 @@ const Icon = ({className, children, icono, ...props}) => (
     tipo="icono"
     { ...props }
   >
-      <i className={`fa-solid fa-${icons(icono)} ${className}`}>
+      <i className={`z-auto fa-solid fa-${icons(icono)} ${className}`}>
         {children}
       </i>
   </Button>

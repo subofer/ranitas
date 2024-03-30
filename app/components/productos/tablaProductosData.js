@@ -22,7 +22,7 @@ export const tablaListaProductosColumnasNames = {
     className:"w-40 text-center",
   },
   codigoBarra: {
-    titulo: "Codigo de Barras",
+    titulo: "Codigo-Barras",
     key:"codigoBarra",
     className:"w-40 text-center",
   },

@@ -1,7 +1,8 @@
 "use client"
 import { useEffect, useRef } from "react";
+import Input from "../formComponents/Input";
 
-const TituloFiltrero = ({titulo, seter, children}) => {
+const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   const inputRef = useRef();
 
   useEffect(() => {
@@ -30,22 +31,22 @@ const TituloFiltrero = ({titulo, seter, children}) => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [seter]);
-
+  const variableLabel = cantidades.seleccionados != cantidades.total ? `(${cantidades.seleccionados}/${cantidades.total})` : `(${cantidades.total})`
   return(
-    <span className="flex flex-row align-middle justify-center gap-2">
+    <div className="flex flex-row align-middle justify-center gap-2 p-1 bg-transparent">
       <span className="self-center">
         {titulo}:
       </span>
-    <input
+    <Input
       name={"InputFiltrero"}
       ref={inputRef}
       type="text"
       placeholder="Filtrar..."
+      label={variableLabel}
       onChange={(e) => seter(e.target.value)}
-      className="input border my-1 self-center border-gray-400 rounded-xl"
       />
       {children}
-    </span>
+    </div>
   )
 }
 export default TituloFiltrero

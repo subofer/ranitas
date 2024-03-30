@@ -14,10 +14,14 @@ const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
 
 const useFiltrarProductosPorValor = (productos, columnas) => {
   const [filtro, setFiltro] = useState("");
+  const productosFiltrados = filtrarProductosPorClave(productos, filtro, tablaListaProductosColumnasNames) || [];
+
   return [
     columnas?.map((x) => tablaListaProductosColumnasNames[x]?.titulo),
-    filtrarProductosPorClave(productos, filtro, tablaListaProductosColumnasNames) || [],
-    setFiltro
+    productosFiltrados,
+    setFiltro,
+    productos.length,
+    productosFiltrados.length
   ];
 }
 

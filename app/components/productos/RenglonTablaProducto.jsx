@@ -1,13 +1,13 @@
 "use client"
 import useMyParams from '@/app/hooks/useMyParams';
-import { Tr, Td } from '../Tablas';
 import { obtenerValorPorRuta as vr } from './tablaProductosData';
+import { Td, Tr } from '../Tablas ';
 
 export const RenglonTablaProducto = ({item, columnas, seleccionado, onToggleseleccionado}) => {
   const myParams = useMyParams();
 
   return (
-  <Tr className={`${seleccionado? "odd:bg-blue-400 even:bg-blue-400":""}`}
+  <Tr className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-200":""}`}
   >
     {
       columnas && columnas.map((col, index)=> {
