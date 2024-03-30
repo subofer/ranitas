@@ -7,21 +7,28 @@ export const RenglonTablaProducto = ({item, columnas, seleccionado, onTogglesele
   const myParams = useMyParams();
 
   return (
-  <Tr onClick={onToggleseleccionado}
-      className={`${seleccionado? "odd:bg-blue-400 even:bg-blue-400":""}`}
+  <Tr className={`${seleccionado? "odd:bg-blue-400 even:bg-blue-400":""}`}
   >
     {
       columnas && columnas.map((col, index)=> {
-        const { className, onClick, texto, Component = null, decorador, imagen, ...resto } = vr(item, col)
+        const { className, onClick, texto, noselect, Component = null, decorador, imagen, ...props } = vr(item, col)
 
         const handleOnClick = () => {
-          const { action, key, value, isParams } = onClick(item)
+          const result = onClick(item)
+          const {
+            action = "",
+            key = '',
+            value = '',
+            isParams = false
+          } = result || {};
+
           isParams && myParams[action](key, value)
         }
+
         return (
-          <Td key={index + col} className={className }>
+          <Td key={index + col} className={className} onClick={() => !noselect && onToggleseleccionado()}>
             {!Component && decorador(texto)}
-            {Component && <Component onClick={handleOnClick} className={"p-0 m-0"} item={item} {...resto}/>}
+            {Component && <Component onClick={handleOnClick} className={"p-0 m-0"} item={item} {...props}/>}
           </Td>
         )
       })

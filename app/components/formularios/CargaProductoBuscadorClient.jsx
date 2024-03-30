@@ -9,6 +9,8 @@ import ImagenProducto from '../productos/ImagenProducto';
 import { getProductoPorCodigoBarra } from "@/prisma/consultas/productos";
 import useMyParams from '@/app/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
+import SelectorImagenes from '../formComponents/SelectorImagenes';
+import FormTitle from '../formComponents/Title';
 
 export const CargaProductoBuscadorClient = ({ categorias }) => {
   const { searchParams, deleteParam } = useMyParams();
@@ -27,6 +29,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
 
   const [formData, setFormData] = useState(blankForm);
   const [buscando, setBuscando] = useState(false);
+  const [imagenes, setImagenes] = useState([]);
   const [reDo, setReDo] = useState(true);
   const [local, setLocal] = useState(null);
 
@@ -41,11 +44,11 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
     const productoLocal = await getProductoPorCodigoBarra(codigoBarraIngresado)
       if (!productoLocal.error) {
         setFormData(productoLocal);
-        setLocal("local")
+        setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
       }else{
-        const { resultadosDeLaBusqueda: [{ prismaObject = {} }] = [] } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+        const { imagenes: ims, primerResultadoDeLaBusqueda: { prismaObject = {} } } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+        setImagenes(ims)
         setFormData(prismaObject);
-        setLocal(null)
       }
       setBuscando(false);
   },[]);
@@ -55,6 +58,12 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
     e.preventDefault()
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }, []);
+
+  const handleImageChange = useCallback((selectedImageUrl) => {
+    if (selectedImageUrl && (selectedImageUrl !== formData.imagen)) {
+      setFormData(prevFormData => ({ ...prevFormData, imagen: selectedImageUrl }));
+    }
+  },[formData]);
 
   const handleCodigoBarraKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -69,6 +78,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
     setBuscando(false)
     setFormData(blankForm)
     setLocal(null)
+    setImagenes([])
   },[blankForm, deleteParam])
 
   useEffect(() => {
@@ -78,70 +88,91 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
   }, [codigoBarraParam, handleBuscarLocalyGoogle, reDo]);
 
   return (
-    <div className='flex flex-row'>
-      {formData.imagen && <ImagenProducto item={formData} size={320} texto="Imagen del producto" />}
-      <FormCard handleReset={handleReset} loading={buscando} title={`${ local ? "Editar" : "Cargar"} Producto`} action={handleSave}>
-        {/*<CheckBox name="activarOpcion" label="Buscar al escribir?" seter={() => {}} />*/}
-        <input hidden name={"imagen"} value={formData.imagen}/>
-        <Input
-          name="codigoBarra"
-          label="Codigo De Barras"
-          placeholder="Codigo de barras"
-          onKeyDown={handleCodigoBarraKeyPress}
-          onChange={handleInputChange}
-          value={formData.codigoBarra}
-        />
+    <div className='flex flex-row m-0'>
+      <div className='py-[44px] px-[12px] rounded-l-2xl w-[344px] h-[408px] items-center bg-slate-400'>
+        <SelectorImagenes imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
+      </div>
+      <FormCard className={"grid grid-cols-1 max-w-[600px] gap-2 rounded-none rounded-r"} handleReset={handleReset} loading={buscando} action={handleSave}>
+        <FormTitle
+            textClass={"text-2xl font-bold text-slate-500"}
+            className={`col-span-full text-center`}
+          >
+              {`${ local ? "Editar" : "Cargar"} Producto`}
+        </FormTitle>
 
-        <Input
-          name="nombre"
-          label="Nombre"
-          placeholder="Nombre"
-          onChange={handleInputChange}
-          value={formData.nombre}
-        />
+        <div className="grid col-span-full grid-cols-12 gap-3">
+          <div className="col-span-6">
+            <Input
+              name="codigoBarra"
+              label="Codigo De Barras"
+              placeholder="Escanee un codigo de barras"
+              onKeyDown={handleCodigoBarraKeyPress}
+              onChange={handleInputChange}
+              value={formData.codigoBarra}
+              />
+            </div>
+            <div className="col-span-3">
+              <Input
+                name="size"
+                label="Tamaño"
+                placeholder="Tamaño, cantidad"
+                onChange={handleInputChange}
+                value={formData.size}
+              />
+            </div>
+            <div className="col-span-3">
+              <Input
+                name="unidad"
+                label="Unidades"
+                placeholder="Litros, gramos, etc.."
+                onChange={handleInputChange}
+                value={formData.unidad}
+              />
+            </div>
+            <div className="col-span-12">
+              <Input
+                name="nombre"
+                label="Nombre"
+                placeholder="Marca y Nombre del producto"
+                onChange={handleInputChange}
+                value={formData.nombre}
+              />
+            </div>
+            <div className="col-span-12">
+              <Input
+                name="descripcion"
+                label="Descripcion"
+                placeholder="Coloque una buena descripcion"
+                onChange={handleInputChange}
+                value={formData.descripcion}
+              />
+            </div>
+            <div className="col-span-6">
+              <Input
+                name="precioActual"
+                label="Precio Actual"
+                placeholder="Ingrese el precio Actual"
+                onChange={handleInputChange}
+                value={formData.precioActual}
+              />
+            </div>
+            <div className="col-span-6">
 
-        <Input
-          name="descripcion"
-          label="Descripcion"
-          placeholder="Descripcion"
-          onChange={handleInputChange}
-          value={formData.descripcion}
-        />
 
-        <Input
-          name="size"
-          label="Tamaño"
-          placeholder="Tamaño"
-          onChange={handleInputChange}
-          value={formData.size}
-        />
+              <SelectCategoriaClient
+                valueField="id"
+                textField="nombre"
+                options={categorias}
+                name="categoriaId"
+                label="Categoria"
+                placeholder="Elija una categoría"
+                onChange={handleInputChange}
+                value={formData.categoriaId}
+              />
+            </div>
+          </div>
 
-        <Input
-          name="unidad"
-          label="Unidad"
-          placeholder="Unidad"
-          onChange={handleInputChange}
-          value={formData.unidad}
-        />
-
-        <Input
-          name="precioActual"
-          label="Precio Actual"
-          placeholder="Precio Actual"
-          onChange={handleInputChange}
-          value={formData.precioActual}
-        />
-
-        <SelectCategoriaClient
-          valueField="id"
-          textField="nombre"
-          options={categorias}
-          name="categoriaId"
-          label="Categoria"
-          placeholder="Elija una categoría"
-          onChange={handleInputChange}
-          value={formData.categoriaId}
-        />
+        <Input className={"col-span-1"}type={"hidden"} name={"imagen"} value={formData.imagen} onChange={handleInputChange}/>
       </FormCard>
     </div>
   );

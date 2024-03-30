@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Label from "./Label";
 import HighlightMatch from '../HiglightMatch';
+import Icon from './Icon';
 
 const FilterSelect = ({ value, save, options = [], valueField, textField, label, ...props }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -68,6 +69,7 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
   }, [isOpen, open]);
 
   useEffect(() => {
+    console.log(filteredOptions)
     optionRefs.current = optionRefs.current.slice(0, filteredOptions.length);
   }, [filteredOptions]);
 
@@ -113,7 +115,71 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
     }
 
   };
+  return (
+    <div ref={refPadre} className="relative">
+      <label
+        className={`
+          absolute left-0 px-2.5
+          transition-all text-sm top-0.5
+          font-medium text-black
+          peer-placeholder-shown:text-md
+          peer-placeholder-shown:top-2.5
+          peer-focus:text-sm 
+          peer-focus:top-0.5
+        `}
+      >
+        {label}
+      </label>
+      <input
+        readOnly
+        hidden
+        name={props.name}
+        value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value : undefined) || 0)}
+      />
+      <div className="flex items-center">
+        <input
+          ref={inputRef}
+          name={"$ACTION_IGNORE_INPUT"}
+          className="form-input block text-right w-full pr-10 pb-2.5 pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0 focus:border-black peer"
+          placeholder={props.placeholder}
+          value={opcion ? opcion[textField] : filtro}
+          onChange={(e) => phase(null, e.target.value, true, -1)}
+          onClick={() => setIsOpen(!isOpen)}
+          onKeyDown={handleKeyDown}
+          tabIndex={props.tabIndex}
+          autoComplete="off"
+        />
+        <div className="pointer-events-none absolute right-2 top-[50%] transform -translate-y-1/2">
+          <div className={`transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`}>
+            <Icon icono={"chevron-up"}/>
+          </div>
+        </div>
+      </div>
+      {isOpen && (
+        <ul className="absolute rounded z-10 w-full max-h-60 overflow-auto border border-gray-200 mt-1 bg-white">
+          {filteredOptions.map((option, index) => (
+            <li
+              key={option[valueField]}
+              className={`cursor-pointer p-2 hover:bg-gray-100 ${hgIndex === index ? "bg-slate-300" : ""}`}
+              ref={(el) => optionRefs.current[index] = el}
+              onClick={() => onSelect(option)}
+              onMouseDown={(e) => e.preventDefault()}
+              tabIndex="0"
+              onKeyDown={handleKeyDown}
+            >
+              <HighlightMatch text={option[textField]} filter={filtro} largo={filteredOptions.length}/>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
 
+export default FilterSelect;
+
+
+  /*
   return (
     <div ref={refPadre} >
       <Label className="flex w-full flex-row justify-between" >{label}
@@ -158,5 +224,5 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
     </div>
   );
 };
-
 export default FilterSelect;
+*/

@@ -19,21 +19,21 @@ model Proveedores {
   email     String?            @default("completar@email.com")
   createdAt DateTime           @default(now())
   productos ProductoProveedor[]
-  facturas Facturas[]
+  facturas  Facturas[]
 }
 
 model ProductoProveedor {
-  id          Int       @id @default(autoincrement())
+  id          Int             @id @default(autoincrement())
   productoId  Int
   proveedorId String
-  codigo      String    // Código específico del producto para este proveedor
-  cantidad    Int       // Cantidad recibida en la última factura
-  precio      Float     // Precio por unidad en la última factura
-  createdAt   DateTime  @default(now())
+  codigo      String          // Código específico del producto para este proveedor
+  cantidad    Int             // Cantidad recibida en la última factura
+  precio      Float           // Precio por unidad en la última factura
+  createdAt   DateTime        @default(now())
 
-  producto   Productos  @relation(fields: [productoId], references: [id])
-  proveedor  Proveedores @relation(fields: [proveedorId], references: [id])
-  detalles   DetalleFactura[]
+  producto    Productos       @relation(fields: [productoId], references: [id])
+  proveedor   Proveedores     @relation(fields: [proveedorId], references: [id])
+  detalles    DetalleFactura[]
 
   @@unique([productoId, proveedorId, codigo]) // Asegura que la combinación de producto-proveedor-código sea única
 }
@@ -61,6 +61,26 @@ model Categorias {
   nombre      String      @unique
   products    Productos[]
 }
+
+model Unidades {
+  id            String          @id @default(uuid())
+  nombre        String          @unique
+  simbolo       String          @unique
+  createdAt     DateTime        @default(now())
+  conversionesA Conversion[]    @relation("ConversionOrigen")
+  conversionesDe Conversion[]   @relation("ConversionDestino")
+}
+
+model Conversion {
+  id            String    @id @default(uuid())
+  factor        Float     // Factor de conversión de la unidad origen a la unidad destino
+  origenId      String    // UUID de la unidad origen
+  destinoId     String    // UUID de la unidad destino
+  origen        Unidades  @relation(name: "ConversionOrigen", fields: [origenId], references: [id])
+  destino       Unidades  @relation(name: "ConversionDestino", fields: [destinoId], references: [id])
+}
+
+
 
 model Facturas {
   id              Int             @id @default(autoincrement())

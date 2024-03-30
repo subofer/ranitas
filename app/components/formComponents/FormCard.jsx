@@ -13,7 +13,7 @@ const FormButtons = ({submitButtonText, resetButtonText, order, handleReset, loa
   )
 }
 
-export const FormCard = ({children, title, loading, buttons, action, handleReset, ...props}) => {
+export const FormCard = ({children, title, loading, buttons, action, handleReset,className, ...props}) => {
   const {
     result: state,
     ...formControl
@@ -21,7 +21,7 @@ export const FormCard = ({children, title, loading, buttons, action, handleReset
 
   return(
     <form
-      className="
+      className={`
         flex flex-col max-w-fit
         shadow-lg
         border-2
@@ -29,11 +29,12 @@ export const FormCard = ({children, title, loading, buttons, action, handleReset
         bg-gray-200
         rounded-md
         p-4
-      "
+        ${className}
+      `}
       {...formControl}
       {...props}
     >
-      { title && <FormTitle>{title}</FormTitle> }
+      { title && <FormTitle className={"col-span-full"}>{title}</FormTitle> }
       { children }
       { buttons !== false && <FormButtons loading={loading} handleReset={handleReset} order={props?.inputs?.length + 1 || props?.formlength || 0}/> }
       <div className="mt-2 h-2">

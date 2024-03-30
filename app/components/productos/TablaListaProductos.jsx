@@ -42,7 +42,7 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
               : "Selecionar todos"
           }
           </SelectAllToggle>
-          <CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>
+          {/*<CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>*/}
         </TituloFiltrero>
       }
       {...props}

@@ -5,13 +5,16 @@ import { BotonEliminarProducto } from './BotonEliminarProducto';
 import ImagenProducto from './ImagenProducto';
 import useMyParams from '@/app/hooks/useMyParams';
 import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
+import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
+import { showImagenProducto } from './showImagenProducto';
 
 export const tablaListaProductosColumnasNames = {
-  edit:{
+  edit: {
     titulo:"",
     Component: BotonEditarProducto,
     onClick: ({codigoBarra}) => ({action:"addParam", key:"codigoBarra", value: codigoBarra, isParams: true}),
     className:"w-px text-center",
+    noselect: true,
   },
   cat: {
     titulo: "Categoria",
@@ -23,21 +26,21 @@ export const tablaListaProductosColumnasNames = {
     key:"codigoBarra",
     className:"w-40 text-center",
   },
-  nombre:{
+  nombre: {
     titulo: "Nombre",
     key:"nombre",
   },
-  desc:{
+  desc: {
     titulo: "Descripcion",
     key: "descripcion"
   },
-  size:{
+  size: {
     titulo: "Tamaño",
     key:["size","unidad"],
     className:"text-right w-px",
     decorador: textos.unidades,
-},
-  precioActual:{
+  },
+  precioActual: {
     titulo: "Precio",
     key: "precioActual",
     className: "text-right w-px",
@@ -48,14 +51,25 @@ export const tablaListaProductosColumnasNames = {
     size: 28,
     key:"imagen",
     Component: ImagenProducto,
+    onClick: ( {nombre, imagen}) => {showImagenProducto(nombre, 
+      `<div style="display: flex; justify-content: center; animation: float 2s ease-in-out infinite;">
+        <img style="width: 320px;" src="${imagen}" alt="img"/>
+      </div>
+    `)},
     componentclassname: "mx-auto",
+    noselect: true,
   },
   eliminar: {
     titulo: "",
     className: "text-center w-px",
     Component: BotonEliminarProducto,
     componentclassname: "p-0 m-0",
-    onClick: ({id}) => eliminarProductoConPreciosPorId(id),
+    onClick: ({id, nombre, imagen}) => alertaBorrarProducto( () => eliminarProductoConPreciosPorId(id), nombre, 
+    `<div style="display: flex; justify-content: center; animation: float 2s ease-in-out infinite;">
+      <img style="width: 320px;" src="${imagen}" alt="img"/>
+    </div>`
+    ),
+    noselect: true,
   },
 }
 
