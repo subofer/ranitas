@@ -1,7 +1,8 @@
 "use client"
 import { textos } from "@/lib/manipularTextos";
-import { Tabla, Td, Tr } from "../Tablas";
+
 import { calculosFinancieros, contarObjetosEnArray } from "@/lib/contarObjetos";
+import { Tabla, Td, Tr } from "../Tablas ";
 
 const columnasNames = {
   cantidad:{

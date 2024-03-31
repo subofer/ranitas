@@ -1,6 +1,6 @@
 "use client"
-import { useEffect, useState, useRef, useCallback } from "react";
-import Label from "./Label";
+import { forwardRef } from "react";
+
 /*
 const Input = ({ label, className, ...props }) => {
   return (
@@ -29,10 +29,13 @@ const Input = ({ label, className, ...props }) => {
 export default Input;
 
 */
-const Input = ({ label, name, type = "text", placeholder, value,  ...props }) => {
+
+//const Input = ({ label, name, type = "text", placeholder, value,  ...props }) => {
+const Input = forwardRef(({ name, type = "text", placeholder, label, value, ...props }, ref) => {
   return (
     <div className="relative">
       <input
+        ref={ref}
         id={name}
         name={name}
         type={type}
@@ -42,7 +45,7 @@ const Input = ({ label, name, type = "text", placeholder, value,  ...props }) =>
           form-input
           block w-full
           px-2.5 pb-2.5
-          pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0 
+          pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
           focus:border-slate-400 peer
           text-right
           `}
@@ -60,6 +63,7 @@ const Input = ({ label, name, type = "text", placeholder, value,  ...props }) =>
 
     </div>
   );
-}
+})
 
+Input.displayName = "Input"
 export default Input;

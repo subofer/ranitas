@@ -1,8 +1,9 @@
 "use client"
 import { borrarCategoria } from "@/prisma/serverActions/categorias";
 import { fechas } from "@/lib/manipularTextos";
-import { Tr, Td } from '../Tablas';
+
 import Icon from "../formComponents/Icon";
+import { Td, Tr } from "../Tablas ";
 
 
 export const RenglonCategoria = ({item}) => (

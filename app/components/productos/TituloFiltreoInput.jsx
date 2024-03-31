@@ -31,6 +31,7 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [seter]);
+
   const variableLabel = cantidades.seleccionados != cantidades.total ? `(${cantidades.seleccionados}/${cantidades.total})` : `(${cantidades.total})`
   return(
     <div className="flex flex-row align-middle justify-center gap-2 p-1 bg-transparent">

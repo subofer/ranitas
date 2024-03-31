@@ -7,7 +7,7 @@ export const RenglonTablaProducto = ({item, columnas, seleccionado, onTogglesele
   const myParams = useMyParams();
 
   return (
-  <Tr className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-200":""}`}
+  <Tr seleccionado={seleccionado} className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-300":""}`}
   >
     {
       columnas && columnas.map((col, index)=> {
