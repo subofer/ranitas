@@ -1,36 +1,5 @@
 "use client"
 import { forwardRef } from "react";
-
-/*
-const Input = ({ label, className, ...props }) => {
-  return (
-  <Label className={`grid grid-cols-[max-content,300px] justify-between  gap-2 ${className}`}>
-      <span className={"pl-2 items-center"} >
-        { label }
-      </span>
-      <input
-        className="
-          h-8
-          form-input
-          rounded
-          border-2
-          border-slate-200
-          text-gray-700
-          w-full
-          disabled:bg-slate-200
-          self-end
-          text-right
-        "
-        {...props}
-      />
-    </Label>
-  )
-}
-export default Input;
-
-*/
-
-//const Input = ({ label, name, type = "text", placeholder, value,  ...props }) => {
 const Input = forwardRef(({ name, type = "text", placeholder, label, value, ...props }, ref) => {
   return (
     <div className="relative">
@@ -54,7 +23,7 @@ const Input = forwardRef(({ name, type = "text", placeholder, label, value, ...p
         <label
           htmlFor={name}
           className={`
-            absolute left-0 transition-all px-2.5 
+            absolute left-0 transition-all px-2.5
             text-sm font-medium top-0.5 text-black
             peer-placeholder-shown:text-md peer-placeholder-shown:top-2.5 peer-focus:text-sm peer-focus:top-0.5`}
         >

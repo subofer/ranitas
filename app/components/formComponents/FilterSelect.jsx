@@ -1,7 +1,5 @@
 "use client";
-
 import { useState, useRef, useEffect, useCallback } from 'react';
-import Label from "./Label";
 import HighlightMatch from '../HiglightMatch';
 import Icon from './Icon';
 
@@ -69,7 +67,6 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
   }, [isOpen, open]);
 
   useEffect(() => {
-    console.log(filteredOptions)
     optionRefs.current = optionRefs.current.slice(0, filteredOptions.length);
   }, [filteredOptions]);
 
@@ -124,7 +121,7 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
           font-medium text-black
           peer-placeholder-shown:text-md
           peer-placeholder-shown:top-2.5
-          peer-focus:text-sm 
+          peer-focus:text-sm
           peer-focus:top-0.5
         `}
       >

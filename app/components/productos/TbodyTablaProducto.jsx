@@ -6,6 +6,7 @@ export const TbodyTablaProducto = ({items, columnas, seleccionados, onToggleSele
     <RenglonTablaProducto
       key={i}
       item={p}
+      ultimo={(i == (items?.length-1))}
       columnas={columnas}
       seleccionado={seleccionados.includes(p.id)}
       onToggleseleccionado={() => onToggleSeleccion(p.id)}

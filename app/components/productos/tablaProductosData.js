@@ -13,62 +13,58 @@ export const tablaListaProductosColumnasNames = {
     titulo:"",
     Component: BotonEditarProducto,
     onClick: ({codigoBarra}) => ({action:"addParam", key:"codigoBarra", value: codigoBarra, isParams: true}),
-    className:"w-px text-center",
+    className:"pl-2 text-center",
     noselect: true,
-  },
-  cat: {
-    titulo: "Categoria",
-    key:"categoria.nombre",
-    className:"w-40 text-center",
   },
   codigoBarra: {
     titulo: "Codigo-Barras",
     key:"codigoBarra",
-    className:"w-40 text-center",
+    className:"w-px px-4 text-center",
+  },
+  cat: {
+    titulo: "Categoria",
+    key:"categoria.nombre",
+    className:"px-2 w-px whitespace-nowrap text-center",
+    valorDefecto:"-",
   },
   nombre: {
     titulo: "Nombre",
     key:"nombre",
+    className:"px-4 text-left",
   },
   desc: {
     titulo: "Descripcion",
-    key: "descripcion"
+    key: "descripcion",
+    className:"px-4 text-left",
   },
   size: {
     titulo: "Tamaño",
     key:["size","unidad"],
-    className:"text-right w-px",
+    className:"px-2 text-center w-px whitespace-nowrap",
     decorador: textos.unidades,
   },
   precioActual: {
     titulo: "Precio",
     key: "precioActual",
-    className: "text-right w-px",
+    className: "px-2 pr-4 text-right w-px",
     decorador: textos.moneda,
   },
   imagen: {
     titulo:"Img",
-    size: 28,
+    size: 64,
     key:"imagen",
+    className: "w-fit m-1",
     Component: ImagenProducto,
-    onClick: ( {nombre, imagen}) => {showImagenProducto(nombre, 
-      `<div style="display: flex; justify-content: center; animation: float 2s ease-in-out infinite;">
-        <img style="width: 320px;" src="${imagen}" alt="img"/>
-      </div>
-    `)},
-    componentclassname: "mx-auto",
+    onClick: showImagenProducto,
+    componentclassname: "mx-auto m-1",
     noselect: true,
   },
   eliminar: {
     titulo: "",
-    className: "text-center w-px",
+    className: "px-2 text-center w-px",
     Component: BotonEliminarProducto,
     componentclassname: "p-0 m-0",
-    onClick: ({id, nombre, imagen}) => alertaBorrarProducto( () => eliminarProductoConPreciosPorId(id), nombre, 
-    `<div style="display: flex; justify-content: center; animation: float 2s ease-in-out infinite;">
-      <img style="width: 320px;" src="${imagen}" alt="img"/>
-    </div>`
-    ),
+    onClick: (item) => alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id)),
     noselect: true,
   },
 }

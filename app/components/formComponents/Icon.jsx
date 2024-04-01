@@ -10,15 +10,21 @@ const icons = (icono) => {
 }
 
 const Icon = ({className, children, icono, ...props}) => (
-  <Button
-    className={`bg-transparent ring-transparent ${className}`}
-    tipo="icono"
+  <button
+    className={`
+      active:scale-[90%]
+      transition duration-150 ease-in-out
+      disabled:bg-slate-400
+      disabled:cursor-not-allowed
+      bg-transparent
+      ring-transparent
+      ${className}`}
     { ...props }
   >
-      <i className={`z-auto fa-solid fa-${icons(icono)} ${className}`}>
+      <i className={`fa-solid fa-${icons(icono)} ${className}`}>
         {children}
       </i>
-  </Button>
+  </button>
 );
 
 export default Icon;

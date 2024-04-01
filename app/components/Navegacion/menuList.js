@@ -1,7 +1,8 @@
 const menuList = {
   "Home" : "/",
   "Venta" : "/venta",
-  "Productos" : "/productos",
+  "Cargar Producto" : "/productos",
+  "Ver Productos" : "/listadoProductos",
   "Categorias" : "/categorias",
   "Busqueda" : "/buscarEnGoogle",
   "Compras" : "/compras",

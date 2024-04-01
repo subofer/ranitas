@@ -2,7 +2,7 @@
 
 import { getProveedores } from "@/prisma/consultas/proveedores";
 import { RenglonProveedor } from "./RenglonProveedor";
-import { Tabla } from "../Tablas ";
+import { Tabla } from "../Tablas/Tablas ";
 
 
 const ListadoProveedores = async (props) => {

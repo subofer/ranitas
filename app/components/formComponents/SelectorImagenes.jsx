@@ -17,7 +17,7 @@ const SelectorImagenes = ({ imagenes, proceder, ...props}) => {
   };
 //style={{ height: '320px', width: '320px', position: 'relative' }}
   return (
-    <div className='relative bg-slate-200 rounded-2xl h-full w-full'>
+    <div className='relative bg-slate-200 rounded h-full w-full'>
       <Image
         src={img?.imagen?.src || imagenRanita.imagen.src}
         alt={img?.imagen?.alt || imagenRanita.imagen.alt}

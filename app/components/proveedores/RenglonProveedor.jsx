@@ -7,7 +7,7 @@ import { textos } from "@/lib/manipularTextos"
 import useMyParams from "@/app/hooks/useMyParams"
 import { useCallback } from "react"
 import { alertaBorrarProveedor } from "../alertas/alertaBorrarProveedor"
-import { Td, Tr } from "../Tablas "
+import { Td, Tr } from "../Tablas/Tablas "
 
 export const RenglonProveedor = ({item: proveedor}) => {
   const { addParam, recarga } = useMyParams();

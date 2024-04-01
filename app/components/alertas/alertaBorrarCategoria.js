@@ -1,12 +1,9 @@
 import Swal from 'sweetalert2'
 
-export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
+export const alertaBorrarCategoria = async ({nombre}, action) => {
   const pregunta = {
-    title: `Borrar ${nombre}?`,
+    title: `Borrar Categoria "${nombre}"?`,
     text: "Se rompen las listas de precios, los provedores, se arma terrible cagada.",
-    html: `<div style="display: flex; justify-content: center; animation: float 2s ease-in-out infinite;">
-            <img style="width: 320px;" src="${imagen}" alt="img"/>
-          </div>`,
     showCancelButton: true,
     confirmButtonColor: '#3085d6',
     cancelButtonColor: '#d33',
@@ -17,7 +14,7 @@ export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
   const solucion = {
     true: {
       title: '¡Borrado!',
-      text: 'Producto eliminado',
+      text: 'Categoria eliminada',
       icon: 'success',
     },
     false : {

@@ -89,7 +89,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
 
   return (
     <div className='flex flex-row m-0'>
-      <FormCard className={"grid grid-cols-1 max-w-[600px] gap-2 rounded-none rounded-l-2xl"} handleReset={handleReset} loading={buscando} action={handleSave}>
+      <FormCard className={"grid grid-cols-1 max-w-[600px] gap-2 rounded-none "} handleReset={handleReset} loading={buscando} action={handleSave}>
         <FormTitle
             textClass={"text-3xl font-bold text-slate-500"}
             className={`col-span-full text-center`}
@@ -171,7 +171,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
 
         <Input className={"col-span-1"}type={"hidden"} name={"imagen"} value={formData.imagen} onChange={handleInputChange}/>
       </FormCard>
-      <div className='p-4 rounded-r-2xl h-auto w-[400px] items-center bg-slate-400'>
+      <div className='p-4 h-auto w-[400px] items-center bg-slate-400'>
         <SelectorImagenes imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
       </div>
     </div>

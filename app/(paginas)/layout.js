@@ -14,9 +14,10 @@ export default function RootLayout({ children }) {
       </head>
       <body className="flex w-screen h-screen min-w-[1024px] overflow-hidden">
         <NavBar className='flex w-fit md:w-64 md:h-screen h-screen'/>
-        <main className='overflow-hidden p-4 mb-4'>
-          {children}
+        <main className='flex flex-col p-4'>
+            {children}
         </main>
+
       </body>
     </html>
   );

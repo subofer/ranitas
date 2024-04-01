@@ -1,13 +1,29 @@
 import Swal from 'sweetalert2'
 
-export const showImagenProducto = async (nombre, html) => {
+export const showImagenProducto = async ({nombre, imagen}) => {
+  
   const pregunta = {
     text: `${nombre}?`,
-    html,
+    html: `<div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+    <span style="text-align: center; font-weight: bold; font-size: 24px; margin-bottom: 20px;">${nombre}</span>
+    <img style="width: 480px; height: auto" src="${imagen}" alt="Imagen del producto"/>
+  </div>
+`,
     toast: true,
+    width: "600px",
   }
  await Swal.fire(pregunta)
 }
+
+
+
+
+
+
+
+
+
+
 
 /*
 export const showImagenProducto = async (nombre, html) => {

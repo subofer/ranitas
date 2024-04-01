@@ -1,12 +1,11 @@
 "use client"
 import { useCallback, useState } from 'react';
-
 import TbodyTablaProducto from './TbodyTablaProducto';
 import TituloFiltrero from './TituloFiltreoInput';
 import useFiltrarProductosPorValor from '@/app/hooks/useFiltrarProductosPorValor';
 import SelectAllToggle from './SelectAllToggle';
 import CopyToClipBoard from './CopyToClipBoard';
-import { Tabla } from '../Tablas ';
+import { Tabla } from '../Tablas/Tablas ';
 
 const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props } = {}) => {
   const [
@@ -37,7 +36,7 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
     <Tabla
       columnas={cols}
       titulo={
-        <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}}titulo={titulo} seter={setFiltro}>
+        <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}} titulo={titulo} seter={setFiltro}>
           <SelectAllToggle seter={toggleSeleccionButton}>
           {
             seleccionados.length == productosFiltrados.length
