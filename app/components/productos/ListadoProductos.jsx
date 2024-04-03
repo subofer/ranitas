@@ -2,9 +2,9 @@
 import { getProductos } from '@/prisma/consultas/productos';
 import TablaListaProductos from './TablaListaProductos';
 
-const ListadoProductos = async ({suspense, ...props}) => {
-  const columnas = ['edit', 'codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual', 'imagen', 'eliminar']
-  const productos = suspense ? [{nombre: "cargando....."},{},{},{},{},{},{}] : await getProductos()
+const ListadoProductos = async ({cols, ...props}) => {
+  const columnas = cols || ['edit', 'codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual', 'imagen', 'eliminar']
+  const productos = await getProductos()
 
   return (
     <TablaListaProductos

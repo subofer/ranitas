@@ -7,6 +7,7 @@ const menuList = {
   "Busqueda" : "/buscarEnGoogle",
   "Compras" : "/compras",
   "Proveedores" : "/proveedores",
+  "Ia" : "/ia",
 }
 
 export default menuList;

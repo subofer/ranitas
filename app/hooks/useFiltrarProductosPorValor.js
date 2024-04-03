@@ -1,6 +1,6 @@
 import { textos as tx } from '@/lib/manipularTextos';
 import { useState } from 'react';
-import { tablaListaProductosColumnasNames, obtenerValorPorRuta as vr} from '../components/productos/tablaProductosData';
+import { getKeyByName, tablaListaProductosColumnasNames, obtenerValorPorRuta as vr} from '../components/productos/tablaProductosData';
 
 const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
   const filtros = tx.preparar(filtro);
@@ -15,13 +15,15 @@ const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
 const useFiltrarProductosPorValor = (productos, columnas) => {
   const [filtro, setFiltro] = useState("");
   const productosFiltrados = filtrarProductosPorClave(productos, filtro, tablaListaProductosColumnasNames) || [];
-
   return [
-    columnas?.map((x) => tablaListaProductosColumnasNames[x]?.titulo),
+    columnas?.map((x) => ({
+      titulo: tablaListaProductosColumnasNames[x]?.titulo,
+      ordenable:tablaListaProductosColumnasNames[x]?.ordenable,
+      key:x })),
     productosFiltrados,
     setFiltro,
     productos.length,
-    productosFiltrados.length
+    productosFiltrados.length,
   ];
 }
 

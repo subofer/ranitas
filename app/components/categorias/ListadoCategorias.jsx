@@ -5,7 +5,12 @@ import { Tabla } from "../Tablas/Tablas ";
 
 
 const ListadoCategorias = async (props) => {
-  const columnas = ['id', 'Creada','Cantidad', 'Nombre', '']
+  const columnas = [
+    {titulo:'id'},
+    {ordenable: true, titulo:'Creada'},
+    {ordenable: true, titulo:'Cantidad'},
+    {ordenable: true, titulo:'Nombre'},
+    {titulo:''}]
   const categorias = await getCategoriasConteo()
 
   return (

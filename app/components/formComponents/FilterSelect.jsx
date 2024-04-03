@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import HighlightMatch from '../HiglightMatch';
 import Icon from './Icon';
 
@@ -13,9 +13,9 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
   const inputRef = useRef(null);
   const optionRefs = useRef([]);
 
-  const filteredOptions = options?.filter((option) =>
-    option[textField]?.toLowerCase()?.includes(filtro?.toLowerCase())
-  );
+  const filteredOptions = useMemo(
+    () => options.filter(option => option[textField].toLowerCase().includes(filtro.toLowerCase())
+  ), [options, filtro, textField]);
 
   const phase = (opcion, filtro, abierto, index) => {
     setOpcion(opcion);
@@ -43,15 +43,15 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
 
   useEffect(() => {
     const formulario = refPadre.current.closest('form');
-    setForm(formulario)
+    if(formulario){
+      setForm(formulario)
+    }
   }, []);
 
 
   useEffect(() => {
     const handleReset = () => phase(null, '', false, -1);
-    if (form) {
-      form.addEventListener('reset', handleReset);
-    }
+    if (form) form.addEventListener('reset', handleReset);
     return () => { if (form) form.removeEventListener('reset', handleReset)};
   }, [form]);
 
@@ -174,52 +174,3 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
 };
 
 export default FilterSelect;
-
-
-  /*
-  return (
-    <div ref={refPadre} >
-      <Label className="flex w-full flex-row justify-between" >{label}
-      <div className="w-3/5 relative">
-        <input readOnly hidden name={props.name} value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value: undefined) || 0)}/>
-        <input
-          ref={inputRef}
-          name={"$ACTION_IGNORE_INPUT"}
-          className="input[type='search'] w-full form-select rounded border-2 border-slate-200 text-right p-0 pr-8"
-          placeholder={props.placeholder}
-          value={opcion ? opcion[textField] : filtro}
-          onChange={(e) => phase(null, e.target.value, true, -1)}
-          onClick={() => setIsOpen(!isOpen)}
-          onKeyDown={handleKeyDown}
-          tabIndex={props.tabIndex}
-          autoComplete="off"
-        />
-        {isOpen && (
-          <ul className="text-right absolute rounded z-10 w-full max-h-60 overflow-auto">
-            {filteredOptions.map((option, index) => (
-              <li
-                key={option[valueField]}
-                className={`form-input form-multiselect pr-8 py-0.5 text-right cursor-pointer
-                  border-slate-200 focus:border-0 border-0
-                  active:bg-slate-300 hover:bg-slate-200
-                  focus:bg-slate-300 focus:ring-0
-                  ${hgIndex == index ? "bg-slate-300" : ""}
-                `}
-                ref={(el) => optionRefs.current[index] = el}
-                onClick={() => onSelect(option)}
-                onMouseDown={(e) => e.preventDefault()}
-                tabIndex="0"
-                onKeyDown={handleKeyDown}
-              >
-                <HighlightMatch text={option[textField]} filter={filtro} largo={filteredOptions.length}/>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      </Label>
-    </div>
-  );
-};
-export default FilterSelect;
-*/

@@ -1,6 +1,6 @@
 "use client"
 import { forwardRef } from "react";
-const Input = forwardRef(({ name, type = "text", placeholder, label, value, ...props }, ref) => {
+const Input = forwardRef(({ name, type = "text", className, placeholder, label, value, ...props }, ref) => {
   return (
     <div className="relative">
       <input
@@ -17,6 +17,7 @@ const Input = forwardRef(({ name, type = "text", placeholder, label, value, ...p
           pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
           focus:border-slate-400 peer
           text-right
+          ${className}
           `}
         {...props}
       />

@@ -8,13 +8,10 @@ const PageCargarProductos = async () => {
   const categorias = await getCategorias();
 
   return (
-    <main className='container flex flex-col gap-4 w-full max-w-full h-screen overflow-hidden'>
+    <main className='flex flex-col gap-4 w-full h-screen overflow-hidden'>
       <CargaProductoBuscadorClient categorias={categorias}/>
-      <Suspense fallback={<ListadoProductos suspense />}>
-        <ListadoProductos/>
-      </Suspense>
+      <ListadoProductos/>
     </main>
   );
 };
 export default PageCargarProductos;
-

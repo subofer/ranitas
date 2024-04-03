@@ -4,8 +4,6 @@ import { guardarProducto } from "@/prisma/serverActions/productos";
 import SelectCategoriaClient from "../categorias/SelectCategoriaClient";
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
-import CheckBox from '../formComponents/CheckBox';
-import ImagenProducto from '../productos/ImagenProducto';
 import { getProductoPorCodigoBarra } from "@/prisma/consultas/productos";
 import useMyParams from '@/app/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
@@ -17,6 +15,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
   const codigoBarraParam = searchParams.get('codigoBarra');
 
   const blankForm = useMemo(() => ({
+    id:'',
     codigoBarra: '',
     nombre: '',
     descripcion: '',
@@ -36,13 +35,14 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
   const handleSave = (e) => {
     guardarProducto(e)
     setReDo(!reDo)
-    setLocal("local")
+    setLocal(true)
   }
 
   const handleBuscarLocalyGoogle = useCallback(async (codigoBarraIngresado) => {
     setBuscando(true);
     const productoLocal = await getProductoPorCodigoBarra(codigoBarraIngresado)
       if (!productoLocal.error) {
+        setLocal(true)
         setFormData(productoLocal);
         setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
       }else{
@@ -77,7 +77,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
     deleteParam("codigoBarra")
     setBuscando(false)
     setFormData(blankForm)
-    setLocal(null)
+    setLocal(false)
     setImagenes([])
   },[blankForm, deleteParam])
 
@@ -94,7 +94,7 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
             textClass={"text-3xl font-bold text-slate-500"}
             className={`col-span-full text-center`}
           >
-              {`${ local ? "Editar" : "Cargar"} Producto`}
+              {`${ local ? "Editar" : "Cargar"} Producto ${formData?.id}`}
         </FormTitle>
 
         <div className="grid col-span-full grid-cols-12 gap-3">

@@ -1,9 +1,7 @@
-import Image from 'next/image';
 import { textos } from '@/lib/manipularTextos';
 import { BotonEditarProducto } from './BotonEditarProducto';
 import { BotonEliminarProducto } from './BotonEliminarProducto';
 import ImagenProducto from './ImagenProducto';
-import useMyParams from '@/app/hooks/useMyParams';
 import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
 import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { showImagenProducto } from './showImagenProducto';
@@ -17,7 +15,7 @@ export const tablaListaProductosColumnasNames = {
     noselect: true,
   },
   codigoBarra: {
-    titulo: "Codigo-Barras",
+    titulo: "Codigo",
     key:"codigoBarra",
     className:"w-px px-4 text-center",
   },
@@ -26,21 +24,24 @@ export const tablaListaProductosColumnasNames = {
     key:"categoria.nombre",
     className:"px-2 w-px whitespace-nowrap text-center",
     valorDefecto:"-",
+    ordenable: true,
   },
   nombre: {
     titulo: "Nombre",
     key:"nombre",
-    className:"px-4 text-left",
+    className:"px-4 text-left w-fit",
+    ordenable: true,
   },
   desc: {
     titulo: "Descripcion",
     key: "descripcion",
-    className:"px-4 text-left",
+    className:"px-4 text-left w-fit",
+    ordenable: true,
   },
   size: {
     titulo: "Tamaño",
     key:["size","unidad"],
-    className:"px-2 text-center w-px whitespace-nowrap",
+    className:"px-2 text-center w-fit whitespace-nowrap",
     decorador: textos.unidades,
   },
   precioActual: {
@@ -48,22 +49,23 @@ export const tablaListaProductosColumnasNames = {
     key: "precioActual",
     className: "px-2 pr-4 text-right w-px",
     decorador: textos.moneda,
+    ordenable: true,
   },
   imagen: {
     titulo:"Img",
-    size: 64,
+    size: 90,
     key:"imagen",
-    className: "w-fit m-1",
+    className: "flex flex-row w-auto",
     Component: ImagenProducto,
     onClick: showImagenProducto,
-    componentclassname: "mx-auto m-1",
+    componentClassname: "my-1 self-center  mx-auto",
     noselect: true,
   },
   eliminar: {
     titulo: "",
     className: "px-2 text-center w-px",
     Component: BotonEliminarProducto,
-    componentclassname: "p-0 m-0",
+    componentClassname: "p-0 m-0",
     onClick: (item) => alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id)),
     noselect: true,
   },

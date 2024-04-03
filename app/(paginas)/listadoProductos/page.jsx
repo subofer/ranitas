@@ -5,9 +5,11 @@ import ListadoProductos from "@/app/components/productos/ListadoProductos"
 const PageVerProductos = async () => {
 
   return (
-    <main className='w-screen container flex flex-col flex-grow  h-screen overflow-hidden'>
+    <main className='flex flex-col flex-grow w-full h-full overflow-hidden'>
       <Suspense fallback={<ListadoProductos suspense />}>
-        <ListadoProductos/>
+        <ListadoProductos
+          cols={['codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual', 'imagen']}
+        />
       </Suspense>
     </main>
   );

@@ -42,6 +42,7 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
       name={"InputFiltrero"}
       ref={inputRef}
       type="text"
+      className={"mt-1 h-[40px]"}
       placeholder="Filtrar..."
       label={variableLabel}
       onChange={(e) => seter(e.target.value)}
