@@ -9,8 +9,9 @@ import useMyParams from '@/app/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
 import SelectorImagenes from '../formComponents/SelectorImagenes';
 import FormTitle from '../formComponents/Title';
+import { consultarAHere } from '@/app/ia/consultaIa';
 
-export const CargaProductoBuscadorClient = ({ categorias }) => {
+export const CargaProductoBuscadorClient = ({ categorias, ia = false }) => {
   const { searchParams, deleteParam } = useMyParams();
   const codigoBarraParam = searchParams.get('codigoBarra');
 
@@ -46,12 +47,16 @@ export const CargaProductoBuscadorClient = ({ categorias }) => {
         setFormData(productoLocal);
         setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
       }else{
-        const { imagenes: ims, primerResultadoDeLaBusqueda: { prismaObject = {} } } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+        const { imagenes: ims, primerResultadoDeLaBusqueda: { prismaObject = {} }, textoCompleto } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
         setImagenes(ims)
         setFormData(prismaObject);
+        //Activar la IA para procesar los datos y corregirlos.
+        if(ia){
+          consultarAHere(prismaObject, textoCompleto)
+        }
       }
       setBuscando(false);
-  },[]);
+  },[ia]);
 
 
   const handleInputChange = useCallback((e) => {

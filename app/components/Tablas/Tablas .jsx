@@ -48,7 +48,7 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, ...props } = 
 
   useEffect(() => {
     if (captionRef.current) {
-      setAlturaCaption(captionRef.current.offsetHeight-4); // Paso 3: Acceder a la altura
+      setAlturaCaption(captionRef.current.offsetHeight); // Paso 3: Acceder a la altura
     }
   }, []);
 
@@ -63,8 +63,8 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, ...props } = 
           {titulo}
         </caption>
         <thead className=" bg-gray-200 w-full">
-          <Separadores columnas={columnas} alto={1} color={"bg-gray-300"} stick={alturaCaption}/>
-          <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaCaption+4}/>
+          <Separadores columnas={columnas} alto={1} color={"bg-gray-200"} stick={alturaCaption+4}/>
+          <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaCaption+6}/>
           <tr ref={headRef} className="justify-around bg-gray-200" style={estiloStyck(alturaCaption)}>
             {columnas && columnas.map(({titulo: t, ordenable, key}, i) => (
               <th key={i} className="whitespace-nowrap px-0 py-0.5 text-xs font-medium text-gray-600 uppercase tracking-wider ">
@@ -73,7 +73,7 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, ...props } = 
             ))}
           </tr>
           <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaHead}/>
-          <Separadores columnas={columnas} alto={1} color={"bg-gray-300"} stick={alturaHead+1}/>
+          <Separadores columnas={columnas} alto={1} color={"bg-gray-300"} stick={alturaHead+4}/>
         </thead>
         <tbody className="bg-white divide-y divide-gray-300 snap-both overflow-hidden">
           {children}

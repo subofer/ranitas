@@ -34,20 +34,20 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
 
   const variableLabel = cantidades.seleccionados != cantidades.total ? `(${cantidades.seleccionados}/${cantidades.total})` : `(${cantidades.total})`
   return(
-    <div className="flex flex-row align-middle justify-center gap-2 bg-transparent">
+    <div className="flex flex-row justify-between px-3 py-2">
+      <div className="self-left"> {children} </div>
       <span className="self-center">
-        {titulo}:
+        {titulo}
       </span>
-    <Input
-      name={"InputFiltrero"}
-      ref={inputRef}
-      type="text"
-      className={"mt-1 h-[40px]"}
-      placeholder="Filtrar..."
-      label={variableLabel}
-      onChange={(e) => seter(e.target.value)}
-      />
-      {children}
+      <Input
+        name={"InputFiltrero"}
+        ref={inputRef}
+        type="text"
+        className={"mt-1 h-[35px]"}
+        placeholder="Filtrar..."
+        label={variableLabel}
+        onChange={(e) => seter(e.target.value)}
+        />
     </div>
   )
 }

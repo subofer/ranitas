@@ -11,6 +11,7 @@ const ListadoProductos = async ({cols, ...props}) => {
       columnas={columnas}
       titulo={"Productos"}
       productos={productos}
+      tipo={"filtro"}
       {...props}
       />
   )

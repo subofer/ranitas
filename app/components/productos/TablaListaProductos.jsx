@@ -7,7 +7,7 @@ import SelectAllToggle from './SelectAllToggle';
 import CopyToClipBoard from './CopyToClipBoard';
 import { Tabla } from '../Tablas/Tablas ';
 
-const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props } = {}) => {
+const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", productos, columnas, titulo= "Productos", ...props } = {}) => {
   const [
     cols,
     productosFiltrados,
@@ -56,22 +56,24 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
     });
   }, [productosFiltrados, orden]);
 
+  const ComponenteTituloFiltrero = () => (
+    <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}} titulo={titulo} seter={setFiltro}>
+    <SelectAllToggle seter={toggleSeleccionButton}>
+    {
+      seleccionados.length == productosOrdenados.length
+        ? "Borrar seleccion"
+        : "Selecionar todos"
+    }
+    </SelectAllToggle>
+    {/*<CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>*/}
+    </TituloFiltrero>
+  )
+
   return (
     <Tabla
       columnas={cols}
       handleSort={handleSort}
-      titulo={
-        <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}} titulo={titulo} seter={setFiltro}>
-          <SelectAllToggle seter={toggleSeleccionButton}>
-          {
-            seleccionados.length == productosOrdenados.length
-              ? "Borrar seleccion"
-              : "Selecionar todos"
-          }
-          </SelectAllToggle>
-          {/*<CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>*/}
-        </TituloFiltrero>
-      }
+      titulo={ComponenteTituloProp ? <ComponenteTituloProp/> : <ComponenteTituloFiltrero/>}
       {...props}
     >
       <TbodyTablaProducto
@@ -79,6 +81,7 @@ const TablaListaProductos = ({productos, columnas, titulo= "Productos", ...props
         columnas={columnas}
         seleccionados={seleccionados}
         onToggleSeleccion={toggleSeleccion}
+        {...props}
       />
     </Tabla>
   )

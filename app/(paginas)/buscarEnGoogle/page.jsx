@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
 import Button from '@/app/components/formComponents/Button';
 import ResultadoBusqueda from '@/app/components/productos/ResultadoBusqueda';
+import { useKeyDown } from '@/app/hooks/useKeyDown';
 
 export default function PageBusquedaProductosEnGoogle() {
   const inputRef = useRef(null)
@@ -52,14 +53,8 @@ export default function PageBusquedaProductosEnGoogle() {
     setError("")
   },[])
 
-  useEffect(() => {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleKeyDown]);
-
+  useKeyDown(handleKeyDown)
+  
   return (
     <main className='container mx-auto p-4'>
 

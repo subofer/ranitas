@@ -5,16 +5,16 @@ import { Td, Tr } from '../Tablas/Tablas ';
 import Skeleton from '../Skeleton';
 
 
-export const RenglonTablaProducto = ({ultimo, item, columnas, seleccionado, onToggleseleccionado}) => {
+export const RenglonTablaProducto = ({ultimo, item, items, columnas, seleccionado, onToggleseleccionado, ...props}) => {
   const myParams = useMyParams();
   return (
     <>
   <Tr ultimo={ultimo} seleccionado={seleccionado} className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-300":""}`}>
     {
       columnas && columnas.map((col, index)=> {
-        const { className, onClick, texto, noselect, Component = null, decorador, imagen, valorDefecto, componentClassname, ...props } = vr(item, col)
+        const { className, onClick, texto, noselect, Component = null, decorador, imagen, valorDefecto, componentClassname, ...resto } = vr(item, col)
         const handleOnClick = () => {
-          const result = onClick(item)
+          const result = onClick(item, items)
           const {
             action = "",
             key = '',
@@ -22,6 +22,7 @@ export const RenglonTablaProducto = ({ultimo, item, columnas, seleccionado, onTo
             isParams = false
           } = result || {};
           isParams && myParams[action](key, value)
+          props?.trigger();
         }
 
         return (

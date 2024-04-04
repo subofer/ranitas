@@ -5,6 +5,7 @@ import ImagenProducto from './ImagenProducto';
 import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
 import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { showImagenProducto } from './showImagenProducto';
+import Counter from '../formComponents/Counter';
 
 export const tablaListaProductosColumnasNames = {
   edit: {
@@ -51,6 +52,21 @@ export const tablaListaProductosColumnasNames = {
     decorador: textos.moneda,
     ordenable: true,
   },
+  precioTotal: {
+    titulo: "Precio",
+    key: "sumaVenta",
+    className: "px-2 pr-4 text-right w-px",
+    decorador: textos.moneda,
+    ordenable: true,
+  },
+  cantidad: {
+    titulo: "Cantidad",
+    key: "cantidad",
+    Component: Counter,
+    className: "px-2 pr-4 text-right w-px",
+    ordenable: true,
+    noselect: true,
+  },
   imagen: {
     titulo:"Img",
     size: 90,
@@ -58,7 +74,7 @@ export const tablaListaProductosColumnasNames = {
     className: "flex flex-row w-auto",
     Component: ImagenProducto,
     onClick: showImagenProducto,
-    componentClassname: "my-1 self-center  mx-auto",
+    componentClassname: "my-1 self-center  mx-auto cursor-zoom-in	",
     noselect: true,
   },
   eliminar: {
@@ -67,6 +83,22 @@ export const tablaListaProductosColumnasNames = {
     Component: BotonEliminarProducto,
     componentClassname: "p-0 m-0",
     onClick: (item) => alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id)),
+    noselect: true,
+  },
+  eliminarLocal: {
+    titulo: "",
+    className: "px-2 text-center w-px",
+    Component: BotonEliminarProducto,
+    onClick: (item, items) => {
+      const index = items.findIndex(({id}) => item.id == id)
+      items[index].cantidad = items[index].cantidad - 1
+      console.log(items[index])
+      return{
+        isParams: true,
+        action: "recarga",
+      }
+    },
+    componentClassname: "p-0 m-0",
     noselect: true,
   },
 }
