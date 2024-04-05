@@ -11,7 +11,7 @@ const MenuItem = ({href, children, ...props}) => {
   )
 }
 
-const NavBar = () => {
+const NavBarVertical = () => {
   return(
     <div className="bg-slate-300 px-2 py-2 border-r-4 border-r-slate-300">
       <ul className="flex flex-col gap-2 ">
@@ -23,4 +23,4 @@ const NavBar = () => {
   )
 }
 
-export default NavBar;
+export default NavBarVertical;

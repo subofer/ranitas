@@ -114,7 +114,7 @@ export default function Home() {
           <Input
             type="text"
             className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-            placeholder="Ingrese código de barras"
+            placeholder="Escanee código de barras"
             ref={inputRef}
             value={codigo}
             onChange={(e) => setCodigo(e.target.value)}

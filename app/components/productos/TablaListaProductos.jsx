@@ -58,14 +58,14 @@ const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", pro
 
   const ComponenteTituloFiltrero = () => (
     <TituloFiltrero cantidades={{total:cantidadTotal, seleccionados:cantidadFiltrada}} titulo={titulo} seter={setFiltro}>
-    <SelectAllToggle seter={toggleSeleccionButton}>
-    {
-      seleccionados.length == productosOrdenados.length
-        ? "Borrar seleccion"
-        : "Selecionar todos"
-    }
-    </SelectAllToggle>
-    {/*<CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>*/}
+      <SelectAllToggle seter={toggleSeleccionButton}>
+      {
+        seleccionados.length == productosOrdenados.length
+          ? "Borrar seleccion"
+          : "Selecionar todos"
+      }
+      </SelectAllToggle>
+      {/*<CopyToClipBoard data={productosFiltrados} selector={seleccionados}> Copiar </CopyToClipBoard>*/}
     </TituloFiltrero>
   )
 
@@ -73,7 +73,8 @@ const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", pro
     <Tabla
       columnas={cols}
       handleSort={handleSort}
-      titulo={ComponenteTituloProp ? <ComponenteTituloProp/> : <ComponenteTituloFiltrero/>}
+      titulo={ComponenteTituloProp ? ComponenteTituloProp() : ComponenteTituloFiltrero()}
+      
       {...props}
     >
       <TbodyTablaProducto

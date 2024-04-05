@@ -8,7 +8,6 @@ import { revalidatePath } from 'next/cache'
 
 export async function guardarCategoria(formData) {
   const categoryObject = formToObject(formData)
-  console.log("aca" + categoryObject.nombre)
   categoryObject.nombre = textos.mayusculas.primeras(categoryObject.nombre)
   delete categoryObject.filterSelect;
 

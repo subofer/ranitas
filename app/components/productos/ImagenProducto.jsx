@@ -4,7 +4,8 @@ import Icon from "../formComponents/Icon";
 
 const ImagenProducto = ({item: { imagen, nombre }, size=32, placeholder, className, onClick}) => (
   imagen
-    ? <Image className={`${className}`}
+    ? <Image 
+        className={className}
         src={imagen}
         height={size}
         width={size}

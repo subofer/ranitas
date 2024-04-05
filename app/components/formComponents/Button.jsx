@@ -77,7 +77,7 @@ const Spinner = () => (
   </div>
 );
 
-const Button = ({children, loading = false, className, tipo = "default", ...props}) => (
+const Button = ({suspense, children, loading = false, className, tipo = "default", ...props}) => (
   <button
     className={`
       ${tiposBotones.basic}

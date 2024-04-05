@@ -11,8 +11,6 @@ function convertirArray(array) {
   return array;
 }
 
-
-
 const Orden = ({col, handleSort, ...props}) => {
   const [ordenar, setOrdenar] = useState(0)
 

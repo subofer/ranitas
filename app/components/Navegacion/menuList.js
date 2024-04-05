@@ -12,7 +12,6 @@ const menuList = {
 
 export default menuList;
 
-
 export const menuListHorizontal = [
   { menu: "Home", href: "/", subMenu: [] },
   { menu: "Listados", href: "/venta", subMenu: [

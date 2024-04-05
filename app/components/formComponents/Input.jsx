@@ -1,6 +1,16 @@
 "use client"
 import { forwardRef } from "react";
-const Input = forwardRef(({ name, type = "text", className, placeholder, label, value, ...props }, ref) => {
+const Input = forwardRef(({ name, type = "text", className, placeholder, label, value, onChange, ...props }, ref) => {
+
+  const handleWheel = (e) => {
+    if (type === "number") {
+      const direction = e.deltaY < 0 ? 1 : -1; // Determina la dirección del scroll
+      const newValue = parseFloat(value || 0) + direction;
+      const useValue = newValue > 1 ? newValue.toString() : 1;
+      onChange({ target: { name, value: useValue } });
+    }
+  };
+
   return (
     <div className="relative">
       <input
@@ -9,7 +19,9 @@ const Input = forwardRef(({ name, type = "text", className, placeholder, label, 
         name={name}
         type={type}
         value={value}
+        onChange={onChange}
         placeholder={placeholder}
+        onWheel={handleWheel}
         className={`
           form-input
           block w-full
@@ -17,8 +29,12 @@ const Input = forwardRef(({ name, type = "text", className, placeholder, label, 
           pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
           focus:border-slate-400 peer
           text-right
+          
+          ${type === "checkbox" ? "form-checkbox text-blue-600 mr-1 ml-auto" : ""}
           ${className}
           `}
+          style={type === "checkbox" ? { marginRight: 0, marginLeft: 'auto' } : {}}
+
         {...props}
       />
         <label

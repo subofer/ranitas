@@ -49,7 +49,7 @@ export const tablaListaProductosColumnasNames = {
     titulo: "Precio",
     key: "precioActual",
     className: "px-2 pr-4 text-right w-px",
-    decorador: textos.moneda,
+    decorador: textos.monedaDecimales,
     ordenable: true,
   },
   precioTotal: {

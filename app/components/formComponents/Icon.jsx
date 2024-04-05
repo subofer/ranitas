@@ -9,7 +9,7 @@ const icons = (icono) => {
   }
 }
 
-const Icon = ({className, children, icono, ...props}) => (
+const Icon = ({className, children, icono, regular,suspense,  ...props}) => (
   <button
     className={`
       active:scale-[90%]
@@ -21,7 +21,7 @@ const Icon = ({className, children, icono, ...props}) => (
       ${className}`}
     { ...props }
   >
-      <i className={`fa-solid fa-${icons(icono)} ${className}`}>
+      <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${className}`}>
         {children}
       </i>
   </button>

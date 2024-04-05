@@ -12,11 +12,13 @@ const theme = {
   text: 'text-white',
 };
 
-const NavBar = () => {
+const NavBarHorizontal = () => {
   const { push } = useRouter();
   const [activeMenuIndex, setActiveMenuIndex] = useState(-1);
   const [activeSubMenuIndex, setActiveSubMenuIndex] = useState(-1);
+  const [isNavActive, setIsNavActive] = useState(false); // Nuevo estado para controlar la activación del menú
   const lastFocusedElement = useRef(null);
+
 
   const goNext = (length, set, reset) => set((prevIndex) => (prevIndex + 1) % length) && reset;
   const goPrev = (length, set, reset) => set((prevIndex) => (prevIndex - 1 + length) % length) && reset;
@@ -40,6 +42,7 @@ const NavBar = () => {
 
   const salir = useCallback((event, focus = true) => {
     event.preventDefault(); event.stopPropagation();
+    setIsNavActive(false)
     focus && lastFocusedElement.current?.focus();
     navigate('reset');
   },[navigate])
@@ -56,18 +59,19 @@ const NavBar = () => {
       if (event.key === 'Alt') {
         if (activeMenuIndex === -1) {
           lastFocusedElement.current = document.activeElement;
+          setIsNavActive(true)
           setActiveMenuIndex(0);
         } else {
           salir(event)
-      }} else if (activeMenuIndex !== -1) {
-        if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(event.key)) { navigate(event.key) }
-        else if (event.key === "Escape" ) {salir(event) }
-        else if (event.key === 'Enter') { go(event) }
+        }} else if (activeMenuIndex !== -1 && isNavActive) {
+          if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(event.key)) { navigate(event.key) }
+          else if (event.key === "Escape" ) {salir(event) }
+          else if (event.key === 'Enter') { go(event) }
       }
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [navigate, activeMenuIndex, activeSubMenuIndex, push, go, salir]);
+  }, [navigate, activeMenuIndex, activeSubMenuIndex, push, go, salir, isNavActive]);
 
   return (
     <div className={`${theme.background} px-2 py-1 w-full`} style={{ position: 'absolute', top: "0", left: "0", zIndex: '9999' }}>
@@ -105,4 +109,4 @@ const NavBar = () => {
   );
 };
 
-export default NavBar;
+export default NavBarHorizontal;

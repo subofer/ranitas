@@ -78,7 +78,7 @@ model Facturas {
   tieneImpuestos  Boolean         @default(false)
   detalles        DetalleFactura[]
   proveedor       Proveedores     @relation(fields: [proveedorId], references: [id])
-
+  total           Float           @default(0)
   @@unique([proveedorId, numeroFactura]) // Asegura que cada factura sea única por proveedor
 }
 

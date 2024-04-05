@@ -1,16 +1,18 @@
 "use client";
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef } from 'react';
 import HighlightMatch from '../HiglightMatch';
 import Icon from './Icon';
 
-const FilterSelect = ({ value, save, options = [], valueField, textField, label, ...props }) => {
+const FilterSelect = forwardRef(({ value, save, options = [], valueField, textField, label, ...props }, ref) => {
+
   const [isOpen, setIsOpen] = useState(false);
   const [opcion, setOpcion] = useState(null);
   const [filtro, setFiltro] = useState('');
   const [hgIndex, setHgIndex] = useState(-1);
   const [form, setForm] = useState(null);
   const refPadre = useRef(null);
-  const inputRef = useRef(null);
+  const inputRef = useRef(null)
+
   const optionRefs = useRef([]);
 
   const filteredOptions = useMemo(
@@ -36,9 +38,13 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
     index && nextIndex(index);
     setIsOpen(seter);
     !seter && inputRef.current.focus()
-  },[nextIndex])
+  },[nextIndex, inputRef])
 
-  const onSelect = (option) => phase(option, option[textField], false, -1);
+  const onSelect = (option) => {
+    phase(option, option[textField], false, -1);
+    if (props?.onChange) {props.onChange(valueField, option[valueField], option)};
+  }
+
   const resetInput = () => phase(null, '', false, -1);
 
   useEffect(() => {
@@ -78,15 +84,16 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
         setFiltro(seleccionInicial[textField]);
       }
     }
+    console.log(value)
   }, [value, options, valueField, textField]);
 
   const handleKeyDown = (e) => {
     const {key: tecla} = e;
-    const keyList = ["Delete", "Tab", "ArrowDown", "ArrowUp", "Enter", "Escape"];
+    const keyList = ["Delete", "ArrowDown", "ArrowUp", "Enter", "Escape"];
     keyList.includes(tecla) ? e.preventDefault() : inputRef.current.focus()
     const checkit = () => optionRefs.current[nextIndex()]?.focus()
 
-    if (['ArrowDown','Tab'].includes(tecla)) {
+    if (['ArrowDown'].includes(tecla)) {
       !isOpen ? open(true) : checkit();
     }
     else if (tecla === 'ArrowUp') {
@@ -145,10 +152,11 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
           onKeyDown={handleKeyDown}
           tabIndex={props.tabIndex}
           autoComplete="off"
+          onBlur={() => setIsOpen(false)}
         />
         <div className="pointer-events-none absolute right-2 top-[50%] transform -translate-y-1/2">
           <div className={`transition-transform ${isOpen ? 'rotate-180' : 'rotate-0'}`}>
-            <Icon icono={"chevron-up"}/>
+            <Icon tabIndex={-1} icono={"chevron-up"}/>
           </div>
         </div>
       </div>
@@ -161,7 +169,7 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
               ref={(el) => optionRefs.current[index] = el}
               onClick={() => onSelect(option)}
               onMouseDown={(e) => e.preventDefault()}
-              tabIndex="0"
+              //tabIndex={0}
               onKeyDown={handleKeyDown}
             >
               <HighlightMatch text={option[textField]} filter={filtro} largo={filteredOptions.length}/>
@@ -171,6 +179,8 @@ const FilterSelect = ({ value, save, options = [], valueField, textField, label,
       )}
     </div>
   );
-};
+});
+
+FilterSelect.displayName = "FilterSelect";
 
 export default FilterSelect;

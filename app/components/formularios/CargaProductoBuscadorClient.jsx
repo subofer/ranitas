@@ -64,6 +64,10 @@ export const CargaProductoBuscadorClient = ({ categorias, ia = false }) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }, []);
 
+  const handleInputChangeSelect = useCallback((a, b) => {
+    setFormData(prev => ({ ...prev, [a]: b }));
+  }, []);
+
   const handleImageChange = useCallback((selectedImageUrl) => {
     if (selectedImageUrl && (selectedImageUrl !== formData.imagen)) {
       setFormData(prevFormData => ({ ...prevFormData, imagen: selectedImageUrl }));
@@ -159,8 +163,6 @@ export const CargaProductoBuscadorClient = ({ categorias, ia = false }) => {
               />
             </div>
             <div className="col-span-6">
-
-
               <SelectCategoriaClient
                 valueField="id"
                 textField="nombre"
@@ -168,7 +170,7 @@ export const CargaProductoBuscadorClient = ({ categorias, ia = false }) => {
                 name="categoriaId"
                 label="Categoria"
                 placeholder="Elija una categoría"
-                onChange={handleInputChange}
+                onChange={handleInputChangeSelect}
                 value={formData.categoriaId}
               />
             </div>

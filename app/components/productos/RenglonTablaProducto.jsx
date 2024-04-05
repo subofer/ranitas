@@ -22,7 +22,7 @@ export const RenglonTablaProducto = ({ultimo, item, items, columnas, seleccionad
             isParams = false
           } = result || {};
           isParams && myParams[action](key, value)
-          props?.trigger();
+          props?.trigger?.();
         }
 
         return (
