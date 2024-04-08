@@ -20,8 +20,8 @@ const NavBarHorizontal = () => {
   const lastFocusedElement = useRef(null);
 
 
-  const goNext = (length, set, reset) => set((prevIndex) => (prevIndex + 1) % length) && reset;
-  const goPrev = (length, set, reset) => set((prevIndex) => (prevIndex - 1 + length) % length) && reset;
+  const goNext = (length, set) => set((prevIndex) => (prevIndex + 1) % length);
+  const goPrev = (length, set) => set((prevIndex) => (prevIndex - 1 + length) % length);
 
   const navigate = useCallback((direction) => {
     window.addEventListener('keydown', (e) => e.preventDefault(), { once: true });
@@ -30,15 +30,19 @@ const NavBarHorizontal = () => {
     if (direction === 'reset') {
       setActiveMenuIndex(-1); setActiveSubMenuIndex(-1);
     } else if (direction === 'ArrowRight') {
-      goNext(menuLength, setActiveMenuIndex, () => setActiveSubMenuIndex(-1));
+      setActiveSubMenuIndex(0)
+      goNext(menuLength, setActiveMenuIndex);
     } else if (direction === 'ArrowLeft') {
-      goPrev(menuLength, setActiveMenuIndex, () => setActiveSubMenuIndex(-1));
+      setActiveSubMenuIndex(0)
+      goPrev(menuLength, setActiveMenuIndex);
     } else if (direction === 'ArrowDown' && subMenuLength > 0) {
       goNext(subMenuLength, setActiveSubMenuIndex);
     } else if (direction === 'ArrowUp' && subMenuLength > 0) {
-      goPrev(subMenuLength, setActiveSubMenuIndex);
+      activeSubMenuIndex == -1
+        ? setActiveSubMenuIndex(subMenuLength - 1)
+        :goPrev(subMenuLength, setActiveSubMenuIndex)
     }
-  }, [activeMenuIndex]);
+  }, [activeMenuIndex, activeSubMenuIndex]);
 
   const salir = useCallback((event, focus = true) => {
     event.preventDefault(); event.stopPropagation();
@@ -65,13 +69,13 @@ const NavBarHorizontal = () => {
           salir(event)
         }} else if (activeMenuIndex !== -1 && isNavActive) {
           if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(event.key)) { navigate(event.key) }
-          else if (event.key === "Escape" ) {salir(event) }
+          else if (event.key === "Escape" ) { salir(event) }
           else if (event.key === 'Enter') { go(event) }
       }
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [navigate, activeMenuIndex, activeSubMenuIndex, push, go, salir, isNavActive]);
+  }, [activeMenuIndex, go, isNavActive, navigate, salir]);
 
   return (
     <div className={`${theme.background} px-2 py-1 w-full`} style={{ position: 'absolute', top: "0", left: "0", zIndex: '9999' }}>

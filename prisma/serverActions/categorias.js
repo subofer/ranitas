@@ -5,7 +5,6 @@ import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
 
 // Las categorias se guardaran con la primer letra en mayusculas.
-
 export async function guardarCategoria(formData) {
   const categoryObject = formToObject(formData)
   categoryObject.nombre = textos.mayusculas.primeras(categoryObject.nombre)
@@ -24,19 +23,22 @@ export async function guardarCategoria(formData) {
       response = { meta: e.meta, error:true, msg:`Ya existe una categoria con ${e.meta.target[0]} = ${categoryObject[e.meta.target[0]]}`}
       console.log(response)
     }
-
   }
   revalidatePath('/categorias')
   return response
 }
 
 export async function borrarCategoria(categoriaId) {
+  let result;
   try{
-    await prisma.categorias.delete({
+    result = await prisma.categorias.delete({
       where: {id: categoriaId}
     })
+    return result;
   } catch(e) {
-      //console.log(e)
-    }
-  revalidatePath('/categorias')
+      result = {error: e,}
+  } finally {
+    revalidatePath('/categorias')
+    return result;
+  }
 }

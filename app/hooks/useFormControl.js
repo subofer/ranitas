@@ -6,14 +6,14 @@ const useFormControl = (setedAction) => {
 
   const ref = useRef(null)
   const defaultResult = {error: false};
-  const [result, setResult] = useState(defaultResult)
+  const [state, setState] = useState(defaultResult)
 
   const handleAction = ({meta, ...error} = {}) => {
     if(meta?.target.length > 0) {
       meta.target.forEach(
         (e) => ref.current.elements[e].classList.add(inputErrorClassName)
       );
-      setResult(error)
+      setState(error)
     } else {
       resetForm()
     }
@@ -26,11 +26,11 @@ const useFormControl = (setedAction) => {
       }
     );
     ref.current.reset();
-    setResult(defaultResult)
+    setState(defaultResult)
   }
 
   return({
-    result,
+    state,
     ref,
     onReset: resetForm,
     action: async (formData) => {

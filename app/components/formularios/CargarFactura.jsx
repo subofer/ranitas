@@ -8,6 +8,7 @@ import { fechaHoy, textos } from "@/lib/manipularTextos";
 import Icon from "../formComponents/Icon";
 import ImagenProducto from "../productos/ImagenProducto";
 import { guardarFactura } from "@/prisma/serverActions/facturas";
+import { showImagenProducto } from "../productos/showImagenProducto";
 
 const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
   const [guardando, setGuardando] = useState(false);
@@ -212,15 +213,17 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
                 <Input
                   name="precioTotal"
                   label="SubTotal"
-                  type="number"
+                  type="text"
                   disabled
-                  value={detalle.precioUnitario * detalle.cantidad}
+                  value={textos.monedaDecimales(detalle.precioUnitario * detalle.cantidad)}
                   onChange={(e) => handleDetalleChange(index, e)}
                   placeholder="Precio Unitario"
                 />
               </div>
               <div className="w-[74px] h-[55px]  justify-center align-middle text-center">
-                <ImagenProducto size={35} className={"p-0 m-0 w-full"} item={formData?.detalles[index]?.item || {}}/>
+                <ImagenProducto 
+                 onClick={() => showImagenProducto(formData?.detalles[index]?.item)}
+                size={35} className={"p-0 m-0 w-full"} item={formData?.detalles[index]?.item || {}}/>
               </div>
                 <div  className="flex flex-col w-[40px] text-slate-600">
                   {index == formData.detalles.length -1 &&

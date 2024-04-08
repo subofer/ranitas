@@ -9,7 +9,7 @@ const icons = (icono) => {
   }
 }
 
-const Icon = ({className, children, icono, regular,suspense,  ...props}) => (
+const Icon = ({className, children, icono, regular, suspense,  ...props}) => (
   <button
     className={`
       active:scale-[90%]

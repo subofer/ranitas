@@ -53,6 +53,26 @@ model Productos {
   precioActual  Float       @default(0)
   precios       Precios[]
   proveedores   ProductoProveedor[]
+  movimientosStock  MovimientosStock[]
+}
+
+model MovimientosStock {
+  id              Int              @id @default(autoincrement())
+  productoId      Int
+  tipoMovimiento  TipoMovimiento
+  cantidad        Int              // Puede ser positivo (ingreso) o negativo (egreso)
+  precioUnitario  Float?           // Opcional, puede ser útil para calcular el valor del stock
+  referencia      String           // Puede ser la ID de una factura o una venta
+  createdAt       DateTime         @default(now())
+  factura         Facturas?        @relation(fields: [facturaId], references: [id])
+  facturaId       Int?             // Este campo es opcional porque un movimiento puede no estar vinculado a una factura
+
+  producto        Productos        @relation(fields: [productoId], references: [id])
+}
+
+enum TipoMovimiento {
+  INGRESO
+  EGRESO
 }
 
 model Categorias {
@@ -61,14 +81,6 @@ model Categorias {
   nombre      String      @unique
   products    Productos[]
 }
-
-model Unidades {
-  id            String          @id @default(uuid())
-  nombre        String          @unique
-  simbolo       String          @unique
-  createdAt     DateTime        @default(now())
-}
-
 
 model Facturas {
   id              Int             @id @default(autoincrement())
@@ -79,6 +91,7 @@ model Facturas {
   detalles        DetalleFactura[]
   proveedor       Proveedores     @relation(fields: [proveedorId], references: [id])
   total           Float           @default(0)
+  movimientosStock  MovimientosStock[]
   @@unique([proveedorId, numeroFactura]) // Asegura que cada factura sea única por proveedor
 }
 

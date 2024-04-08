@@ -22,11 +22,14 @@ export const menuListHorizontal = [
     { menu: "Minorista", href: "/venta" },
     { menu: "Mayorista", href: "/venta" },
   ] },
+  { menu: "Compras", subMenu: [
+    { menu: "Cargar Factura", href: "/compras" },
+  ] },
   { menu: "ABM", subMenu: [
-    { menu: "Cargar Producto", href: "/productos" },
+    { menu: "Productos", href: "/productos" },
     { menu: "Categorias", href: "/categorias" },
     { menu: "Proveedores", href: "/proveedores" },
-    { menu: "Compras", href: "/compras" },
   ] },
   { menu: "Ia", href: "/ia", subMenu: [] },
+  { menu: "Camara", href: "/captura", subMenu: [] },
 ];

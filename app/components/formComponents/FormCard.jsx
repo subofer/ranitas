@@ -15,7 +15,7 @@ const FormButtons = ({submitButtonText, resetButtonText, order, handleReset, loa
 
 export const FormCard = ({children, title, loading, buttons, action, handleReset,className, ...props}) => {
   const {
-    result: state,
+    state,
     ...formControl
   } = useFormControl(action);
 

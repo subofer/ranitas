@@ -180,6 +180,9 @@ export const CargaProductoBuscadorClient = ({ categorias, ia = false }) => {
       </FormCard>
       <div className='p-4 h-auto w-[400px] items-center bg-slate-400'>
         <SelectorImagenes imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
+        <div className='absolute top-0 left-0'>
+          <div>Cargar imagen</div>
+        </div>
       </div>
     </div>
   );
