@@ -28,17 +28,26 @@ export const nuevoPrecioProducto = async (idDelProducto, nuevoPrecio) => {
   });
 }
 
-export const getProductos = async () => await prisma.productos.findMany({
-  include:{
-    categoria: true,
-    precios: {
-      orderBy: {
-        createdAt: 'desc',
+export const getProductos = async () => {
+  const productos = await prisma.productos.findMany({
+    include:{
+      categoria: true,
+      precios: {
+        orderBy: {
+          createdAt: 'asc',
+        },
+        take: 1,
       },
-      take: 1,
+      proveedores: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }
     }
-  }
-})
+  })
+
+  return productos
+}
 
 export const getProductoPorCodigoBarra = async (codigoBarra) => {
   const producto = await prisma.productos.findUnique({
@@ -47,6 +56,7 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
     },
     include: {
       categoria: true,
+      proveedores: true,
       precios: {
         orderBy: {
           createdAt: 'desc',

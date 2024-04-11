@@ -1,7 +1,7 @@
 "use client"
 import RenglonTablaProducto from './RenglonTablaProducto';
 
-export const TbodyTablaProducto = ({items, columnas, seleccionados, onToggleSeleccion, ...props}) => 
+export const TbodyTablaProducto = ({items, columnas, seleccionados, onToggleSeleccion, ...props}) =>
   items?.map((p,i) => (
     <RenglonTablaProducto
       key={i}

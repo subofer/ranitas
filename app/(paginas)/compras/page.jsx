@@ -8,9 +8,11 @@ export default async function CargarFacturaPage() {
   const productos = await getProductos()
 
   return(
-    <CargaFacturaForm
-      proveedoresProps={{options:proveedores}}
-      productosProps={{options:productos}}
-    />
+    <main className="mx-auto">
+      <CargaFacturaForm
+        proveedoresProps={{options:proveedores}}
+        productosProps={{options:productos}}
+        />
+    </main>
   )
 }

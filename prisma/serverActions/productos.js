@@ -1,118 +1,113 @@
 'use server'
 import prisma from "../prisma";
-import formToObject from "@/lib/formToObject"
 import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
 
-export async function guardarProducto(prevState, formData, formDataReady) {
-  const productObject = formData ? formToObject(formData) : formToObject(prevState);
+const revalidarProductos = () => revalidatePath("/cargarProductos");
+export async function guardarProducto(formData) {
+  // Transformación de datos básicos
+  const transformedData = {
+    codigoBarra: formData.codigoBarra,
+    descripcion: formData.descripcion,
+    unidad: formData.unidad,
+    imagen: formData.imagen,
+    stock: parseInt(formData.stock) || 0,
+    size: parseFloat(formData.size) || null,
+    precioActual: parseFloat(formData.precioActual) || 0,
+    nombre: textos.mayusculas.primeras(formData.nombre),
+  };
 
-  productObject.categoriaId = parseInt(productObject.categoriaId, 10) || null;
-  productObject.size = parseFloat(productObject.size) || null;
-  const precioActual = parseFloat(productObject.precioActual) || 0;
-  productObject.precioActual = precioActual
-  productObject.nombre = textos.mayusculas.primeras(productObject.nombre);
+  const relaciones = { update:{}, create:{} }
 
-  delete productObject.precio;
-  delete productObject.filterSelect;
+  // Preparación de los datos de relaciones
+  if (formData.precioActual) {
+    relaciones.create.precios = {
+      create: [{ precio: transformedData.precioActual }],
+    };
+    relaciones.update.precios = {
+      ...relaciones.create.precios,
+    };
+  }
 
-  let response = "";
+  if (formData?.idCategoria && formData?.idCategoria != "") {
+    relaciones.create.categoria = {
+      connect: { id: formData.idCategoria },
+    };
+    relaciones.update.categoria = {
+      ...relaciones.create.categoria,
+    };
+  }
+
+  if (formData.proveedores) {
+    relaciones.create.proveedores = {
+      connect: formData.proveedores.map(({id}) => ({id})),
+    };
+    relaciones.update.proveedores = {
+      set: [],
+      ...relaciones.create.proveedores,
+    };
+  }
 
   try {
-    const productoExistente = await prisma.productos.findUnique({
-      where: { codigoBarra: productObject.codigoBarra },
+    const producto = await prisma.productos.upsert({
+      where: { codigoBarra: formData.codigoBarra },
+      update: {
+        ...transformedData,
+        ...relaciones.update,
+      },
+      create: {
+        ...transformedData,
+        ...relaciones.create,
+      },
+      include: {
+        categoria: true,
+        precios: true,
+        proveedores: true,
+      },
     });
 
-    if (productoExistente) {
-      // Producto existe, verifica si el precio ha cambiado.
-      if (productoExistente.precioActual !== precioActual) {
-        // Crea un nuevo registro de precio.
-        await prisma.precios.create({
-          data: {
-            precio: precioActual,
-            productoId: productoExistente.id,
-          },
-        });
-      }
 
-      // Actualiza el producto existente (excluyendo la creación de un precio directamente aquí).
-      await prisma.productos.update({
-        where: { codigoBarra: productObject.codigoBarra },
-        data: {
-          ...productObject,
-          categoriaId: productObject.categoriaId,
-          precios: undefined, // Evita intentar crear precios directamente aquí.
-        },
-      });
-      response = { error: false, msg: "Producto actualizado con éxito" };
-    } else {
-      // Producto no existe, crea uno nuevo.
-      await prisma.productos.create({
-        data: {
-          ...productObject,
-          categoriaId: productObject.categoriaId,
-          precios: {
-            create: [{ precio: precioActual }],
-          },
-        },
-      });
-      response = { error: false, msg: "Producto guardado con éxito" };
+
+
+    return { error: false, msg: "Producto procesado con éxito", data: producto };
+  } catch (error) {
+    console.error("Error al guardar el producto:", error);
+    let msg = "Error al procesar el producto";
+    if (error.code === "P2002") {
+      msg = `Ya existe un producto con el código de barras ${formData.codigoBarra}.`;
     }
-  } catch (e) {
-    console.error(e);
-    response = { error: true, msg: "Error al guardar el producto" };
-    if (e.code === "P2002") {
-      response.msg = `Ya existe un producto con el código de barras ${productObject.codigoBarra}`;
-    }
+    return { error: true, msg, data: null };
+  } finally {
+    console.log('finaly, revalidar productos')
+    revalidarProductos();
   }
-
-  revalidatePath('/productos');
-  return response;
 }
 
-
 export async function guardarProductoBuscado(productObject) {
-  const categoriaId = parseInt(productObject.categoriaId);
-  const precio = parseFloat(productObject.precioActual) || 0;
-  let response = ""
-  try{
-    await prisma.productos.create({
-      data: {
-        ...productObject,
-        categoriaId,
-        precios: {
-          create: [{ precio }],
-        },
-      }
-    })
-    response = {error: false, msg:"Producto guardado con exito"}
-  } catch(e) {
-    if(e.code == "P2002"){
-      response = { meta: e.meta, error:true, msg:`Ya existe un producto con ${e.meta.target[0]} = ${productObject[e.meta.target[0]]}`}
-      console.log(response)
-    }
-
-  }
-  revalidatePath('/productos')
+  const response = await guardarProducto(productObject)
+  revalidarProductos();
   return response
 }
 
-export async function eliminarProductoConPreciosPorId(productoId) {
+export async function eliminarProductoConPreciosPorId(idProducto) {
   const resultado = await prisma.$transaction(async (prisma) => {
     // Eliminar precios asociados al producto
-    await prisma.precios.deleteMany({
+    const resultadoBorrarPrecios = await prisma.precios.deleteMany({
       where: {
-        productoId: productoId,
+        idProducto: idProducto,
       },
     });
 
     // Eliminar el producto
-    return await prisma.productos.delete({
+    const resultadoBorrarProducto = await prisma.productos.delete({
       where: {
-        id: productoId,
+        id: idProducto,
       },
     });
+
+   return {resultadoBorrarPrecios, resultadoBorrarProducto}
   });
-  revalidatePath('/productos')
+  revalidarProductos();
+  console.log(resultado)
   return resultado;
 }

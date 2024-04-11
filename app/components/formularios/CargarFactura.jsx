@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "../formComponents/Button";
 import Input from "../formComponents/Input";
 import SelectOnClientByProps from "../proveedores/SelectOnClientByProps";
@@ -7,15 +7,16 @@ import { FormCard } from "../formComponents/FormCard";
 import { fechaHoy, textos } from "@/lib/manipularTextos";
 import Icon from "../formComponents/Icon";
 import ImagenProducto from "../productos/ImagenProducto";
-import { guardarFactura } from "@/prisma/serverActions/facturas";
+import { guardarFacturaConStock } from "@/prisma/serverActions/facturas";
 import { showImagenProducto } from "../productos/showImagenProducto";
+import { guardarFacturaCompra } from "@/prisma/serverActions/documentos";
 
 const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
   const [guardando, setGuardando] = useState(false);
   const detallesRefs = useRef([]);
   const blankForm = {
     idProveedor: '',
-    numeroFactura: '',
+    numeroDocumento: '',
     fecha: fechaHoy(),
     tieneImpuestos: false,
     detalles: [{ idProducto: '', cantidad: 1, precioUnitario: 0}]
@@ -23,9 +24,15 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
   const [formData, setFormData] = useState(blankForm);
 
   const handleReset = () => {
-    console.log("reset")
     setFormData(blankForm)
   }
+  const optionProductosFiltradoPorProveedor = useMemo(() => {
+    const { options } = productosProps;
+    if(formData.idProveedor != ''){
+      return {options: options.filter((item) => item.proveedores.some(({id}) => id == formData.idProveedor))}
+    }
+    return {options};
+  },[productosProps, formData.idProveedor])
 
   const handleInputChange = useCallback((e) => {
     const { name, value, type, checked } = e.target;
@@ -68,11 +75,6 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
     }));
   }, [blankForm.detalles]);
 
-  useEffect(() => {
-    console.log('aca el formData', formData)
-  },[formData])
-
-
   const handleDetalleKeyDown = (index, e) => {
     if (e.key === 'Tab' && !e.shiftKey && index === formData.detalles.length - 1) {
       e.preventDefault();
@@ -82,8 +84,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
 
   const handleSubmit = useCallback(async () => {
     setGuardando(true)
-    console.log('Guardando factura?:', formData);
-    await guardarFactura(formData)
+    await guardarFacturaCompra(formData)
     setGuardando(false)
   },[formData]);
 
@@ -95,8 +96,6 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
   const handleFormKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      //Prevenimos que el form se envie con enter en cualquier campo
-      //vamos a ver como hacemos despues para que enviarlo sea facil
     }
   };
 
@@ -127,8 +126,8 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
       <div className="col-span-2">
         <Input
           label="Número de Factura"
-          name="numeroFactura"
-          value={formData.numeroFactura}
+          name="numeroDocumento"
+          value={formData.numeroDocumento}
           onChange={handleInputChange}
           />
       </div>
@@ -178,14 +177,13 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
                   placeholder="Ingrese producto"
                   name="idProducto"
                   onChange={(name, value, item) => {
-                    console.log('viene el value', value)
                     handleDetalleChange(index, { target: { value, name:"idProducto" } })
                     setItem(item, index)
                   }}
                   value={detalle.idProducto}
                   save={true}
                   ref={(el) => detallesRefs.current[index] = el}
-                  {...productosProps}
+                  {...optionProductosFiltradoPorProveedor}
                   />
               </div>
               <div className="w-[150px]">
@@ -221,7 +219,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
                 />
               </div>
               <div className="w-[74px] h-[55px]  justify-center align-middle text-center">
-                <ImagenProducto 
+                <ImagenProducto
                  onClick={() => showImagenProducto(formData?.detalles[index]?.item)}
                 size={35} className={"p-0 m-0 w-full"} item={formData?.detalles[index]?.item || {}}/>
               </div>

@@ -36,7 +36,7 @@ export default function Home() {
         Inicio?
       </span>
       <button onClick={() => convertir({value:2, unit: "g"}, "kaka")}>Convertir</button>
-      <Link href={"/productos"}>Ir a productos</Link>
+      <Link href={"/cargarProductos"}>Ir a productos</Link>
     </main>
   )
 }

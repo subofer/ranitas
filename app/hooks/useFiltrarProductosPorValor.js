@@ -15,13 +15,11 @@ const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
 const useFiltrarProductosPorValor = (productos, columnas) => {
   const [filtro, setFiltro] = useState("");
   const productosFiltrados = filtrarProductosPorClave(productos, filtro, tablaListaProductosColumnasNames) || [];
-  
+
   const cols = useMemo(() => columnas?.map((x) => ({
-    titulo: tablaListaProductosColumnasNames[x]?.titulo,
-    ordenable:tablaListaProductosColumnasNames[x]?.ordenable,
-    key:x })),[columnas])
-  
-  
+    ...tablaListaProductosColumnasNames[x],
+  })),[columnas])
+
   return [
     cols,
     productosFiltrados,

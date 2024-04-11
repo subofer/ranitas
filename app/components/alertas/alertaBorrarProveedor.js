@@ -1,4 +1,4 @@
-import Swal from 'sweetalert2'
+import { alertaSiNoAcction } from './genericas/alertaSiNoAction';
 
 const pregunta = {
   title: '¿Estás seguro de borrar el proveedor?',
@@ -25,7 +25,5 @@ const solucion = {
 }
 
 export const alertaBorrarProveedor = async (action) => {
-  const { isConfirmed } = await Swal.fire(pregunta)
-  isConfirmed && action()
-  solucion[isConfirmed] && Swal.fire(solucion[isConfirmed])
+  alertaSiNoAcction(action, pregunta, solucion);
 }

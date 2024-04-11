@@ -76,7 +76,6 @@ export default function CargarProveedor({proveedores}) {
       async function completarConCuit() {
         setBuscando(true)
         const proveedorEncontrado = {...await getProveedorByCuit(cuitIngresado)}
-        console.log(proveedorEncontrado)
         proveedorEncontrado.cuit !== cuitIngresado
           ? handleReset()
           : setFormData({...defautlFormValues, ...proveedorEncontrado})

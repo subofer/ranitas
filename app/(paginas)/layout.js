@@ -7,18 +7,40 @@ export const metadata = {
   description: 'Gestion de productos',
 }
 export default function RootLayout({ children }) {
-  const vertical = false 
+  const vertical = false
   return (
-    <html lang="es" className="bg-neutral-200 w-screen h-screen">
+    <html lang="es">
       <head>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
       </head>
-      <body className={`flex ${vertical? "flex-row": "flex-col"} w-screen h-full min-w-[800px] overflow-hidden`}>
-        {vertical ? <NavBarVertical className='flex w-fit '/> : <NavBarHorizontal className='flex w-fit '/>}
-        <main className='pt-10 flex flex-col h-screen w-full p-2'>
-            {children}
-        </main>
 
+      <body className={`
+        flex
+        ${vertical? "flex-row": "flex-col"}
+        w-screen
+        max-w-full
+        max-h-screen
+        min-h-screen
+        lg:overflow-hidden
+        `}>
+        <div className={`
+          sticky top-0 left-0 mb-2
+          h-fit
+          ${vertical? "mr-2": "mb-2"}
+
+        `}
+
+          style={{zIndex:99999}}
+        >
+          {
+            vertical
+              ? <NavBarVertical />
+              : <NavBarHorizontal />
+          }
+        </div>
+          <div className='flex max-h-full w-auto h-screen lg:mx-auto lg:pb-14'>
+            {children}
+          </div>
       </body>
     </html>
   );

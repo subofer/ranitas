@@ -1,5 +1,3 @@
-import Button from "./Button";
-
 const icons = (icono) => {
   switch(icono){
     case "eliminar": return "trash-can hover:text-red-500";
@@ -16,15 +14,13 @@ const Icon = ({className, children, icono, regular, suspense,  ...props}) => (
       transition duration-150 ease-in-out
       disabled:bg-slate-400
       disabled:cursor-not-allowed
-      bg-transparent
       ring-transparent
       ${className}`}
     { ...props }
   >
-      <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${className}`}>
-        {children}
-      </i>
-  </button>
+    <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)}`}/>
+      {children}
+ </button>
 );
 
 export default Icon;

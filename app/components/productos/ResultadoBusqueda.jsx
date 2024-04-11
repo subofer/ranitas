@@ -22,7 +22,6 @@ const ResultadoBusqueda = ({ resultado, resaltado = false }={}) => {
     puntaje,
   } = resultado ;
   const handleSave = async () => {
-    console.log(prismaObject)
     await guardarProductoBuscado(prismaObject)
   }
   if (titulo && comercio){  

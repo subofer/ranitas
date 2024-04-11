@@ -1,4 +1,4 @@
-import Swal from 'sweetalert2'
+import { alertaSiNoAcction } from './genericas/alertaSiNoAction';
 
 export const alertaBorrarCategoria = async ({nombre}, action) => {
   const pregunta = {
@@ -23,9 +23,5 @@ export const alertaBorrarCategoria = async ({nombre}, action) => {
       icon: 'info',
     }
   }
-
-
-  const { isConfirmed } = await Swal.fire(pregunta)
-  isConfirmed && action()
-  solucion[isConfirmed] && Swal.fire(solucion[isConfirmed])
+  alertaSiNoAcction(action, pregunta, solucion);
 }

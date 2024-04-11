@@ -26,10 +26,10 @@ export const menuListHorizontal = [
     { menu: "Cargar Factura", href: "/compras" },
   ] },
   { menu: "ABM", subMenu: [
-    { menu: "Productos", href: "/productos" },
+    { menu: "Productos", href: "/cargarProductos" },
     { menu: "Categorias", href: "/categorias" },
     { menu: "Proveedores", href: "/proveedores" },
   ] },
   { menu: "Ia", href: "/ia", subMenu: [] },
-  { menu: "Camara", href: "/captura", subMenu: [] },
+  { menu: "Auditoria", href: "/", subMenu: [] },
 ];

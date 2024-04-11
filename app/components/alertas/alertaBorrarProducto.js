@@ -1,4 +1,11 @@
-import Swal from 'sweetalert2'
+import { createPortal } from 'react-dom';
+import { alertaSiNoAcction } from './genericas/alertaSiNoAction';
+
+const P = ({ children }) => createPortal(
+  children,
+  document.getElementById('helpPortal')
+);
+
 
 export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
   const pregunta = {
@@ -27,8 +34,10 @@ export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
     }
   }
 
-
-  const { isConfirmed } = await Swal.fire(pregunta)
-  isConfirmed && action()
-  solucion[isConfirmed] && Swal.fire(solucion[isConfirmed])
+  alertaSiNoAcction(action, pregunta, solucion);
 }
+
+/*
+
+
+*/

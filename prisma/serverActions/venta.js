@@ -1,12 +1,15 @@
 "use server";
+import { getlastDocumentosVenta } from "../consultas/documentos";
 import prisma from "../prisma";
 
-export async function guardarFacturaConStock(formData) {
-  console.log(formData);
-  const { idProveedor, numeroDocumento, fecha, tieneImpuestos, detalles } = formData;
+export async function guardarVentaConStock({imagen, ...detalleVenta}) {
 
+  console.log('aca', detalleVenta.map(a => console.log('aca',a )));
+  const { numeroDocumento: lastNumeroDocumento } = await getlastDocumentosVenta()
+  const nextNumeroDocumento = lastNumeroDocumento ? lastNumeroDocumento + 1 : 1;
+  return;
   // Transformar los detalles de la factura a la estructura esperada por Prisma
-  const detallesTransformados = detalles.map(
+  const detallesTransformados = detalleVenta.map(
     ({ idProducto, cantidad, precioUnitario }) => ({
       idProducto,
       cantidad: parseInt(cantidad, 10),
@@ -18,8 +21,8 @@ export async function guardarFacturaConStock(formData) {
     const factura = await prisma.documentos.create({
       data: {
         idProveedor,
-        numeroDocumento,
-        tipoMovimiento: "ENTRADA",
+        numeroDocumento: nextNumeroDocumento,
+        tipoMovimiento: "SALIDA",
         tipoDocumento: tieneImpuestos ? "FACTURA" : "REMITO",
         fecha: new Date(fecha),
         tieneImpuestos,
@@ -41,16 +44,8 @@ export async function guardarFacturaConStock(formData) {
           where: { id: detalle.idProducto },
           data: {
             stock: {
-              increment: detalle.cantidad,
+              decrement: detalle.cantidad,
             },
-          },
-        });
-
-        // Actualizar el precio del producto, si es necesario
-        await prisma.precios.create({
-          data: {
-            idProducto: detalle.idProducto,
-            precio: detalle.precioUnitario,
           },
         });
       })

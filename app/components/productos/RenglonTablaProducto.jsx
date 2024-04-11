@@ -30,7 +30,7 @@ export const RenglonTablaProducto = ({ultimo, item, items, columnas, seleccionad
             {
               item.id
               ? ( Component
-                ? <Component onClick={handleOnClick} className={componentClassname} item={item} {...props} />
+                ? <Component onClick={handleOnClick} className={componentClassname} item={item} {...props} {...resto} />
                 : decorador(texto ? texto : valorDefecto)
                 ) : <Skeleton className='h-[64px]'/>
             }

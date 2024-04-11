@@ -1,6 +1,6 @@
+"use client"
 import React, { useRef } from 'react';
 import Icon from './formComponents/Icon';
-
 
 const ImageToBase64Uploader = ({ onImageUpload }) => {
   const fileInputRef = useRef(null);
@@ -23,34 +23,35 @@ const ImageToBase64Uploader = ({ onImageUpload }) => {
   };
 
   return (
-    <>
-      <button
-        onClick={handleButtonClick}
-        className='
-          active:scale-95
-          drop-shadow-xl
-          py-1
-          active:drop-shadow
-          rounded
-          bg-slate-500
-          p-2
-          px-4
-          text-white
-          text-xl
-          text-nowrap
+    <Icon
+      regular
+      onClick={handleButtonClick}
+      className='
+        drop-shadow-xl
+        py-1
+        active:drop-shadow
+        rounded
+        bg-slate-500
+        p-2
+        px-4
+        text-white
+        text-nowrap
+        mr-1
+        -translate-y-6
         '
-      > 
-        <Icon className={"mr-1"} regular icono={"image"}/>
+      icono={"image"}
+    >
+      <span className="ml-3 text-xl">
         Cargar imagen
-      </button>
+      </span>
       <input
         ref={fileInputRef}
         type="file"
         onChange={handleImageChange}
         accept="image/*"
-        style={{ display: 'none' }} // Esconde el input de archivo
-      />
-    </>
+        hidden
+        />
+    </Icon>
   );
 };
 

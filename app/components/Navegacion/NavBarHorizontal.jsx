@@ -1,5 +1,5 @@
 "use client"
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback, forwardRef } from "react";
 import Link from "next/link";
 import { menuListHorizontal } from "./menuList";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,7 @@ const theme = {
   text: 'text-white',
 };
 
-const NavBarHorizontal = () => {
+const NavBarHorizontal = forwardRef((props, ref) => {
   const { push } = useRouter();
   const [activeMenuIndex, setActiveMenuIndex] = useState(-1);
   const [activeSubMenuIndex, setActiveSubMenuIndex] = useState(-1);
@@ -78,11 +78,25 @@ const NavBarHorizontal = () => {
   }, [activeMenuIndex, go, isNavActive, navigate, salir]);
 
   return (
-    <div className={`${theme.background} px-2 py-1 w-full`} style={{ position: 'absolute', top: "0", left: "0", zIndex: '9999' }}>
-      <ul className="flex gap-2">
+    <div className={`
+      ${theme.background}
+      px-2
+      py-1
+      min-w-full
+      w-full
+      text-3xl
+      lg:text-xl
+      `}>
+      <ul className="flex flex-row flex-wrap gap-2">
         {menuListHorizontal.map((item, menuIndex) => (
           <li key={menuIndex}
-              className={`${theme.menuItemHover} ${activeMenuIndex === menuIndex ? theme.menuItemActive : theme.menuItem} ${theme.text} p-1 px-2 text-xs cursor-pointer`}
+              className={`
+                ${theme.menuItemHover}
+                ${activeMenuIndex === menuIndex ? theme.menuItemActive : theme.menuItem}
+                ${theme.text}
+                p-1
+                px-2
+                cursor-pointer`}
               onClick={() => {
                 setActiveMenuIndex(menuIndex);
                 setActiveSubMenuIndex(-1);
@@ -95,7 +109,14 @@ const NavBarHorizontal = () => {
               <ul className="absolute left-0 mt-1" style={{ zIndex: '9999', backgroundColor: 'var(--gray-600)' }}>
                 {item.subMenu.map((subItem, subIndex) => (
                   <li key={subIndex}
-                      className={`${theme.menuItemHover} ${activeSubMenuIndex === subIndex ? theme.menuItemActive : theme.menuItem} ${theme.text} px-3 py-3 cursor-pointer`}
+                      className={`
+                        ${theme.menuItemHover}
+                        ${activeSubMenuIndex === subIndex ? theme.menuItemActive : theme.menuItem}
+                        ${theme.text}
+                        px-3
+                        py-3
+                        cursor-pointer
+                      `}
                       onClick={(e) => {
                         e.stopPropagation();
                         window.location.href = subItem.href;
@@ -111,6 +132,6 @@ const NavBarHorizontal = () => {
       </ul>
     </div>
   );
-};
-
+});
+NavBarHorizontal.displayName = "NavBarHorizontal"
 export default NavBarHorizontal;

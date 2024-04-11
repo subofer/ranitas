@@ -1,5 +1,6 @@
 import Link from "next/link";
 import menuList from "./menuList";
+import { forwardRef } from "react";
 
 const MenuItem = ({href, children, ...props}) => {
   return(
@@ -11,7 +12,7 @@ const MenuItem = ({href, children, ...props}) => {
   )
 }
 
-const NavBarVertical = () => {
+const NavBarVertical = forwardRef((props, ref) => {
   return(
     <div className="bg-slate-300 px-2 py-2 border-r-4 border-r-slate-300">
       <ul className="flex flex-col gap-2 ">
@@ -21,6 +22,7 @@ const NavBarVertical = () => {
       </ul>
     </div>
   )
-}
+})
+NavBarVertical.displayName = "NavBar vertical"
 
 export default NavBarVertical;

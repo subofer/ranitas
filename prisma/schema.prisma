@@ -1,114 +1,106 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-//  provider = "sqlite"
-//  url      = "file:./dev.db"
 }
 
 generator client {
   provider = "prisma-client-js"
 }
 
-model Proveedores {
-  id        String             @id @default(uuid())
-  cuit      String             @unique
-  nombre    String             @unique
-  persona   String?
-  iva       String?
-  telefono  String?            @default("0800-completar-telefono")
-  email     String?            @default("completar@email.com")
-  createdAt DateTime           @default(now())
-  productos ProductoProveedor[]
-  facturas  Facturas[]
+enum TipoMovimiento {
+  ENTRADA
+  SALIDA
 }
 
-model ProductoProveedor {
-  id          Int             @id @default(autoincrement())
-  productoId  Int
-  proveedorId String
-  codigo      String          // Código específico del producto para este proveedor
-  cantidad    Int             // Cantidad recibida en la última factura
-  precio      Float           // Precio por unidad en la última factura
-  createdAt   DateTime        @default(now())
-
-  producto    Productos       @relation(fields: [productoId], references: [id])
-  proveedor   Proveedores     @relation(fields: [proveedorId], references: [id])
-  detalles    DetalleFactura[]
-
-  @@unique([productoId, proveedorId, codigo]) // Asegura que la combinación de producto-proveedor-código sea única
+enum TipoDocumento {
+  FACTURA
+  REMITO
+  PRESUPUESTO
+  CONTEO
 }
 
+//Categorias, va a tener una categoria que sea por ejemplo "consumibles/impuestos/alquiler etc.", donde voy a agrupar los impuestos. luz, gas, alquiler etc..
+model Categorias {
+  id        String      @id @default(uuid())
+  createdAt DateTime    @default(now())
+
+  nombre   String       @unique
+  products Productos[]
+}
 
 model Productos {
-  id            Int         @id @default(autoincrement())
-  nombre        String
-  codigoBarra   String      @unique
-  descripcion   String?
-  createdAt     DateTime    @default(now())
-  categoriaId   Int?
-  size          Float?
-  unidad        String?
-  imagen        String?     @db.Text
-  categoria     Categorias? @relation(fields: [categoriaId], references: [id])
-  precioActual  Float       @default(0)
-  precios       Precios[]
-  proveedores   ProductoProveedor[]
-  movimientosStock  MovimientosStock[]
+  id                String              @id @default(uuid())
+  createdAt         DateTime            @default(now())
+
+  codigoBarra       String              @unique //todo producto que no tenga codigo de barra, comenzara con 2333[xxxxxx]
+  precioActual      Float               @default(0)
+  stock             Int                 @default(0)
+  nombre            String
+
+  descripcion       String?
+  idCategoria       String?
+  size              Float?
+  unidad            String?
+  imagen            String?             @db.Text
+
+  categoria         Categorias?         @relation(fields: [idCategoria], references: [id])
+  precios           Precios[]
+  proveedores       Proveedores[]
+  detalleDocumento  DetalleDocumento[]
 }
 
-model MovimientosStock {
-  id              Int              @id @default(autoincrement())
-  productoId      Int
-  tipoMovimiento  TipoMovimiento
-  cantidad        Int              // Puede ser positivo (ingreso) o negativo (egreso)
-  precioUnitario  Float?           // Opcional, puede ser útil para calcular el valor del stock
-  referencia      String           // Puede ser la ID de una factura o una venta
-  createdAt       DateTime         @default(now())
-  factura         Facturas?        @relation(fields: [facturaId], references: [id])
-  facturaId       Int?             // Este campo es opcional porque un movimiento puede no estar vinculado a una factura
+model Proveedores {
+  id              String      @id @default(uuid())
+  createdAt       DateTime    @default(now())
 
-  producto        Productos        @relation(fields: [productoId], references: [id])
+  cuit            String      @unique
+  nombre          String      @unique
+  telefono        String      @default("0800-completar-telefono")
+  email           String      @default("completar@email.com")
+
+  persona         String?
+  iva             String?
+  interno         Boolean     @default(false)
+  productos       Productos[]
+  documentos      Documentos[]
 }
 
-enum TipoMovimiento {
-  INGRESO
-  EGRESO
+model Documentos {
+  id                  String             @id @default(uuid())
+  createdAt           DateTime           @default(now())
+
+  idProveedor         String
+  numeroDocumento     String             // Identificador único de la factura @map("numeroFactura")
+  fecha               DateTime
+  tieneImpuestos      Boolean            @default(false)
+
+  tipoDocumento       TipoDocumento
+  tipoMovimiento      TipoMovimiento
+  detalle             DetalleDocumento[]
+  proveedor           Proveedores        @relation(fields: [idProveedor], references: [id])
+  total               Float              @default(0)
+
+  @@unique([idProveedor, numeroDocumento]) // Asegura que cada factura sea única por proveedor
 }
 
-model Categorias {
-  id          Int         @id @default(autoincrement())
-  createdAt   DateTime    @default(now())
-  nombre      String      @unique
-  products    Productos[]
-}
+model DetalleDocumento {
+  id                  String            @id @default(uuid())
+  createdAt           DateTime          @default(now())
 
-model Facturas {
-  id              Int             @id @default(autoincrement())
-  proveedorId     String
-  numeroFactura   String          // Identificador único de la factura
-  fecha           DateTime
-  tieneImpuestos  Boolean         @default(false)
-  detalles        DetalleFactura[]
-  proveedor       Proveedores     @relation(fields: [proveedorId], references: [id])
-  total           Float           @default(0)
-  movimientosStock  MovimientosStock[]
-  @@unique([proveedorId, numeroFactura]) // Asegura que cada factura sea única por proveedor
-}
+  docRelacionado      String
+  idProducto          String
+  cantidad            Int
+  precioUnitario      Float
 
-model DetalleFactura {
-  id              Int                @id @default(autoincrement())
-  facturaId       Int
-  productoProvId  Int
-  cantidad        Int
-  precioUnitario  Float
-  factura         Facturas          @relation(fields: [facturaId], references: [id])
-  productoProv    ProductoProveedor @relation(fields: [productoProvId], references: [id])
+  documento           Documentos        @relation(fields: [docRelacionado], references: [id])
+  producto            Productos         @relation(fields: [idProducto], references: [id])
 }
 
 model Precios {
-  id         Int       @id @default(autoincrement())
-  precio     Float
-  createdAt  DateTime  @default(now())
-  productoId Int
-  producto   Productos @relation(fields: [productoId], references: [id])
+  id                  Int               @id @default(autoincrement())
+  createdAt           DateTime          @default(now())
+
+  precio              Float
+  idProducto          String
+  producto            Productos         @relation(fields: [idProducto], references: [id])
 }

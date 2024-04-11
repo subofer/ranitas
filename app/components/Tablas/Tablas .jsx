@@ -36,7 +36,7 @@ const Separadores = ({style = {}, stick = null, alto = null, columnas = [], colo
 }
 
 
-export const Tabla = ({ columnas:cc, handleSort, children, titulo, ...props } = {}) => {
+export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...props } = {}) => {
   const columnas = convertirArray(cc)
   const captionRef = useRef(null)
   const headRef = useRef(null)
@@ -55,40 +55,49 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, ...props } = 
   },[alturaCaption])
 
   return (
-    <div className="flex w-full h-fit overflow-auto overscroll-contain snap-y">
-      <table className="table-auto w-full text-sm text-gray-600 bg-slate-400">
-        <caption ref={captionRef} className="sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
+    <div className="flex flex-row max-h-full w-full"> {/* Asegúrate de que este contenedor tenga la altura correcta */}
+      <table className="table-auto w-full h-full lg:text-sm text-xs text-gray-600 bg-slate-400">
+        <caption ref={captionRef} className="table-caption sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
           {titulo}
         </caption>
-        <thead className=" bg-gray-200 w-full">
+        <thead className="table-header-group bg-gray-200 w-full">
           <Separadores columnas={columnas} alto={1} color={"bg-gray-200"} stick={alturaCaption+4}/>
           <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaCaption+6}/>
-          <tr ref={headRef} className="justify-around bg-gray-200" style={estiloStyck(alturaCaption)}>
-            {columnas && columnas.map(({titulo: t, ordenable, key}, i) => (
-              <th key={i} className="whitespace-nowrap px-0 py-0.5 text-xs font-medium text-gray-600 uppercase tracking-wider ">
-                {ordenable && <Orden handleSort={handleSort} col={key}/>} {t} 
+          <tr ref={headRef} className=" bg-gray-200" style={estiloStyck(alturaCaption)}>
+            {columnas && columnas.map(({colw, titulo, ordenable, key}, i) => (
+              <th key={i} className={`
+                  whitespace-nowrap
+                  px-0 py-0.5
+                  text-xs
+                  font-medium
+                  text-gray-600
+                  uppercase
+                  tracking-wider
+                  ${colw}
+                `}>
+                {ordenable && <Orden handleSort={handleSort} col={key}/>} {titulo}
               </th>
             ))}
           </tr>
           <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaHead}/>
           <Separadores columnas={columnas} alto={1} color={"bg-gray-300"} stick={alturaHead+4}/>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-300 snap-both overflow-hidden">
+        <tbody className="table-row-group bg-white divide-y divide-gray-300 snap-both overflow-auto">
           {children}
         </tbody>
       </table>
-    </div>
+      </div>
   );
 }
 
 export const Tr = ({ ultimo, children, className, seleccionado, ...props } = {}) => (
-  <tr className={` ${seleccionado ? "": "hover:bg-gray-200"} ${className} last:h-18 last:align-center last:mt-2`} {...props}>
+  <tr className={`table-row ${seleccionado ? "": "hover:bg-gray-200"} ${className} last:h-18 last:align-center last:mt-2`} {...props}>
     {children}
   </tr>
 )
 
 export const Td = ({ children, className, ...props } = {}) => (
-  <td className={`${className}`} {...props}>
+  <td className={`table-cell ${className} py-1`} {...props}>
     {children}
   </td>
 );

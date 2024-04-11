@@ -22,7 +22,8 @@ export const FormCard = ({children, title, loading, buttons, action, handleReset
   return(
     <form
       className={`
-        flex flex-col max-w-fit
+        flex flex-col 
+        max-w-fit
         shadow-lg
         border-2
         border-gray-300

@@ -7,50 +7,57 @@ import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { showImagenProducto } from './showImagenProducto';
 import Counter from '../formComponents/Counter';
 
+
 export const tablaListaProductosColumnasNames = {
   edit: {
     titulo:"",
     Component: BotonEditarProducto,
     onClick: ({codigoBarra}) => ({action:"addParam", key:"codigoBarra", value: codigoBarra, isParams: true}),
-    className:"pl-2 text-center",
+    className:"text-center",
     noselect: true,
+    colw: "w-[25px]"
   },
   codigoBarra: {
     titulo: "Codigo",
     key:"codigoBarra",
-    className:"w-px px-4 text-center",
+    className:"text-center px-2",
+    colw: "w-px",
   },
   cat: {
     titulo: "Categoria",
     key:"categoria.nombre",
-    className:"px-2 w-px whitespace-nowrap text-center",
+    className:"whitespace-nowrap text-center px-2",
     valorDefecto:"-",
     ordenable: true,
+    colw: "w-px",
   },
   nombre: {
     titulo: "Nombre",
     key:"nombre",
-    className:"px-4 text-left w-fit",
+    className:"whitespace-nowrap px-2 text-left",
+    colw:"w-px",
     ordenable: true,
   },
   desc: {
     titulo: "Descripcion",
     key: "descripcion",
-    className:"px-4 text-left w-fit",
+    className:"px-2 text-left",
     ordenable: true,
   },
   size: {
     titulo: "Tamaño",
     key:["size","unidad"],
-    className:"px-2 text-center w-fit whitespace-nowrap",
+    className:"px-2 text-center whitespace-nowrap",
+    colw: "w-px",
     decorador: textos.unidades,
   },
   precioActual: {
     titulo: "Precio",
     key: "precioActual",
-    className: "px-2 pr-4 text-right w-px",
+    className: "px-4 text-right",
     decorador: textos.monedaDecimales,
     ordenable: true,
+    colw: "w-px",
   },
   precioTotal: {
     titulo: "Precio",
@@ -58,6 +65,7 @@ export const tablaListaProductosColumnasNames = {
     className: "px-2 pr-4 text-right w-px",
     decorador: textos.moneda,
     ordenable: true,
+    colw: "w-px",
   },
   cantidad: {
     titulo: "Cantidad",
@@ -67,14 +75,25 @@ export const tablaListaProductosColumnasNames = {
     ordenable: true,
     noselect: true,
   },
+  stock: {
+    titulo: "Stock",
+    key: "stock",
+    valueKey: 'stock',
+    Component: Counter,
+    className: "px-1 pr-4 text-center",
+    colw: "w-px",
+    ordenable: true,
+    noselect: true,
+  },
   imagen: {
     titulo:"Img",
-    size: 90,
+    size: 70,
     key:"imagen",
-    className: "flex flex-row w-auto",
+    className: "flex justify-center p-0 w-auto my-1",
     Component: ImagenProducto,
     onClick: showImagenProducto,
-    componentClassname: "my-1 self-center  mx-auto cursor-zoom-in	",
+    componentClassname: "mx-0 self-center cursor-zoom-in",
+    colw:"w-[70px] min-w-[70px]",
     noselect: true,
   },
   eliminar: {
@@ -84,6 +103,7 @@ export const tablaListaProductosColumnasNames = {
     componentClassname: "p-0 m-0",
     onClick: (item) => alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id)),
     noselect: true,
+    colw:"w-px",
   },
   eliminarLocal: {
     titulo: "",
@@ -92,7 +112,6 @@ export const tablaListaProductosColumnasNames = {
     onClick: (item, items) => {
       const index = items.findIndex(({id}) => item.id == id)
       items[index].cantidad = items[index].cantidad - 1
-      console.log(items[index])
       return{
         isParams: true,
         action: "recarga",

@@ -34,9 +34,6 @@ export const showImagenProducto = async (nombre, html) => {
     showConfirmButton: true,
     timer: null, // Asegurándonos de que el toast no se cierra automáticamente.
     didOpen: (toast, pepe, nana) => {
-      console.log(toast)
-      console.log(pepe)
-      console.log(nana)
       let isDragging = false;
       let dragOffsetX = 0;
       let dragOffsetY = 0;

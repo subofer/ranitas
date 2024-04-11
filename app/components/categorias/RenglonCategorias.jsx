@@ -7,10 +7,10 @@ import { alertaBorrarCategoria } from "../alertas/alertaBorrarCategoria";
 
 export const RenglonCategoria = ({item}) => (
   <Tr className={"h-10 align-middle"} >
-    <Td className="w-px">
+    <Td className="px-2 w-px">
       {item?.id}
     </Td>
-    <Td className="w-px">
+    <Td className="pl-2 w-px">
       {fechas.fecha(item?.createdAt)}
     </Td>
     <Td className="w-px text-center">

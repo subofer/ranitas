@@ -24,7 +24,6 @@ export async function guardarProveedor(prevState, formData) {
       },
     });
     response = { r, error: false, msg: "Proveedor guardado con éxito" };
-    console.log(r)
   } catch (e) {
     console.log(e)
     if (e.code === "P2002") {

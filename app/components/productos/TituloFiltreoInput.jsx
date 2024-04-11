@@ -5,7 +5,7 @@ import Input from "../formComponents/Input";
 const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   const inputRef = useRef(null);
   const [valorLocal, setValorLocal] = useState("")
-console.log('refresca?')
+
   const evita = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -16,10 +16,6 @@ console.log('refresca?')
     seter(val);
     setValorLocal(val);
   },[seter])
-  useEffect(() => {
-    console.log(valorLocal)
-
-  },[valorLocal])
 
   const handleChange = (e) => { setValue(e.target.value, e) }
 
@@ -56,7 +52,8 @@ console.log('refresca?')
         ref={inputRef}
         type="text"
         className={"mt-1 h-[35px]"}
-        placeholder="Filtrar..."
+        forceClassName={"placeholder:-translate-y-1 placeholder:mr-2"}
+        placeholder={"Filtrar..."}
         label={variableLabel}
         onChange={handleChange}
         value={valorLocal}
