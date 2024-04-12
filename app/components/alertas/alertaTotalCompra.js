@@ -9,53 +9,70 @@ export const alertaTotalCompra = async (action, venta) => {
     icon: 'warning',
     html: `
     <style>
-      .swal2-popup {
-        font-family: Arial, sans-serif;
-      }
-      .swal2-title {
-        color: #333;
-        font-weight: bold;
-      }
+    .swal2-popup {
+      font-family: 'Courier New', Courier, monospace; /* Estilo de fuente de máquina de escribir para simular ticket */
+    }
+    .swal2-title {
+      color: #333;
+      font-weight: bold;
+      font-size: 1.2em;
+      margin-bottom: 1em;
+    }
       .ticket-container {
-        padding: 20px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        background-color: #f7f7f7;
+        padding: 1em;
+        border: none;
+        font-size: 0.9em; /* Ajustar el tamaño de la fuente si es necesario */
       }
       .ticket-table {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 10px;
       }
-      .ticket-table thead th {
+      .ticket-table th, .ticket-table td {
+        padding: 0.4em;
         text-align: left;
-        border-bottom: 2px solid #333;
-        padding-bottom: 5px;
+        border-bottom: 1px solid #ddd;
+        word-break: keep-all; /* Evitar cortar palabras */
+        white-space: normal; /* Permitir que el texto ocupe más de una línea */
       }
-      .ticket-table tbody td {
-        padding: 5px 0;
-        border-bottom: 1px solid #ccc;
+      .ticket-table th {
+        font-weight: bold;
+      }
+      .ticket-table td {
+        vertical-align: top; /* Alinear el texto en la parte superior de la celda */
+      }
+      .ticket-table td.cantidad {
+        max-width: 50px; /* Ajustar al ancho deseado para los nombres */
+      }
+      .ticket-table td.nombre {
+        max-width: 150px; /* Ajustar al ancho deseado para los nombres */
+      }
+      .ticket-table td.subtotal {
+        width: 1%; /* Ajustar al ancho deseado para los subtotales */
+        white-space: nowrap; /* Evitar que los números se partan en líneas */
+        text-align: right;
       }
       .ticket-total {
-        text-align: right;
         font-weight: bold;
-        margin-top: 10px;
         font-size: 1.2em;
+        text-align: right;
+        padding-top: 0.5em;
       }
     </style>
     <div class="ticket-container">
       <table class="ticket-table">
         <thead>
           <tr>
-            <th>Nombre</th>
-            <th>Subtotal</th>
+            <th class="cantidad">Qt.</th>
+            <th class="nombre">Nombre</th>
+            <th class="subtotal">Subtotal</th>
           </tr>
         </thead>
         <tbody>
           ${venta.detalle.map(d => `
-            <tr> 
-              <td>${d.nombre}</td>
-              <td>$${d.sumaVenta.toFixed(2)}</td>
+            <tr>
+              <td class="cantidad">${d.cantidad}</td>
+              <td class="nombre">${d.nombre}</td>
+              <td class="subtotal">$${d.sumaVenta.toFixed(2)}</td>
             </tr>
           `).join('')}
         </tbody>

@@ -87,7 +87,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
       text-3xl
       lg:text-xl
       `}>
-      <ul className="flex flex-row flex-wrap gap-2">
+      <ul className="flex flex-row flex-wrap gap-2" style={{ zIndex: '99999',}}>
         {menuListHorizontal.map((item, menuIndex) => (
           <li key={menuIndex}
               className={`
@@ -102,11 +102,11 @@ const NavBarHorizontal = forwardRef((props, ref) => {
                 setActiveSubMenuIndex(-1);
                 item.subMenu?.length ? navigate('ArrowDown') : window.location.href = item.href;
               }}
-              style={{ position: 'relative' }}
+              style={{ position: 'relative' , zIndex: '99999'}}
           >
             {item.menu}
             {item.subMenu && item.subMenu.length > 0 && activeMenuIndex === menuIndex && (
-              <ul className="absolute left-0 mt-1" style={{ zIndex: '9999', backgroundColor: 'var(--gray-600)' }}>
+              <ul className="absolute left-0 mt-1" style={{ zIndex: '99999', backgroundColor: 'var(--gray-600)' }}>
                 {item.subMenu.map((subItem, subIndex) => (
                   <li key={subIndex}
                       className={`
@@ -121,8 +121,9 @@ const NavBarHorizontal = forwardRef((props, ref) => {
                         e.stopPropagation();
                         window.location.href = subItem.href;
                       }}
+                      style={{ zIndex: '9999'}}
                   >
-                    <Link className="whitespace-nowrap p-1 " href={subItem.href}>{subItem.menu}</Link>
+                    <Link className="whitespace-nowrap p-1 " href={subItem.href}  style={{ zIndex: '9999'}}>{subItem.menu}</Link>
                   </li>
                 ))}
               </ul>
