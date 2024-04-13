@@ -1,6 +1,7 @@
 "use client"
 import { forwardRef } from "react";
-const Input = forwardRef(({ name, type = "text",value, label, placeholder, className, onChange, forceClassName, ...props }, ref) => {
+import Icon from "./Icon";
+const Input = forwardRef(({ name, type = "text",value, label, placeholder, className, onChange, forceClassName, actionIcon,  ...props }, ref) => {
 
   const handleWheel = (e) => {
     if (type === "number") {
@@ -32,6 +33,7 @@ const Input = forwardRef(({ name, type = "text",value, label, placeholder, class
           ${forceClassName? forceClassName : "placeholder:translate-y-2"}
           ${type === "checkbox" ? "form-checkbox text-blue-600 mr-1 ml-auto" : ""}
           ${className}
+          ${actionIcon ? "pr-12":""}
           `}
           style={type === "checkbox" ? { marginRight: 0, marginLeft: 'auto' } : {}}
 
@@ -42,11 +44,16 @@ const Input = forwardRef(({ name, type = "text",value, label, placeholder, class
           className={`
             absolute left-0 transition-all px-2.5
             text-sm font-medium top-0.5 text-black
-            peer-placeholder-shown:text-md peer-placeholder-shown:top-2.5 
+            peer-placeholder-shown:text-md peer-placeholder-shown:top-2.5
             peer-focus:text-sm peer-focus:top-0.5`}
         >
           {label}
         </label>
+        { actionIcon &&
+          <div className="text-[1.4rem] pt-1 absolute right-2 top-[50%] transform -translate-y-1/2">
+            {actionIcon}
+          </div>
+        }
 
     </div>
   );

@@ -14,7 +14,14 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
       </head>
       <body className={`w-screen h-screen lg:overflow-hidden`}>
-        <div className='mb-2' style={{zIndex:99999}}>
+        <div
+          id="modalUnico"
+          className='fixed top-0 left-0 w-screen h-screen bg-black' style={{zIndex:9999}}
+          hidden={true}
+        >
+
+        </div>
+        <div className='mb-2' style={{zIndex:999}}>
           <NavBarHorizontal />
         </div>
         <div className={`w-screen top-0 left-0 h-fit md:h-[1800px] overflow-hidden`} >

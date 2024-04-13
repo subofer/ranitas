@@ -12,6 +12,8 @@ import FormTitle from '../formComponents/Title';
 import { consultarAHere } from '@/app/ia/consultaIa';
 import InputArrayList from '../formComponents/InputArrayList';
 import Icon from '../formComponents/Icon';
+import QrCodeScanner from "@/app/components/camara/Scanner"
+import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 
 export const CargaProductoBuscadorClient = ({ categorias, proveedores, ia = false }) => {
   const [listadoProveedores, setListadoProveedores] = useState([])
@@ -67,6 +69,15 @@ export const CargaProductoBuscadorClient = ({ categorias, proveedores, ia = fals
     e.preventDefault()
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   }, []);
+
+  const onCapture = (code) => {
+    console.log('code', code)
+    alertaLeerCodigoBarra(code, () => {
+      setFormData(prev => ({ ...prev, codigoBarra: code }))
+      handleBuscarLocalyGoogle(code)
+    }
+  )
+  }
 
   const handleCategoriaChange = useCallback((a, b) => {
     setFormData(prev => ({ ...prev, idCategoria: b }));
@@ -153,7 +164,8 @@ export const CargaProductoBuscadorClient = ({ categorias, proveedores, ia = fals
               onKeyDown={handleCodigoBarraKeyPress}
               onChange={handleInputChange}
               value={formData.codigoBarra}
-              />
+              actionIcon={<QrCodeScanner onScan={onCapture} onError={(error) => console.error(error)}/>}
+            />
           </div>
           <div className="lg:col-span-2">
             <Input

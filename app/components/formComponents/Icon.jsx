@@ -7,8 +7,9 @@ const icons = (icono) => {
   }
 }
 
-const Icon = ({className, children, icono, regular, suspense,  ...props}) => (
+const Icon = ({className, children, icono, type = "button", regular, suspense,  ...props}) => (
   <button
+    type={type}
     className={`
       active:scale-[90%]
       transition duration-150 ease-in-out

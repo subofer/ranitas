@@ -5,6 +5,7 @@
   "scripts": {
     "devOrigin": "next dev",
     "dev": "sudo docker compose up -d && next dev",
+    "secureDev":"sudo docker compose up -d && node serverLocal.js",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
@@ -21,6 +22,7 @@
     "convert": "^5.0.0",
     "create-index": "^2.6.0",
     "dotenv-cli": "^7.3.0",
+    "html5-qrcode": "^2.3.8",
     "next": "14.0.4",
     "node-fetch": "^3.3.2",
     "pg": "^8.11.3",

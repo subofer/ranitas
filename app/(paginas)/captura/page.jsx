@@ -1,11 +1,20 @@
 "use client"
-import CameraCapture from "@/app/components/formComponents/CameraCapture"
+import { useState } from "react"
+import QrCodeScanner from "@/app/components/camara/Scanner"
 
 export default function CargarFacturaPage() {
-  const onCapture = (captura) => {
-    console.log(captura)
+  const [captura, setCaptura] = useState(null)
+  const onCapture = (code) => {
+    console.log(code)
+    setCaptura(code)
   }
   return(
-    <CameraCapture onCapture={onCapture}/>
+    <>
+    {captura}
+      <QrCodeScanner
+        onScan={onCapture}
+        onError={(error) => console.error(error)}
+      />
+    </>
   )
 }
