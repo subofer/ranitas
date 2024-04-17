@@ -4,23 +4,36 @@ import FormTitle from "../formComponents/Title";
 import Button from "../formComponents/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buscar } from "@/app/(paginas)/proveedores/actions/handleAction";
-import { guardarProveedor } from "@/prisma/serverActions/proveedores";
+import { upsertProveedor } from "@/prisma/serverActions/proveedores";
 import Input from "../formComponents/Input";
 import { getProveedorByCuit } from "@/prisma/consultas/proveedores";
 import useMyParams from "@/app/hooks/useMyParams";
-import SelectProveedorClient from "./SelectProveedorClient";
+import SelectProvinciaClient from "../geoRef/SelectProvinciaClient";
+import SelectLocalidadClient from "../geoRef/SelectLocalidadClient";
+import SelectCalleClient from "../geoRef/SelectCalleClient";
+import useRenderCount from "@/app/hooks/useRenderCount";
 
 const inputStyle = "bg-slate-300 rounded"
 const defautlFormValues = {
+  id:'',
+  esProveedor: true,
+  interno: false,
   cuit:'',
   nombre:'',
   telefono:'',
   email: '',
   persona: '',
   iva: '',
+  idProvincia: '',
+  idLocalidad: '',
+  idLocalidadCensal: '',
+  idCalle: '',
+  numeroCalle: '',
 };
 
-export default function CargarProveedor({proveedores}) {
+export default function CargarProveedor() {
+  useRenderCount("CargarProveedor")
+
   const { searchParams, deleteParam } = useMyParams()
 
   const [formData, setFormData] = useState({...defautlFormValues})
@@ -32,7 +45,10 @@ export default function CargarProveedor({proveedores}) {
   const [error, setError] = useState({error:false})
   const formRef = useRef(null);
 
-  const onChange = (e) => setFormData(prev => ({...prev, [e.target.name]: e.target.value}))
+  const onChange = ({name, value}) => setFormData(prev => ({...prev, [name]: value}))
+  const onSelectChange = ({name, value, option: { idLocalidadCensal }}) => {
+    setFormData(prev => ({...prev, [name]: value, idLocalidadCensal}))
+  }
 
   const handleReset = useCallback(() => {
     deleteParam('cuit')
@@ -76,9 +92,18 @@ export default function CargarProveedor({proveedores}) {
       async function completarConCuit() {
         setBuscando(true)
         const proveedorEncontrado = {...await getProveedorByCuit(cuitIngresado)}
+
+        console.log('aca', proveedorEncontrado)
         proveedorEncontrado.cuit !== cuitIngresado
           ? handleReset()
-          : setFormData({...defautlFormValues, ...proveedorEncontrado})
+          : setFormData({
+            ...defautlFormValues,
+            ...proveedorEncontrado,
+            ...proveedorEncontrado?.direcciones?.[0],
+            ...proveedorEncontrado?.direcciones?.[0]?.calle,
+            ...proveedorEncontrado?.emails?.[0]
+
+          })
         setBuscando(false)
       }
       completarConCuit();
@@ -107,7 +132,7 @@ export default function CargarProveedor({proveedores}) {
           rounded-md
           p-4
         `}
-        action={guardarProveedor}
+        action={upsertProveedor}
       >
         <FormTitle
           textClass={"text-2xl font-bold text-slate-500"}
@@ -116,6 +141,7 @@ export default function CargarProveedor({proveedores}) {
             {title}
         </FormTitle>
         <div className="grid grid-cols-11 gap-3">
+          <input hidden name="id" value={formData.id} readOnly/>
           <div className={`col-span-3  ${inputStyle}`}>
             <Input
               name={"cuit"}
@@ -169,6 +195,41 @@ export default function CargarProveedor({proveedores}) {
               onChange={onChange}
               value={formData.email}
               placeholder={"Correro@electron.ico"}
+            />
+          </div>
+          <div className={`col-span-4 ${inputStyle}`}>
+              <SelectProvinciaClient
+                name="idProvincia"
+                value={formData.idProvincia}
+                onChange={onSelectChange}
+              />
+          </div>
+          <div className={`col-span-4 ${inputStyle}`}>
+              <SelectLocalidadClient
+                idProvincia={formData.idProvincia}
+                name="idLocalidad"
+                value={formData.idLocalidad}
+                onChange={onSelectChange}
+              />
+          </div>
+          <div className={`col-span-4 ${inputStyle}`}>
+              <SelectCalleClient
+                idProvincia={formData.idProvincia}
+                idLocalidad={formData.idLocalidad}
+                idLocalidadCensal={formData.idLocalidadCensal}
+                name={"idCalle"}
+                value={formData.idCalle}
+                onChange={onSelectChange}
+              />
+          </div>
+          <div className={`col-span-4 ${inputStyle}`}>
+            <Input
+              name={"numeroCalle"}
+              label={"Numero"}
+              type={"number"}
+              onChange={onChange}
+              value={formData?.numeroCalle}
+              placeholder={"Ingrese numeracion"}
             />
           </div>
           <div className="col-span-full h-1 text-red-500">

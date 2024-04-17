@@ -55,7 +55,8 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
   },[alturaCaption])
 
   return (
-    <div className="flex flex-row max-h-full w-full"> {/* Asegúrate de que este contenedor tenga la altura correcta */}
+    <div className="flex h-full w-full mx-h-[400px]">
+    <div className="pepe flex flex-col flex-grow max-h-fit overflow-auto">
       <table className="table-auto w-full h-full lg:text-sm text-xs text-gray-600 bg-slate-400">
         <caption ref={captionRef} className="table-caption sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
           {titulo}
@@ -82,10 +83,11 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
           <Separadores columnas={columnas} alto={6} color={"bg-gray-200"} stick={alturaHead}/>
           <Separadores columnas={columnas} alto={1} color={"bg-gray-300"} stick={alturaHead+4}/>
         </thead>
-        <tbody className="table-row-group bg-white divide-y divide-gray-300 snap-both overflow-auto">
+         <tbody className="table-row-group bg-white divide-y divide-gray-300 snap-both overflow-auto flex-grow">
           {children}
         </tbody>
       </table>
+      </div>
       </div>
   );
 }

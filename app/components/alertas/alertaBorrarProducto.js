@@ -31,13 +31,8 @@ export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
       title: '¡No se borro!',
       text: 'Menos mal, no se como termina el tema.',
       icon: 'info',
-    }
+    },
   }
 
   alertaSiNoAcction(action, pregunta, solucion);
 }
-
-/*
-
-
-*/

@@ -1,4 +1,7 @@
 "use client"
+import cargarDatos from "@/prisma/geoRef/createGeoRef";
+import { deleteCalles } from "@/prisma/geoRef/getGeoRefs";
+import { deleteContacto } from "@/prisma/serverActions/contactos";
 import convert from "convert"
 import { convertMany } from "convert";
 import Link from "next/link"
@@ -35,6 +38,14 @@ export default function Home() {
       <span>
         Inicio?
       </span>
+      <form action={cargarDatos}>
+        <button >Cargar GeoRef</button>
+
+      </form>
+      <form action={deleteContacto}>
+
+        <button >borrar contacto  GeoRef</button>
+      </form>
       <button onClick={() => convertir({value:2, unit: "g"}, "kaka")}>Convertir</button>
       <Link href={"/cargarProductos"}>Ir a productos</Link>
     </main>

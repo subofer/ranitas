@@ -6,8 +6,9 @@ import Icon from './Icon';
 import ImageToBase64Uploader from '../LoadImage64';
 import CameraCaptureModal from './CameraCapture';
 import { ChevronPair } from './Chevron';
+import { showImagenProducto } from '../productos/showImagenProducto';
 
-const SelectorImagenes = ({ imagenes: imagenesProp, proceder, ...props}) => {
+const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, ...props}) => {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [imagenes, setImagenes] = useState([])
 
@@ -50,22 +51,24 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, ...props}) => {
   };
 
   return (
-    <div className='relative h-full w-full bg-slate-300 rounded-2xl overflow-hidden'>
-      <div className='flex w-[400px] h-[400px]'>
-        <div className='block w-full h-full relative'>
+    <div
+      className='flex relative w-full lg:w-fit bg-white'
+        onClick={() => false && showImagenProducto({imagen:imagenes[currentIndex]?.imagen?.src, nombre:props.nombre})}
+      >
+        <div className="relative w-screen h-screen max-w-[300px] max-h-[300px]">
           <Image
             src={imagenes[currentIndex]?.imagen?.src || imagenRanita.imagen.src}
             alt={imagenes[currentIndex]?.imagen?.alt || imagenRanita.imagen.alt}
             fill
-            //width={400}
-            //height={400}
+            //width={320}
+            //height={320}
             quality={100}
-            className='object-cover rounded-2xl p-1'
+            className='relative rounded-2xl p-1'
           />
         </div>
-      </div>
+
       <div className='absolute inset-0 flex flex-col justify-between p-4
-        group opacity-30 delay-[200ms] hover:delay-75 hover:opacity-100
+        group opacity-60 hover:opacity-100
         transition-opacity ease-in-out duration-500
         '>
 

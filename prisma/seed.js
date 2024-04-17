@@ -10,7 +10,7 @@ async function main() {
   });
 
   // Crear un proveedor
-  const proveedor = await prisma.proveedores.create({
+  const proveedor = await prisma.contactos.create({
     data: {
       cuit: '20-29906618-9',
       nombre: 'Las Ranitas',

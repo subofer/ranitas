@@ -53,13 +53,11 @@ const Counter = ({ especialCounter, item, valueKey = "cantidad" }) => {
   };
 
   return (
-    <div className={`flex flex-row ${especialCounter ? "cursor-ns-resize" : "cursor-default"}`} onWheel={handleWheel}>
+    <div className={`flex flex-row justify-center ${especialCounter ? "cursor-ns-resize" : "cursor-default"}`} onWheel={handleWheel}>
       {especialCounter && <Icon icono={"minus"} onClick={() => restar(item)} className={"text-red-900 cursor-pointer"} />}
-      <div className="w-[25px] text-center">
-        <span className="mx-auto text-center cursor-pointer" onClick={handleSetCantidad}>
+        <span className="text-center cursor-pointer" onClick={handleSetCantidad}>
           {item[valueKey]}
         </span>
-      </div>
       {especialCounter && <Icon icono={"plus"} onClick={() => sumar(item)} className={"text-lime-500 cursor-pointer"} />}
     </div>
   );

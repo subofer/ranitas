@@ -1,13 +1,6 @@
-import Label from "./Label";
-
-const FormTitle = ({
-  children,
-  className,
-  textClass,
-  ...props
-}) => (
-  <div className={`flex justify-center w-full pb-2 ${className}`} {...props}>
-    <span className={textClass}>{children}</span>
+const FormTitle = ({children, className, textClass, ...props}) => (
+  <div className={`text-center pb-4 ${className}`} {...props}>
+    <p className={textClass}>{children}</p>
   </div>
 );
 

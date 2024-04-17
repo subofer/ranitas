@@ -1,6 +1,6 @@
 import { textos as tx } from '@/lib/manipularTextos';
 import { useMemo, useState } from 'react';
-import { getKeyByName, tablaListaProductosColumnasNames, obtenerValorPorRuta as vr} from '../components/productos/tablaProductosData';
+import { tablaListaProductosColumnasNames, obtenerValorPorRuta as vr} from '../components/productos/tablaProductosData';
 
 const filtrarProductosPorClave = (productos, filtro, columnasNames) => {
   const filtros = tx.preparar(filtro);

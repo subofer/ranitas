@@ -1,9 +1,9 @@
 "use server"
-import { getProveedores } from "@/prisma/consultas/proveedores";
+import { getProveedoresCompletos } from "@/prisma/consultas/proveedores";
 import SelectProveedorClient from "./SelectProveedorClient";
 
 const SelectProveedor =  async (props) => {
-  const proveedores = await getProveedores()
+  const proveedores = await getProveedoresCompletos()
   return (
     <SelectProveedorClient
       options={proveedores}

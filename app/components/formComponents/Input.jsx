@@ -1,56 +1,73 @@
 "use client"
 import { forwardRef } from "react";
-import Icon from "./Icon";
-const Input = forwardRef(({ name, type = "text",value, label, placeholder, className, onChange, forceClassName, actionIcon,  ...props }, ref) => {
+import { useFormStatus } from "react-dom";
 
+const Input = forwardRef(({ transform, name, type = "text",value, label, placeholder, className, onChange, forceClassName, actionIcon,  ...props }, ref) => {
+
+  const handleOnChange = (e) => {
+    onChange({name: e.target.name, value: e.target.value})
+  }
+  const { pending } = useFormStatus();
+  
   const handleWheel = (e) => {
     if (type === "number") {
       const direction = e.deltaY < 0 ? 1 : -1; // Determina la dirección del scroll
       const newValue = parseFloat(value || 0) + direction;
       const useValue = newValue > 1 ? newValue.toString() : 1;
-      onChange({ target: { name, value: useValue } });
+      handleOnChange({ name, value: useValue });
     }
   };
-
   return (
-    <div className="relative">
+    <div className="relative w-full">
+
       <input
         ref={ref}
         id={name}
-        onChange={onChange}
         name={name}
         type={type}
         value={value}
         placeholder={placeholder}
+        onChange={handleOnChange}
         onWheel={handleWheel}
         className={`
-          form-input
-          block w-full
-          px-2.5 pb-2.5
-          pt-4 border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
-          focus:border-slate-400 peer
+          appearance-none
           text-right
-          ${forceClassName? forceClassName : "placeholder:translate-y-2"}
+          block w-full
+          px-2 pb-[3px] pt-[20px]
+          border-0 border-b-2 border-gray-300
+          focus:outline-none focus:ring-0
+          focus:border-slate-400 peer
+
+          ${pending ? "bg-gray-200":""}
+          ${forceClassName? forceClassName : "placeholder:translate-y-[2px]"}
           ${type === "checkbox" ? "form-checkbox text-blue-600 mr-1 ml-auto" : ""}
+          ${actionIcon ? "pr-[32px]":""}
           ${className}
-          ${actionIcon ? "pr-12":""}
           `}
           style={type === "checkbox" ? { marginRight: 0, marginLeft: 'auto' } : {}}
 
         {...props}
       />
-        <label
-          htmlFor={name}
+        <label htmlFor={name}
           className={`
-            absolute left-0 transition-all px-2.5
-            text-sm font-medium top-0.5 text-black
-            peer-placeholder-shown:text-md peer-placeholder-shown:top-2.5
-            peer-focus:text-sm peer-focus:top-0.5`}
+            appearance-none absolute px-2 transition-all top-0.5
+            text-[0.96rem] font-medium text-black
+            peer-placeholder-shown:text-md
+            peer-placeholder-shown:top-1.5
+            peer-focus:text-sm
+            peer-focus:top-0.5
+            peer-focus:px-1.5
+          `}
         >
           {label}
         </label>
         { actionIcon &&
-          <div className="text-[1.4rem] pt-1 absolute right-2 top-[50%] transform -translate-y-1/2">
+          <div className={`
+            absolute
+            text-center text-[1.2rem]
+            w-[1.2rem] right-1 top-[50%]
+            pt-1 transform -translate-y-1/2
+          `}>
             {actionIcon}
           </div>
         }

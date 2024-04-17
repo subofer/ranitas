@@ -7,7 +7,18 @@ module.exports = {
     './components/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(0)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.3s ease-out forwards',
+        'spin-slow': 'spin 3s linear infinite',
+      },
+    },
   },
   plugins: [
     require('@tailwindcss/forms'),

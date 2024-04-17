@@ -5,20 +5,21 @@ import { menuListHorizontal } from "./menuList";
 import { useRouter } from "next/navigation";
 
 const theme = {
-  background: 'bg-gray-700',
-  menuItem: 'bg-gray-600',
+  background: 'bg-gray-800',
+  menuItem: 'bg-gray-700',
   menuItemHover: 'hover:bg-gray-500',
   menuItemActive: 'bg-gray-500',
   text: 'text-white',
 };
+const zIndexNavBar = 9998;
 
 const NavBarHorizontal = forwardRef((props, ref) => {
   const { push } = useRouter();
   const [activeMenuIndex, setActiveMenuIndex] = useState(-1);
   const [activeSubMenuIndex, setActiveSubMenuIndex] = useState(-1);
+  
   const [isNavActive, setIsNavActive] = useState(false); // Nuevo estado para controlar la activación del menú
   const lastFocusedElement = useRef(null);
-
 
   const goNext = (length, set) => set((prevIndex) => (prevIndex + 1) % length);
   const goPrev = (length, set) => set((prevIndex) => (prevIndex - 1 + length) % length);
@@ -45,7 +46,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
   }, [activeMenuIndex, activeSubMenuIndex]);
 
   const salir = useCallback((event, focus = true) => {
-    event.preventDefault(); event.stopPropagation();
+    event?.preventDefault(); event.stopPropagation();
     setIsNavActive(false)
     focus && lastFocusedElement.current?.focus();
     navigate('reset');
@@ -57,6 +58,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
     push(subMenuHref || menuHref || "" )
     salir(event, false);
   },[activeMenuIndex, activeSubMenuIndex, push, salir])
+
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -78,52 +80,51 @@ const NavBarHorizontal = forwardRef((props, ref) => {
   }, [activeMenuIndex, go, isNavActive, navigate, salir]);
 
   return (
-    <div className={`
-      ${theme.background}
-      px-2
-      py-1
-      min-w-full
-      w-full
-      text-3xl
-      lg:text-xl
-      `}>
-      <ul className="flex flex-row flex-wrap gap-2" style={{ zIndex: 999,}}>
-        {menuListHorizontal.map((item, menuIndex) => (
+    <div
+      style={{ zIndex: zIndexNavBar }}
+      className={`${theme.background}
+        px-2 py-1 min-w-full w-screen text-2xl lg:text-xl mb-2
+    `}>
+      <ul className="flex flex-row flex-wrap gap-0.5" >
+        {menuListHorizontal.map(({menu, subMenu, href}, menuIndex) => (
           <li key={menuIndex}
               className={`
                 ${theme.menuItemHover}
                 ${activeMenuIndex === menuIndex ? theme.menuItemActive : theme.menuItem}
                 ${theme.text}
-                p-1
-                px-2
-                cursor-pointer`}
+                px-4
+                relative
+                w-fit
+                cursor-pointer
+              `}
               onClick={() => {
                 setActiveMenuIndex(menuIndex);
                 setActiveSubMenuIndex(-1);
-                item.subMenu?.length ? navigate('ArrowDown') : window.location.href = item.href;
+                subMenu?.length ? navigate('ArrowDown') :push(href);
               }}
-              style={{ position: 'relative' , zIndex: 999}}
+              style={{ zIndex: zIndexNavBar + 1 }}
           >
-            {item.menu}
-            {item.subMenu && item.subMenu.length > 0 && activeMenuIndex === menuIndex && (
-              <ul className="absolute left-0 mt-1" style={{ zIndex: 999, backgroundColor: 'var(--gray-600)' }}>
-                {item.subMenu.map((subItem, subIndex) => (
+            <span>{menu}</span>
+            {subMenu && subMenu?.length > 0 && activeMenuIndex === menuIndex && (
+              <ul className="absolute left-0 mt-2 bg-gray-500" style={{ zIndex: zIndexNavBar + 2 }}>
+                {subMenu?.map(({menu, href}, subIndex) => (
                   <li key={subIndex}
                       className={`
                         ${theme.menuItemHover}
                         ${activeSubMenuIndex === subIndex ? theme.menuItemActive : theme.menuItem}
                         ${theme.text}
-                        px-3
-                        py-3
+                        bg-gray-600
+                        px-4
+                        py-2
+                        mb-0.5
                         cursor-pointer
                       `}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.location.href = subItem.href;
-                      }}
-                      style={{ zIndex: 999}}
+                      onClick={(e)=> {push(href); salir(e)}}
+                      style={{ zIndex: zIndexNavBar + 2 }}
                   >
-                    <Link className="whitespace-nowrap p-1 " href={subItem.href}  style={{ zIndex: 999}}>{subItem.menu}</Link>
+                    <Link className="whitespace-nowrap" href={href}>
+                      {menu}
+                    </Link>
                   </li>
                 ))}
               </ul>

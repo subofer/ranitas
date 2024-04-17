@@ -90,24 +90,45 @@ export async function guardarProductoBuscado(productObject) {
 }
 
 export async function eliminarProductoConPreciosPorId(idProducto) {
-  const resultado = await prisma.$transaction(async (prisma) => {
-    // Eliminar precios asociados al producto
-    const resultadoBorrarPrecios = await prisma.precios.deleteMany({
-      where: {
-        idProducto: idProducto,
-      },
-    });
+  try{
+    const resultado = await prisma.$transaction(async (prisma) => {
+      // Eliminar precios asociados al producto
+      const resultadoBorrarPrecios = await prisma.precios.deleteMany({
+        where: {
+          idProducto: idProducto,
+        },
+      });
 
-    // Eliminar el producto
-    const resultadoBorrarProducto = await prisma.productos.delete({
-      where: {
-        id: idProducto,
-      },
+      // Eliminar el producto
+      const resultadoBorrarProducto = await prisma.productos.delete({
+        where: {
+          id: idProducto,
+        },
+      });
+      return {resultadoBorrarPrecios, resultadoBorrarProducto}
     });
+    return resultado;
+  }catch(e){
+    let msg;
+    switch (e.code) {
+      case "P2003":
+        msg = {
+          title: '¡No se borro!',
+          text: 'No se puede borrar este producto, esta cargado en facturas',
+          icon: 'info',
+        }
+      break;
+      default:
+        msg = {
+          title: '¡No se borro!',
+          text: e.code,
+          icon: 'info',
+        }
+      break;
+      }
 
-   return {resultadoBorrarPrecios, resultadoBorrarProducto}
-  });
-  revalidarProductos();
-  console.log(resultado)
-  return resultado;
+    return {error: true, code: e.code, msg}
+  } finally {
+    revalidarProductos();
+  }
 }

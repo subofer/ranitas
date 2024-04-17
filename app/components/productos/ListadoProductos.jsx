@@ -1,12 +1,12 @@
 "use server"
 import { getProductos } from '@/prisma/consultas/productos';
 import TablaListaProductos from './TablaListaProductos';
-import { getProveedores } from '@/prisma/consultas/proveedores';
+import { getProveedoresCompletos } from '@/prisma/consultas/proveedores';
 
 const ListadoProductos = async ({cols, ...props}) => {
-  const columnas = cols || ['edit', 'codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'eliminar']
+  const columnas = cols || ['eliminar', 'codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'edit']
   const productos = await getProductos()
-  const proveedores = await getProveedores()
+  const proveedores = await getProveedoresCompletos()
 
   return (
     <TablaListaProductos

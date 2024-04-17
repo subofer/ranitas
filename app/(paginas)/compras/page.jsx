@@ -1,10 +1,10 @@
 "use server"
 import CargaFacturaForm from "@/app/components/formularios/CargarFactura"
 import { getProductos } from "@/prisma/consultas/productos"
-import { getProveedores } from "@/prisma/consultas/proveedores"
+import { getProveedoresCompletos } from "@/prisma/consultas/proveedores"
 
 export default async function CargarFacturaPage() {
-  const proveedores = await getProveedores()
+  const proveedores = await getProveedoresCompletos()
   const productos = await getProductos()
 
   return(
