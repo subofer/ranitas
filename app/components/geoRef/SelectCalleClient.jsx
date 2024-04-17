@@ -1,21 +1,21 @@
 "use client"
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { getCallesPorLocalidad } from "@/prisma/geoRef/getGeoRefs";
 import FilterSelect from "../formComponents/FilterSelect";
 import useSelect from "@/app/hooks/useSelect";
 
-const SelectCalleClient = ({idProvincia, idLocalidad, idLocalidadCensal, ...props}) => {
+const SelectCalleClient = ({idProvincia, idLocalidadCensal, ...props}) => {
 
   const get = useCallback(async () =>
-    idLocalidad && idProvincia && idLocalidadCensal
-    ? await getCallesPorLocalidad(idLocalidad, idProvincia, idLocalidadCensal)
-    : []
-  ,[idLocalidad, idLocalidadCensal, idProvincia])
+    idProvincia && idLocalidadCensal
+     ? await getCallesPorLocalidad(idProvincia, idLocalidadCensal)
+      : []
+  ,[idLocalidadCensal, idProvincia])
 
-  const { data: calles } = useSelect(get)
+  const { data: calles, busy } = useSelect(get)
 
-  const placeholder = `Elija ${!idProvincia ? "Provincia y ":""}${!idLocalidad ? "Localidad":""}${idProvincia && idLocalidad ? "Calle":""}`
+  const placeholder = `Elija ${!idProvincia ? "Provincia y ":""}${!idLocalidadCensal ? "Localidad":""}${idProvincia && idLocalidadCensal ? "Calle":""}`
 
   return (
     <FilterSelect
@@ -24,6 +24,7 @@ const SelectCalleClient = ({idProvincia, idLocalidad, idLocalidadCensal, ...prop
       textField={"nombre"}
       placeholder={placeholder}
       label={"Calle"}
+      busy={busy}
       {...props}
     />
   )

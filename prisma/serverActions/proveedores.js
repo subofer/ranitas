@@ -5,6 +5,7 @@ import { upsertContacto } from "./contactos";
 
 
 export const upsertProveedor = async (formData) => {
+  console.log(formData)
   let result;
   try{
     const data = formToObject(formData)

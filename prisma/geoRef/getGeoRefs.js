@@ -16,7 +16,7 @@ export const getLocalidadesPorProvincia = async (idProvincia) => {
   });
 };
 
-export const getCallesPorLocalidad = async (idLocalidad, idProvincia, idLocalidadCensal) => {
+export const getCallesPorLocalidad = async (idProvincia, idLocalidadCensal) => {
   return await prisma.calles.findMany({
     where: {
       idProvincia: idProvincia,

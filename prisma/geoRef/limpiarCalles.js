@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 
 function filtrarCalles() {
@@ -13,11 +14,21 @@ function filtrarCalles() {
 
     // Filtrar las calles que no coincidan con la expresión regular
     const callesFiltradas = obj.calles.filter(calle => !regex.test(calle.nombre));
+    const callesTransformadas = callesFiltradas.map(({altura:{inicio, fin}, ...calle}) => ({
+      id: calle.id,
+      nombre: calle.nombre,
+      categoria: calle.categoria,
+      alturas:JSON.stringify([[inicio.derecha, inicio.izquierda],[fin.derecha, fin.izquierda]]),
+      idProvincia: calle.provincia.id,
+      idLocalidadCensal: calle.localidad_censal.id
+
+    }));
+
 
     // Actualizar el objeto con las calles filtradas y la nueva cantidad y total
-    obj.calles = callesFiltradas;
-    obj.cantidad = callesFiltradas.length;
-    obj.total = callesFiltradas.length;
+    obj.calles = callesTransformadas;
+    obj.cantidad = callesTransformadas.length;
+    obj.total = callesTransformadas.length;
     obj.inicio = 0;
     obj.paramentros = {};
 

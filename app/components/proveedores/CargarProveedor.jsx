@@ -47,7 +47,13 @@ export default function CargarProveedor() {
 
   const onChange = ({name, value}) => setFormData(prev => ({...prev, [name]: value}))
   const onSelectChange = ({name, value, option: { idLocalidadCensal }}) => {
+    console.log("cambia aca?", idLocalidadCensal )
     setFormData(prev => ({...prev, [name]: value, idLocalidadCensal}))
+  }
+  
+  const handleSave = (a,b) => {
+    console.log(a,b)
+    upsertProveedor(a,b)
   }
 
   const handleReset = useCallback(() => {
@@ -98,11 +104,10 @@ export default function CargarProveedor() {
           ? handleReset()
           : setFormData({
             ...defautlFormValues,
-            ...proveedorEncontrado,
             ...proveedorEncontrado?.direcciones?.[0],
             ...proveedorEncontrado?.direcciones?.[0]?.calle,
-            ...proveedorEncontrado?.emails?.[0]
-
+            ...proveedorEncontrado?.emails?.[0],
+            ...proveedorEncontrado,
           })
         setBuscando(false)
       }
@@ -132,7 +137,7 @@ export default function CargarProveedor() {
           rounded-md
           p-4
         `}
-        action={upsertProveedor}
+        action={handleSave}
       >
         <FormTitle
           textClass={"text-2xl font-bold text-slate-500"}
@@ -198,29 +203,28 @@ export default function CargarProveedor() {
             />
           </div>
           <div className={`col-span-4 ${inputStyle}`}>
-              <SelectProvinciaClient
-                name="idProvincia"
-                value={formData.idProvincia}
-                onChange={onSelectChange}
-              />
+            <SelectProvinciaClient
+              name="idProvincia"
+              value={formData.idProvincia}
+              onChange={onSelectChange}
+            />
           </div>
           <div className={`col-span-4 ${inputStyle}`}>
-              <SelectLocalidadClient
-                idProvincia={formData.idProvincia}
-                name="idLocalidad"
-                value={formData.idLocalidad}
-                onChange={onSelectChange}
-              />
+            <SelectLocalidadClient
+              idProvincia={formData.idProvincia}
+              name="idLocalidad"
+              value={formData.idLocalidad}
+              onChange={onSelectChange}
+            />
           </div>
           <div className={`col-span-4 ${inputStyle}`}>
-              <SelectCalleClient
-                idProvincia={formData.idProvincia}
-                idLocalidad={formData.idLocalidad}
-                idLocalidadCensal={formData.idLocalidadCensal}
-                name={"idCalle"}
-                value={formData.idCalle}
-                onChange={onSelectChange}
-              />
+            <SelectCalleClient
+              idProvincia={formData.idProvincia}
+              idLocalidadCensal={formData.idLocalidadCensal}
+              name={"idCalle"}
+              value={formData.idCalle}
+              onChange={onSelectChange}
+            />
           </div>
           <div className={`col-span-4 ${inputStyle}`}>
             <Input

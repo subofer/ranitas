@@ -4,8 +4,8 @@ import prisma from '../prisma';
 import { textos } from '@/lib/manipularTextos';
 
 const cargar = {
-  provincias: true,
-  localidades: true,
+  provincias: false,
+  localidades: false,
   calles: true,
 }
 
@@ -79,16 +79,9 @@ async function cargarCalles() {
       try {
         await prisma.calles.createMany({
           data: batch.map(item => ({
+            ...item,
             id: `${item.id}`,
-            nombre: textos.mayusculas.primeras(item.nombre),
-            fuente: item.fuente,
-            categoria: item.categoria,
-            alturaInicioDerecha: item.altura.inicio.derecha,
-            alturaInicioIzquierda: item.altura.inicio.izquierda,
-            alturaFinDerecha: item.altura.fin.derecha,
-            alturaFinIzquierda: item.altura.fin.izquierda,
-            idProvincia: `${item.provincia.id}`,
-            idLocalidadCensal: `${item.localidad_censal.id}`
+            nombre: `${textos.mayusculas.primeras(item.nombre)}`
           })),
           skipDuplicates: true
         });
@@ -99,16 +92,7 @@ async function cargarCalles() {
           try {
             await prisma.calles.create({
               data: {
-                id: `${item.id}`,
-                nombre: textos.mayusculas.primeras(item.nombre),
-                fuente: item.fuente,
-                categoria: item.categoria,
-                alturaInicioDerecha: item.altura.inicio.derecha,
-                alturaInicioIzquierda: item.altura.inicio.izquierda,
-                alturaFinDerecha: item.altura.fin.derecha,
-                alturaFinIzquierda: item.altura.fin.izquierda,
-                idProvincia: `${item.provincia.id}`,
-                idLocalidadCensal: `${item.localidad_censal.id}`
+                ...item
               }
             });
           } catch (innerError) {
@@ -122,6 +106,7 @@ async function cargarCalles() {
     }
 
     console.log('Todos los datos de calles han sido importados exitosamente.');
+    console.log('Se cargaron ', callesDataLarge.length, " calles");
   } catch (error) {
     console.error('Error general en la carga de calles:', error);
   } finally {

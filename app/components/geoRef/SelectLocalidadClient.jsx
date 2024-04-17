@@ -3,15 +3,16 @@
 import { getLocalidadesPorProvincia } from "@/prisma/geoRef/getGeoRefs";
 import FilterSelect from "../formComponents/FilterSelect";
 import useSelect from "@/app/hooks/useSelect";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 
 const SelectLocalidadClient = ({idProvincia, ...props}) => {
-
   const get = useCallback(async () =>
-    await getLocalidadesPorProvincia(idProvincia)
+  idProvincia
+      ? await getLocalidadesPorProvincia(idProvincia)
+      : []
   ,[idProvincia])
 
-  const { data: localidades } = useSelect(get)
+  const { data: localidades, busy } = useSelect(get)
 
   return (
     <FilterSelect
@@ -20,6 +21,7 @@ const SelectLocalidadClient = ({idProvincia, ...props}) => {
       textField={"nombre"}
       placeholder={idProvincia ? "Elija Localidad":"Elija provincia"}
       label={"Localidad"}
+      busy={busy}
       {...props}
     />
   )

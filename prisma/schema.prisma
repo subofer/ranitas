@@ -172,12 +172,8 @@ model Localidades {
 model Calles {
   id                    String @id
   nombre                String
-  fuente                String
   categoria             String
-  alturaInicioDerecha   Int
-  alturaInicioIzquierda Int
-  alturaFinDerecha      Int
-  alturaFinIzquierda    Int
+  alturas               String
   idProvincia           String
   idLocalidadCensal     String
 

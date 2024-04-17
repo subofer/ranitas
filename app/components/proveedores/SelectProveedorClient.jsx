@@ -5,7 +5,7 @@ import { getProveedoresCompletos } from "@/prisma/consultas/proveedores";
 import useSelect from "@/app/hooks/useSelect";
 
 const SelectProveedorClient =  ({...props}) => {
-  const { data: proveedores } = useSelect(getProveedoresCompletos)
+  const { data: proveedores, busy } = useSelect(getProveedoresCompletos)
 
   return (
     <FilterSelect
@@ -14,6 +14,7 @@ const SelectProveedorClient =  ({...props}) => {
       textField={"nombre"}
       placeholder={"Elija provincia"}
       label={"Elija provincia"}
+      busy={busy}
       {...props}
     />
   )

@@ -2,33 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes spin {
-  from {transform: rotate(0deg);}
-  to {transform: rotate(360deg);}
-}
 @keyframes growPill {
-  from {transform: scale(0.5);opacity: 0;}
+  from {transform: scale(0.1);opacity: 0;}
   to {transform: scale(1);opacity: 1;}
 }
-
-.grow {
-  animation: growPill 0.3s ease-out forwards;
-}
-
 @keyframes shrinkPill {
-  from {
-    transform: scale(1);
-    opacity: 1;
-  }
-  to {
-    transform: scale(0.5);
-    opacity: 0;
-  }
+  from {transform: scale(1);opacity: 1;}
+  to {transform: scale(0.1);opacity: 0;}
 }
+.grow   { animation: growPill 0.3s ease-out forwards;}
+.shrink { animation: shrinkPill 0.3s ease-in forwards;}
 
-.shrink {
-  animation: shrinkPill 0.3s ease-in forwards;
+
+@keyframes spin {
+  from {transform: rotate(360deg)}
+  to {transform: rotate(0deg)}
 }
+.spin-slow{  animation: spin 3s linear infinite;}
+
+
+
 :root{
   background-color: dimgrey;
   box-sizing: border-box;

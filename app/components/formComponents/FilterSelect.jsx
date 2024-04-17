@@ -12,6 +12,7 @@ const FilterSelect = forwardRef(({
   valueField,
   textField,
   save,
+  busy = false,
   ...props
 },
 ref
@@ -107,28 +108,27 @@ ref
 
 
   useEffect(() => {
-    console.log('Id: ', props.name, " value: ",value)
     if (value) {
       const seleccionInicial = options.find((option) => {
         return (option[valueField] == value[valueField] || option[valueField] == value)
       });
+
       if (seleccionInicial) {
         setOpcion(seleccionInicial);
         setFiltro(seleccionInicial[textField]);
       }
     }
-  }, [value, options, valueField, textField, props.name, filtro]);
+  }, [value, options, valueField, textField, props.formData]);
 
   //Esta funcion maneja las acciones al tocar cada tecla de la lista.
   const handleKeyDown = (e) => {
     const { key: tecla } = e;
-    //Si es tecla de accion, preventDefault, sino, salgo.
     if(["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(tecla)) {
       e.preventDefault()
       if (["ArrowDown", "ArrowUp"].includes(tecla)) {
         !isOpen && open(true)
       }
-    } else { return }
+    }
 
     const checkit = (i, dir) => optionRefs.current[nextIndex(i, dir)]?.focus()
 
@@ -148,13 +148,20 @@ ref
   };
 
   //Esto es completamente innecesario, pero queda lindo.
-  const iconoSegunCaso = {
-    icono: filteredOptions?.length == 0 ? 'xmark'  : pending ? 'spinner': 'chevron-up',
-    className: `
-      ${filteredOptions?.length == 0 ? "pointer-events-none" : "transition-transform"}
-      ${isOpen ? 'rotate-180' : 'rotate-0'} ${pending ? "spin-slow" : ""}
-    `
+  const iconoSegunCaso = useMemo(() => {
+    let ocupado = pending || busy ;
+    let vacio = filteredOptions?.length == 0;
+
+    return {
+      icono: ocupado ? 'spinner': vacio ? 'xmark' : 'chevron-up',
+      className:`
+        ${ocupado ? "spin-slow": "transition-transform "}
+        ${isOpen && !vacio ? 'rotate-180' : 'rotate-0'}
+        ${vacio ? "pointer-events-none":""}
+      `,
     }
+
+  },[busy, filteredOptions?.length, isOpen, pending])
 
   return (
     <div ref={refPadre} className="relative">
@@ -177,13 +184,14 @@ ref
         autoComplete="off"
         onBlur={() => setIsOpen(false)}
         label={label}
+        disabled={pending || busy}
         actionIcon={
           <Icon
             className={iconoSegunCaso.className}
             tabIndex={-1}
             icono={iconoSegunCaso.icono}
             onClick={() => setIsOpen(prev => !prev)}
-          />
+            />
         }
       />
       <ul

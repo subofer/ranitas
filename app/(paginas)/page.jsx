@@ -46,6 +46,10 @@ export default function Home() {
 
         <button >borrar contacto  GeoRef</button>
       </form>
+      <form action={deleteCalles}>
+
+        <button >borrar Calles</button>
+        </form>
       <button onClick={() => convertir({value:2, unit: "g"}, "kaka")}>Convertir</button>
       <Link href={"/cargarProductos"}>Ir a productos</Link>
     </main>

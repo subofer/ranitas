@@ -4,7 +4,7 @@ import { getCategorias } from "@/prisma/consultas/categorias";
 import useSelect from "@/app/hooks/useSelect";
 
 const SelectCategoriaClient =  ({...props}) => {
-  const { data: categorias } = useSelect(getCategorias)
+  const { data: categorias, busy } = useSelect(getCategorias)
 
   return (
     <FilterSelect
@@ -13,6 +13,7 @@ const SelectCategoriaClient =  ({...props}) => {
       textField={"nombre"}
       placeholder="Elija una categoría"
       label="Categoria"
+      busy={busy}
       {...props}
     />
   )

@@ -51,9 +51,8 @@ export const CargaProductoBuscadorClient = () => {
 
   const handleBuscarLocalyGoogle = useCallback(async (codigoBarraIngresado) => {
     setBuscando(true);
-    const productoLocal = await getProductoPorCodigoBarra(codigoBarraIngresado)
+    const {categoria, ...productoLocal} = await getProductoPorCodigoBarra(codigoBarraIngresado)
       if (!productoLocal.error) {
-        console.log("productoLocal", productoLocal)
         setLocal(true)
         setFormData(productoLocal);
         setListadoProveedores(productoLocal.proveedores)
@@ -199,6 +198,7 @@ export const CargaProductoBuscadorClient = () => {
               name={"idCategoria"}
               onChange={handleInputChange}
               value={formData.idCategoria}
+              formData={formData}
               keepData={formData}
             />
           </div>

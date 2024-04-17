@@ -9,13 +9,10 @@ const PageCargarProductos = async () => {
   return (
     <section className="flex flex-col gap-3 lg:max-w-[1600px] mx-auto flex-grow max-w-screen">
       <CargaProductoBuscadorClient proveedores={proveedores}/>
+      <div className="flex flex-growoverflow-hidden">
+          <ListadoProductos/>
+      </div>
     </section>
   );
 };
 export default PageCargarProductos;
-
-/*
-      <div className="flex flex-growoverflow-hidden">
-          <ListadoProductos/>
-      </div>
-      */

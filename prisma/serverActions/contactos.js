@@ -72,46 +72,50 @@ export const upsertContacto = async (data) => {
     ]
   }
   const posibleId = data?.id ? `${data?.id}` : "IDFALSO123"
-
+  const posibleCuit = data?.id ? `${data?.cuit}`.replace(/-/g, '') : "CUITFALSO123"
+  console.log('posibleId -> ', posibleId)
+  console.log('posibleCuit -> ', posibleCuit)
+  let result;
   try{
-  const result = await prisma.contactos.upsert({
-    where: { id: posibleId},
-    update: {
-      ...transformedData.contacto,
-      emails: {
-        deleteMany: {}, // Elimina todos los emails actuales (opcional, dependiendo de la lógica de negocio)
-        create: transformedData.emails.map(({email}) => ({
-          email: email
-        }))
+    result = await prisma.contactos.upsert({
+      where: { id: posibleId, cuit: posibleCuit},
+      update: {
+        ...transformedData.contacto,
+        emails: {
+          deleteMany: {}, // Elimina todos los emails actuales (opcional, dependiendo de la lógica de negocio)
+          create: transformedData.emails.map(({email}) => ({
+            email: email
+          }))
+        },
+        direcciones: {
+          deleteMany: {}, // Elimina todas las direcciones actuales (opcional)
+          create: transformedData.direcciones.map(direccion => ({
+            ...direccion
+          }))
+        }
       },
-      direcciones: {
-        deleteMany: {}, // Elimina todas las direcciones actuales (opcional)
-        create: transformedData.direcciones.map(direccion => ({
-          ...direccion
-        }))
-      }
-    },
-    create: {
-      ...transformedData.contacto,
-      emails: {
-        create: transformedData.emails.map(({email}) => ({
-          email: email
-        }))
+      create: {
+        ...transformedData.contacto,
+        emails: {
+          create: transformedData.emails.map(({email}) => ({
+            email: email
+          }))
+        },
+        direcciones: {
+          create: transformedData.direcciones.map(direccion => ({
+            ...direccion
+          }))
+        }
       },
-      direcciones: {
-        create: transformedData.direcciones.map(direccion => ({
-          ...direccion
-        }))
+      include: {
+        emails: true,
+        direcciones: true
       }
-    },
-    include: {
-      emails: true,
-      direcciones: true
-    }
-  });
-  return result;
+    });
   }catch (e){
-    console.error(e)
-    return { error: true, msg: e.meta, code: e.code}
+    result = { error: true, msg: e.meta, code: e.code}
+  }finally{
+    console.log(result)
+    return result;
   }
 }

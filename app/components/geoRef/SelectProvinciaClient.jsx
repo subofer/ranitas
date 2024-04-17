@@ -4,7 +4,7 @@ import FilterSelect from "../formComponents/FilterSelect";
 import useSelect from "@/app/hooks/useSelect";
 
 const SelectProvinciaClient =  ({...props}) => {
-  const { data: provincias } = useSelect(getProvincias)
+  const { data: provincias, busy } = useSelect(getProvincias)
 
   return (
     <FilterSelect
@@ -13,6 +13,7 @@ const SelectProvinciaClient =  ({...props}) => {
       textField={"nombre"}
       placeholder={"Elija provincia"}
       label={"Elija provincia"}
+      busy={busy}
       {...props}
     />
   )

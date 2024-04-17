@@ -1,14 +1,19 @@
 "use client"
-import { forwardRef } from "react";
+import { forwardRef, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
 const Input = forwardRef(({ transform, name, type = "text",value, label, placeholder, className, onChange, forceClassName, actionIcon,  ...props }, ref) => {
-
   const handleOnChange = (e) => {
     onChange({name: e.target.name, value: e.target.value})
   }
   const { pending } = useFormStatus();
-  
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+    }
+  };
+
   const handleWheel = (e) => {
     if (type === "number") {
       const direction = e.deltaY < 0 ? 1 : -1; // Determina la dirección del scroll
@@ -29,6 +34,7 @@ const Input = forwardRef(({ transform, name, type = "text",value, label, placeho
         placeholder={placeholder}
         onChange={handleOnChange}
         onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
         className={`
           appearance-none
           text-right

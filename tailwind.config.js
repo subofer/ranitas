@@ -13,6 +13,10 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(0)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        spin: {
+          from: {transform: 'rotate(360deg)'},
+          to: {transform: 'rotate(0deg)'},
+        },
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out forwards',

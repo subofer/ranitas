@@ -16,7 +16,8 @@ const Icon = ({className, children, icono, type = "button", regular, suspense,  
       disabled:bg-slate-400
       disabled:cursor-not-allowed
       ring-transparent
-      ${className}`}
+      ${className}
+      `}
     { ...props }
   >
     <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)}`}/>
