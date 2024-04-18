@@ -5,7 +5,7 @@
   "scripts": {
     "devOrigin": "next dev",
     "dev": "sudo docker compose up -d && next dev",
-    "secureDev":"sudo docker compose up -d && node serverLocal.js",
+    "secureDev": "sudo docker compose up -d && node serverLocal.js",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",

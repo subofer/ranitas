@@ -15,7 +15,6 @@ import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
 import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import { textos } from '@/lib/manipularTextos';
-import { showImagenProducto } from '../productos/showImagenProducto';
 
 export const CargaProductoBuscadorClient = () => {
   const [listadoProveedores, setListadoProveedores] = useState([])
@@ -138,14 +137,28 @@ export const CargaProductoBuscadorClient = () => {
       handleReset={handleReset}
       loading={buscando}
       action={handleSave}
-      className={"flex pt-4 max-w-full  bg-gray-200"}
+      className={"flex pt-4 max-w-screen  bg-gray-200"}
       title={`${local ? "Editar" : "Cargar"} Producto`}
+      busy={buscando}
     >
-      <div className='flex flex-col-reverse lg:flex-row-reverse'>
-        <SelectorImagenes nombre={formData.nombre} imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-2 h-fit">
+      <div className='flex flex-col-reverse lg:flex-row-reverse gap-2'>
+        <div className='p-2 bg-gray-400  pepe'>
+          <SelectorImagenes className='pepa' nombre={formData.nombre} imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
+        </div>
+        <div className="pepa
+          grid 
+          grid-cols-1
+          w-full
+          
+          gap-2
+          lg:gap-6
+          lg:grid-cols-10
+          
+          lg:mx-auto
+          lg:h-fit
+        ">
 
-          <div className="lg:col-span-3">
+          <div className="col-span-full lg:col-span-4">
             <Input
               name="codigoBarra"
               label="Codigo De Barras"
@@ -157,7 +170,7 @@ export const CargaProductoBuscadorClient = () => {
               actionIcon={<QrCodeScanner onScan={onCapture} onError={(error) => console.error(error)}/>}
             />
           </div>
-          <div className="lg:col-span-2">
+          <div className="col-span-full  lg:col-span-2">
             <Input
               name="size"
               label="Tamaño"
@@ -166,7 +179,7 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.size}
             />
           </div>
-          <div className="lg:col-span-2">
+          <div className="col-span-full lg:col-span-2">
             <Input
               name="unidad"
               label="Unidades"
@@ -175,25 +188,7 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.unidad}
             />
           </div>
-          <div className="lg:col-span-1">
-            <Input
-              name="stock"
-              label="Stock"
-              placeholder="cantidad"
-              onChange={handleInputChange}
-              value={formData.stock}
-            />
-          </div>
-          <div className="lg:col-span-2">
-            <Input
-              name="precioActual"
-              label="Precio"
-              placeholder="Ingrese el precio Actual"
-              onChange={handleInputChange}
-              value={formData.precioActual}
-            />
-          </div>
-          <div className="lg:col-span-3">
+          <div className="col-span-full lg:col-span-4">
             <SelectCategoriaClient
               name={"idCategoria"}
               onChange={handleInputChange}
@@ -202,7 +197,25 @@ export const CargaProductoBuscadorClient = () => {
               keepData={formData}
             />
           </div>
-          <div className="lg:col-span-7">
+          <div className="col-span-full lg:col-span-2">
+            <Input
+              name="stock"
+              label="Stock"
+              placeholder="cantidad"
+              onChange={handleInputChange}
+              value={formData.stock}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-2">
+            <Input
+              name="precioActual"
+              label="Precio"
+              placeholder="Ingrese el precio Actual"
+              onChange={handleInputChange}
+              value={formData.precioActual}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-4">
             <Input
               name="nombre"
               label="Nombre"
@@ -211,7 +224,7 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.nombre}
             />
           </div>
-          <div className="lg:col-span-10">
+          <div className="col-span-full lg:col-span-6">
             <Input
               name="descripcion"
               label="Descripcion"
@@ -220,7 +233,7 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.descripcion}
             />
           </div>
-          <div className="flex flex-row lg:col-span-3">
+          <div className="col-span-full lg:col-span-3">
             <SelectProveedorClient
               name={"$ACTION_IGNORE"}
               valueField="id"
@@ -231,7 +244,30 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.proveedores}
             />
           </div>
-          <div className="lg:col-span-7">
+          <div className="col-span-full lg:col-span-7">
+            <InputArrayListProveedores
+              name="Provedores"
+              label="Proveedores"
+              placeholder="Agregue proveedores"
+              dataList={formData.proveedores}
+              dataFilterKey={"id"}
+              onChange={handleInputChange}
+              onRemove={deleteProveedorById}
+              tabIndex={-1}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-3">
+            <SelectProveedorClient
+              name={"$ACTION_IGNORE"}
+              valueField="id"
+              textField="nombre"
+              label="Proveedor"
+              placeholder="Elija un Proveedor"
+              onChange={handleProveedoresSelected}
+              value={formData.proveedores}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-7">
             <InputArrayListProveedores
               name="Provedores"
               label="Proveedores"

@@ -11,13 +11,10 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
     e.stopPropagation();
   }
 
-  const setValue = useCallback((val, e) => {
-    e && evita(e);
-    seter(val);
-    setValorLocal(val);
+  const handleChange = useCallback(({value}) => {
+    seter(value);
+    setValorLocal(value);
   },[seter])
-
-  const handleChange = (e) => { setValue(e.target.value, e) }
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -26,10 +23,10 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
         inputRef?.current && inputRef?.current?.focus?.();
       }
       if (e.ctrlKey && e.key === 'q') {
-        setValue("", e)
+        handleChange({value:""})
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
-        setValue("", e)
+        handleChange({value:""})
         inputRef?.current?.blur?.();
       }
     };
@@ -38,7 +35,7 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [setValue, seter]);
+  }, [handleChange, seter]);
 
   const variableLabel = cantidades.seleccionados != cantidades.total ? `(${cantidades.seleccionados}/${cantidades.total})` : `(${cantidades.total})`
   return(
@@ -47,17 +44,19 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
       <span className="self-center">
         {titulo}
       </span>
-      <Input
-        name={"InputFiltrero"}
-        ref={inputRef}
-        type="text"
-        className={"mt-1 h-[35px]"}
-        forceClassName={"placeholder:-translate-y-1 placeholder:mr-2"}
-        placeholder={"Filtrar..."}
-        label={variableLabel}
-        onChange={handleChange}
-        value={valorLocal}
-        />
+      <div className="">
+        <Input
+          name={"InputFiltrero"}
+          ref={inputRef}
+          type="text"
+          className={"mt-1 h-[2.35rem]"}
+          forceClassName={"placeholder:-translate-y-1 placeholder:mr-2 pb-2"}
+          placeholder={"Filtrar..."}
+          label={variableLabel}
+          onChange={handleChange}
+          value={valorLocal}
+          />
+        </div>
     </div>
   )
 }

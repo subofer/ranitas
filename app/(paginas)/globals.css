@@ -10,16 +10,16 @@
   from {transform: scale(1);opacity: 1;}
   to {transform: scale(0.1);opacity: 0;}
 }
-.grow   { animation: growPill 0.3s ease-out forwards;}
-.shrink { animation: shrinkPill 0.3s ease-in forwards;}
-
-
 @keyframes spin {
   from {transform: rotate(360deg)}
   to {transform: rotate(0deg)}
 }
-.spin-slow{  animation: spin 3s linear infinite;}
 
+.grow   { animation: growPill 0.3s ease-out forwards;}
+
+.shrink { animation: shrinkPill 0.3s ease-in forwards;}
+
+.spin-slow{  animation: spin 3s linear infinite;}
 
 
 :root{
@@ -29,11 +29,20 @@
 html{
   box-sizing: border-box;
 }
-.pepe{
+.pepo{
+  border: solid 5px yellow;
+}
+.pepi {
   border: solid 1px blue;
 }
+.pepis {
+  border: solid 3px blue;
+}
+.pepe{
+  border: solid 1px green;
+}
 .pepes{
-  border: solid 3px green;
+  border: solid 5px green;
 }
 .pepa{
   border: solid 1px red;
@@ -41,19 +50,12 @@ html{
 .pepas{
   border: solid 3px red;
 }
-.scroll-custom {
-  scrollbar-width: thin;
-}
 
-/* Para navegadores basados en WebKit */
-.scroll-custom::-webkit-scrollbar {
-  width: 10px;
+.hideScroll {
+  -ms-overflow-style: none; /* for Internet Explorer, Edge */
+  scrollbar-width: none; 
+  overflow-y: scroll;
 }
-
-.scroll-custom::-webkit-scrollbar-track {
-  background: gray;
-}
-
-.scroll-custom::-webkit-scrollbar-thumb {
-  border-radius: 20px;
+.hideScroll::-webkit-scrollbar {
+  display: none; /* for Chrome, Safari, and Opera */
 }

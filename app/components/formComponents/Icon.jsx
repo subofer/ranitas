@@ -7,7 +7,7 @@ const icons = (icono) => {
   }
 }
 
-const Icon = ({className, children, icono, type = "button", regular, suspense,  ...props}) => (
+const Icon = ({className, rotate, children, icono, type = "button", regular, suspense,  ...props}) => (
   <button
     type={type}
     className={`
@@ -20,7 +20,7 @@ const Icon = ({className, children, icono, type = "button", regular, suspense,  
       `}
     { ...props }
   >
-    <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)}`}/>
+    <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${rotate ? 'rotate-180' : 'rotate-0'}`}/>
       {children}
  </button>
 );

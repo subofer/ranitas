@@ -4,7 +4,7 @@ import TablaListaProductos from './TablaListaProductos';
 import { getProveedoresCompletos } from '@/prisma/consultas/proveedores';
 
 const ListadoProductos = async ({cols, ...props}) => {
-  const columnas = cols || ['eliminar', 'codigoBarra', 'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'edit']
+  const columnas = cols || ['eliminar',  'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'edit']
   const productos = await getProductos()
   const proveedores = await getProveedoresCompletos()
 

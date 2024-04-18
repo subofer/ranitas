@@ -8,7 +8,7 @@ import CameraCaptureModal from './CameraCapture';
 import { ChevronPair } from './Chevron';
 import { showImagenProducto } from '../productos/showImagenProducto';
 
-const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, ...props}) => {
+const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className, ...props}) => {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [imagenes, setImagenes] = useState([])
 
@@ -52,10 +52,10 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, ...props}
 
   return (
     <div
-      className='flex relative w-full lg:w-fit bg-white'
+      className={`flex relative w-full lg:w-fit bg-white ${className}`}
         onClick={() => false && showImagenProducto({imagen:imagenes[currentIndex]?.imagen?.src, nombre:props.nombre})}
       >
-        <div className="relative w-screen h-screen max-w-[300px] max-h-[300px]">
+        <div className="relative w-screen mx-auto h-screen max-w-[300px] max-h-[300px]">
           <Image
             src={imagenes[currentIndex]?.imagen?.src || imagenRanita.imagen.src}
             alt={imagenes[currentIndex]?.imagen?.alt || imagenRanita.imagen.alt}

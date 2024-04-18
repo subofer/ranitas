@@ -6,7 +6,7 @@ datasource db {
 generator client {
   provider = "prisma-client-js"
 }
-
+//Enumeradores de tipos basicos.
 enum TipoMovimiento {
   ENTRADA
   SALIDA
@@ -19,6 +19,9 @@ enum TipoDocumento {
   CONTEO
 }
 
+
+
+
 //Categorias, va a tener una categoria que sea por ejemplo "consumibles/impuestos/alquiler etc.", donde voy a agrupar los impuestos. luz, gas, alquiler etc..
 model Categorias {
   id        String   @id @default(uuid())
@@ -27,6 +30,8 @@ model Categorias {
   nombre   String      @unique
   products Productos[]
 }
+
+
 
 model Productos {
   id        String   @id @default(uuid())
@@ -49,52 +54,20 @@ model Productos {
   detalleDocumento DetalleDocumento[]
 }
 
-model Emails {
-  id          String      @id @default(uuid())
-  email       String      @unique
-  idContacto  String
-  contacto    Contactos @relation(fields: [idContacto], references: [id])
+model Precios {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  precio     Float
+  idProducto String
+  producto   Productos @relation(fields: [idProducto], references: [id])
 }
 
-model Direcciones {
-  id          String      @id @default(uuid())
-  idContacto  String
-  contacto    Contactos @relation(fields: [idContacto], references: [id])
 
-  idProvincia String?
-  idLocalidad String?
-  idCalle     String?
 
-  provincia Provincias?  @relation(fields: [idProvincia], references: [id])
-  localidad Localidades? @relation(fields: [idLocalidad], references: [id])
-  calle     Calles?      @relation(fields: [idCalle], references: [id])
 
-  numeroCalle   Int?
-  piso          String?
-  depto         String?
-  detalles      String?
-}
 
-model Contactos {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now())
-
-  cuit            String    @unique
-  nombre          String    @unique
-  telefono        String    @default("0800-completar-telefono")
-
-  persona         String?
-  iva             String?
-  interno         Boolean   @default(false)
-  esProveedor     Boolean   @default(false)
-
-  emails              Emails[]
-  direcciones         Direcciones[]
-  productos           Productos[]
-  documentosEmitidos  Documentos[]  @relation("EmisorDocumento")
-  documentosRecibidos Documentos[]  @relation("ReceptorDocumento")
-}
-
+//Documentos, facturas, remitos, pedidos de compra, etc..
 model Documentos {
   id              String   @id @default(uuid())
   createdAt       DateTime @default(now())
@@ -128,13 +101,54 @@ model DetalleDocumento {
   producto  Productos  @relation(fields: [idProducto], references: [id])
 }
 
-model Precios {
-  id        Int      @id @default(autoincrement())
-  createdAt DateTime @default(now())
 
-  precio     Float
-  idProducto String
-  producto   Productos @relation(fields: [idProducto], references: [id])
+//Libreta de contactos, direcciones, provincias, localidades, calles.
+model Contactos {
+  id              String    @id @default(uuid())
+  createdAt       DateTime  @default(now())
+
+  cuit            String    @unique
+  nombre          String    @unique
+  telefono        String    @default("0800-completar-telefono")
+
+  persona         String?
+  iva             String?
+  interno         Boolean   @default(false)
+  esProveedor     Boolean   @default(false)
+
+  emails              Emails[]
+  direcciones         Direcciones[]
+  productos           Productos[]
+  documentosEmitidos  Documentos[]  @relation("EmisorDocumento")
+  documentosRecibidos Documentos[]  @relation("ReceptorDocumento")
+}
+
+model Emails {
+  id          String      @id @default(uuid())
+  email       String      @unique
+  idContacto  String
+  contacto    Contactos @relation(fields: [idContacto], references: [id])
+}
+
+
+
+model Direcciones {
+  id          String      @id @default(uuid())
+  idContacto  String
+  contacto    Contactos @relation(fields: [idContacto], references: [id])
+
+  idProvincia String?
+  idLocalidad String?
+  idCalle     String?
+
+  provincia Provincias?  @relation(fields: [idProvincia], references: [id])
+  localidad Localidades? @relation(fields: [idLocalidad], references: [id])
+  calle     Calles?      @relation(fields: [idCalle], references: [id])
+
+  numeroCalle   Int?
+  piso          String?
+  depto         String?
+  detalles      String?
 }
 
 model Provincias {

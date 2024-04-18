@@ -1,3 +1,5 @@
+import Icon from "./Icon";
+
 const tiposBotones ={
   basic: `
     flex
@@ -72,7 +74,6 @@ const tiposBotones ={
 const Spinner = () => (
   <div className="absolute top-0 bottom-0 right-0 left-0 bg-black bg-opacity-25 flex justify-center items-center cursor-progress">
     <div className="align-bottom animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white">
-      {}
     </div>
   </div>
 );

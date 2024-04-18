@@ -15,7 +15,7 @@ export const tablaListaProductosColumnasNames = {
     onClick: ({codigoBarra}) => ({action:"addParam", key:"codigoBarra", value: codigoBarra, isParams: true}),
     className:"text-center",
     noselect: true,
-    colw: "w-[25px]"
+    colw: "w-[30px]"
   },
   codigoBarra: {
     titulo: "Codigo",
@@ -34,8 +34,8 @@ export const tablaListaProductosColumnasNames = {
   nombre: {
     titulo: "Nombre",
     key:"nombre",
-    className:"whitespace-nowrap px-2 text-right",
-    colw:"w-px",
+    className:"px-2 text-left",
+
     ordenable: true,
   },
   desc: {
@@ -54,7 +54,7 @@ export const tablaListaProductosColumnasNames = {
   precioActual: {
     titulo: "Precio",
     key: "precioActual",
-    className: "pepe px-4 text-right",
+    className: "px-4 text-right",
     decorador: textos.monedaDecimales,
     ordenable: true,
     colw: "w-[4rem] px-1",

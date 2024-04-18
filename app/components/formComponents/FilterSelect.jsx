@@ -156,12 +156,11 @@ ref
       icono: ocupado ? 'spinner': vacio ? 'xmark' : 'chevron-up',
       className:`
         ${ocupado ? "spin-slow": "transition-transform "}
-        ${isOpen && !vacio ? 'rotate-180' : 'rotate-0'}
         ${vacio ? "pointer-events-none":""}
       `,
     }
 
-  },[busy, filteredOptions?.length, isOpen, pending])
+  },[busy, filteredOptions?.length, pending])
 
   return (
     <div ref={refPadre} className="relative">
@@ -187,6 +186,7 @@ ref
         disabled={pending || busy}
         actionIcon={
           <Icon
+            rotate={isOpen && filteredOptions?.length != 0}
             className={iconoSegunCaso.className}
             tabIndex={-1}
             icono={iconoSegunCaso.icono}

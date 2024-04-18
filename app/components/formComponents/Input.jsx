@@ -23,8 +23,7 @@ const Input = forwardRef(({ transform, name, type = "text",value, label, placeho
     }
   };
   return (
-    <div className="relative w-full">
-
+    <div className="flex relative w-full">
       <input
         ref={ref}
         id={name}

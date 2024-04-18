@@ -83,7 +83,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
     <div
       style={{ zIndex: zIndexNavBar }}
       className={`${theme.background}
-        px-2 py-1 min-w-full w-screen text-2xl lg:text-xl mb-2
+        px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
     `}>
       <ul className="flex flex-row flex-wrap gap-0.5" >
         {menuListHorizontal.map(({menu, subMenu, href}, menuIndex) => (
