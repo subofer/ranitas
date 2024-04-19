@@ -1,15 +1,16 @@
-"use server"
-import { readFileSync } from 'fs';
-import prisma from '../prisma';
-import { textos } from '@/lib/manipularTextos';
+const { prisma } = require('../prisma');
+const { textos } = require('@/lib/manipularTextos');
+const { readFileSync } = require('fs');
+
+
 
 const cargar = {
-  provincias: true,
-  localidades: true,
+  provincias: false,
+  localidades: false,
   calles: true,
 }
 
-export default async function cargarDatos() {
+async function cargarDatos() {
   try{
     const provinciasData = JSON.parse(readFileSync(`${process.cwd()}/prisma/geoRef/provincias.json`, 'utf8'));
     console.log('Provincias totales: ', provinciasData.length)
@@ -112,4 +113,8 @@ async function cargarCalles() {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+module.exports= {
+  cargarDatos
 }

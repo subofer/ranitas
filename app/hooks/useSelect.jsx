@@ -6,30 +6,29 @@ const useSelect = (geter)  => {
   const [data, setData] = useState([])
   const [busy, setBusy] = useState(true)
 
-  useEffect(() => {
-    const actualizarDatos = async () => {
-      setBusy(true)
-      const listadoDatos = await geter()
-      setData(listadoDatos)
-    }
-    actualizarDatos();
-  }, [geter])
+  const actualizarDatos = useCallback(async () => {
+    setBusy(true)
+    const listadoDatos = await geter()
+    setData(listadoDatos)
+    setBusy(false)
+  },[geter])
 
   useEffect(() => {
-    data && setBusy(false)
-  }, [data])
+    actualizarDatos();
+  }, [actualizarDatos])
+
 
   const filteredByKeyList = useCallback((list, key) => {
     setBusy(true)
-    const lista = list.map((item) => data.find((dataItem) => dataItem[key] == item[key]))
+    const lista = list?.map((item) => data.find((dataItem) => dataItem[key] == item[key])) || []
     setBusy(false)
     return lista;
   },[data])
 
   return {
     data,
-    filteredByKeyList,
     busy,
+    filteredByKeyList,
   }
 }
 

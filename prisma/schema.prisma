@@ -115,6 +115,7 @@ model Contactos {
   iva             String?
   interno         Boolean   @default(false)
   esProveedor     Boolean   @default(false)
+  esMarca         Boolean   @default(false)
 
   emails              Emails[]
   direcciones         Direcciones[]

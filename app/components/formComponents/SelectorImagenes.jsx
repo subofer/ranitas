@@ -13,24 +13,12 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className
   const [imagenes, setImagenes] = useState([])
 
   useEffect(() => {
-    if(imagenes[currentIndex]?.imagen?.src){
-      proceder(imagenes[currentIndex]?.imagen.src)
-    }else{
-      proceder(imagenTransparente.imagen.src)
-    }
-  },[currentIndex, imagenes, proceder])
-
-  useEffect(() => {
     setImagenes(imagenesProp)
-    imagenesProp.length == 0
-      && setCurrentIndex(0)
+    imagenesProp.length == 0 && setCurrentIndex(0)
   },[imagenesProp])
 
-  const cambiarImagen = (valor) => {
-    setCurrentIndex((actual) => {
-      const nuevo = actual + valor
-      return nuevo > imagenes.length-1 ? 0 : nuevo < 0 ? imagenes.length-1 : nuevo
-    })
+  const cambiarImagen = (v) => {
+    setCurrentIndex((n) => n + v > imagenes.length-1 ? 0 : n + v < 0 ? imagenes.length-1 : n + v)
   };
 
   const addImageToGallery = (base64Image) => {
@@ -39,15 +27,8 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className
   };
 
   const deleteCurrentImage = () => {
-    if(imagenes.length == 1) {
-      setImagenes([]);
-    } else {
-      setImagenes(prevImages => [...prevImages.filter((_, index) => index != currentIndex)]);
-      setCurrentIndex(prev => {
-       const nuevo = prev - 1;
-       return nuevo < 0 ? 0 : nuevo
-      });
-    }
+    setImagenes(prevImages => [...prevImages.filter((_, index) => index != currentIndex)]);
+    setCurrentIndex(prev => prev - 1 < 0 ? 0 : prev - 1);
   };
 
   return (

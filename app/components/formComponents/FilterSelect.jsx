@@ -17,23 +17,31 @@ const FilterSelect = forwardRef(({
 },
 ref
 ) => {
-  const { pending } = useFormStatus();
+  const { pending, data } = useFormStatus();
 
   const [form, setForm] = useState(null);
   const [isOpen, setIsOpen] = useState(false);
   const [opcion, setOpcion] = useState(null);
   const [filtro, setFiltro] = useState('');
   const [hgIndex, setHgIndex] = useState(-1);
+
   const refPadre = useRef(null);
   const inputRef = useRef(null)
   const valueRef = useRef(null)
 
   const optionRefs = useRef([]);
 
-  const filteredOptions = useMemo(
-    () => options.filter(option =>
-      option[textField].toLowerCase().includes(filtro.toLowerCase())
+  const filteredOptions = useMemo(() =>
+    options.filter(option =>
+      option[textField].toLowerCase().includes(filtro?.toLowerCase?.())
   ), [options, filtro, textField]);
+
+  useEffect(() => {
+    const formulario = refPadre.current.closest('form');
+    if(formulario) {
+      setForm(formulario)
+    }
+  }, []);
 
   useEffect(() => {
     optionRefs.current = optionRefs.current.slice(0, filteredOptions.length);
@@ -78,18 +86,12 @@ ref
       valueField,
       textField,
       option,
+      selected: {[valueField]: option[valueField]}
     })
   }
 
-
   useEffect(() => {
-    const formulario = refPadre.current.closest('form');
-    if(formulario) {
-      setForm(formulario)
-    }
-  }, []);
-
-  useEffect(() => {
+    console.log('esta tomando el reset??')
     if (form) form.addEventListener('reset', resetInput);
     return () => { if (form) form.removeEventListener('reset', resetInput)};
   }, [form, resetInput]);
@@ -105,20 +107,16 @@ ref
     };
   }, [isOpen, open]);
 
-
-
   useEffect(() => {
-    if (value) {
-      const seleccionInicial = options.find((option) => {
-        return (option[valueField] == value[valueField] || option[valueField] == value)
-      });
+    const seleccionInicial = options.find((option) => {
+      return (option[valueField] == value[valueField] || option[valueField] == value)
+    });
 
-      if (seleccionInicial) {
-        setOpcion(seleccionInicial);
-        setFiltro(seleccionInicial[textField]);
-      }
+    if (seleccionInicial) {
+      setOpcion(seleccionInicial);
+      setFiltro(seleccionInicial[textField]);
     }
-  }, [value, options, valueField, textField, props.formData]);
+  }, [value, options, valueField, textField, data]);
 
   //Esta funcion maneja las acciones al tocar cada tecla de la lista.
   const handleKeyDown = (e) => {

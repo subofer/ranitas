@@ -8,7 +8,7 @@ import { getProductoPorCodigoBarra } from "@/prisma/consultas/productos";
 import useMyParams from '@/app/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
 import SelectorImagenes from '../formComponents/SelectorImagenes';
-import FormTitle from '../formComponents/Title';
+
 import QrCodeScanner from "@/app/components/camara/Scanner"
 import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 import SelectProveedorClient from '../proveedores/SelectProveedorClient';
@@ -17,8 +17,6 @@ import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import { textos } from '@/lib/manipularTextos';
 
 export const CargaProductoBuscadorClient = () => {
-  const [listadoProveedores, setListadoProveedores] = useState([])
-  const [proveedorSelected, setProveedorSelected] = useState({})
   const { searchParams, deleteParam } = useMyParams();
   const codigoBarraParam = searchParams.get('codigoBarra');
 
@@ -39,79 +37,69 @@ export const CargaProductoBuscadorClient = () => {
   const [formData, setFormData] = useState(blankForm);
   const [buscando, setBuscando] = useState(false);
   const [imagenes, setImagenes] = useState([]);
-  const [reDo, setReDo] = useState(true);
   const [local, setLocal] = useState(null);
 
-  const handleSave = useCallback(() => {
-    guardarProducto(formData)
-    setReDo(!reDo)
-    setLocal(true)
-  },[reDo, formData])
-
-  const handleBuscarLocalyGoogle = useCallback(async (codigoBarraIngresado) => {
+  const handleBuscar = useCallback(async (codigoBarraIngresado) => {
     setBuscando(true);
-    const {categoria, ...productoLocal} = await getProductoPorCodigoBarra(codigoBarraIngresado)
-      if (!productoLocal.error) {
-        setLocal(true)
-        setFormData(productoLocal);
-        setListadoProveedores(productoLocal.proveedores)
-        setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
-      }else{
-        const { imagenes: ims, primerResultadoDeLaBusqueda: { prismaObject = {} }, textoCompleto } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
-        setImagenes(ims)
-        setFormData((prev) => ({...prev, ...prismaObject}));
-      }
-      setBuscando(false);
+    const productoLocal = await getProductoPorCodigoBarra(codigoBarraIngresado)
+
+    if (!productoLocal.error) {
+      setLocal(true)
+      setFormData((prev) => ({...prev, ...productoLocal}));
+      setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
+    }else{
+      const { imagenes, primerResultado: { prismaObject = {} } } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+      setImagenes(imagenes)
+      setFormData((prev) => ({ ...prev, ...prismaObject}));
+    }
+
+    setBuscando(false);
   },[]);
 
-  const handleInputChange = useCallback(({name, value}) => {
+  const handleSave = async (e) => {
+    await guardarProducto(formData)
+    await handleBuscar(formData.codigoBarra)
+  }
+
+  const handleInputChange =({name, value}) => {
     setFormData(prev => ({ ...prev, [name]: value }));
-  }, []);
+  }
 
-  const handleProveedoresSelected = useCallback(({valueField, value}) => {
-    setProveedorSelected({[valueField]:value})
-  }, []);
+  const handleProveedoresSelected = ({ selected }) =>
+    setFormData(({ proveedores, ...prev }) => {
+      const updatedProveedores = [...proveedores, selected];
+      const uniqueProveedores = [...new Map(updatedProveedores.map(item => [item.id, item])).values()];
+      return { ...prev, proveedores: uniqueProveedores };
+  })
 
-
-
-  const onCapture = (code) => {
-    console.log('code', code)
-    alertaLeerCodigoBarra(code, () => {
-      setFormData(prev => ({ ...prev, codigoBarra: code }))
-      handleBuscarLocalyGoogle(code)
+  const deleteProveedorById = (id) => {
+    setFormData(({proveedores, ...prev}) => {
+    const newProveedores =  proveedores.filter(proveedor => proveedor.id !== id)
+    return {...prev, proveedores: newProveedores}
     })
   }
 
-  const deleteProveedorById = (id) => {
-    setListadoProveedores((prev) => prev.filter(proveedor => proveedor.id !== id));
+  //esto funciona solo con la camara
+  const onCapture = (code) => {
+    alertaLeerCodigoBarra(code, () => {
+      setFormData(prev => ({ ...prev, codigoBarra: code }))
+      handleBuscar(code)
+    })
   }
 
-  useEffect(() => {
-    if(proveedorSelected?.id){
-      setListadoProveedores((prev) => {
-        prev.push(proveedorSelected)
-        const ids = {}
-        prev.forEach(({id}) => ids[id] = id )
-        const resultado = Object.keys(ids).map((k) => ({id: k}))
-        console.log(resultado)
-        return resultado;
-      })
-   }
-  },[proveedorSelected])
-
   const handleImageChange = useCallback((selectedImageUrl) => {
-    if (selectedImageUrl && (selectedImageUrl !== formData.imagen)) {
-      setFormData(prevFormData => ({ ...prevFormData, imagen: selectedImageUrl }));
+    if (selectedImageUrl) {
+      setFormData(prev => ({ ...prev, imagen: selectedImageUrl }));
     }
-  },[formData]);
+  },[]);
 
   const handleCodigoBarraKeyPress = useCallback((e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const value = e.target.value;
-      handleBuscarLocalyGoogle(value);
+      handleBuscar(value);
     }
-  }, [handleBuscarLocalyGoogle]);
+  }, [handleBuscar]);
 
   const handleReset = useCallback(() => {
     deleteParam("codigoBarra")
@@ -119,41 +107,42 @@ export const CargaProductoBuscadorClient = () => {
     setFormData(blankForm)
     setLocal(false)
     setImagenes([])
-    setListadoProveedores([])
   },[blankForm, deleteParam])
 
   useEffect(() => {
     if (codigoBarraParam) {
-     handleBuscarLocalyGoogle(codigoBarraParam)
+     handleBuscar(codigoBarraParam)
     }
-  }, [codigoBarraParam, handleBuscarLocalyGoogle, reDo]);
+  }, [codigoBarraParam, handleBuscar]);
 
   useEffect(() => {
-      setFormData((prev) => ({...prev, proveedores: listadoProveedores}))
-  }, [listadoProveedores]);
-  
+    console.log('forma data ->', formData)
+  }, [formData]);
+
   return (
     <FormCard
       handleReset={handleReset}
       loading={buscando}
       action={handleSave}
-      className={"flex pt-4 max-w-screen  bg-gray-200"}
+      className={"flex pt-4 max-w-screen  bg-gray-200 md:p-4" }
       title={`${local ? "Editar" : "Cargar"} Producto`}
       busy={buscando}
     >
       <div className='flex flex-col-reverse lg:flex-row-reverse gap-2'>
-        <div className='p-2 bg-gray-400  pepe'>
-          <SelectorImagenes className='pepa' nombre={formData.nombre} imagenes={imagenes} proceder={(selectedImageUrl) => handleImageChange(selectedImageUrl)}/>
+        <div className='p-2 bg-gray-400  h-fit'>
+          <SelectorImagenes
+            className=''
+            nombre={formData.nombre}
+            imagenes={imagenes}
+            proceder={handleImageChange}/>
         </div>
-        <div className="pepa
-          grid 
+        <div className="
+          grid
           grid-cols-1
           w-full
-          
           gap-2
-          lg:gap-6
-          lg:grid-cols-10
-          
+          lg:gap-3
+          lg:grid-cols-12
           lg:mx-auto
           lg:h-fit
         ">
@@ -186,15 +175,6 @@ export const CargaProductoBuscadorClient = () => {
               placeholder="Litros, gramos, etc.."
               onChange={handleInputChange}
               value={formData.unidad}
-            />
-          </div>
-          <div className="col-span-full lg:col-span-4">
-            <SelectCategoriaClient
-              name={"idCategoria"}
-              onChange={handleInputChange}
-              value={formData.idCategoria}
-              formData={formData}
-              keepData={formData}
             />
           </div>
           <div className="col-span-full lg:col-span-2">
@@ -233,6 +213,17 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.descripcion}
             />
           </div>
+
+          <div className="col-span-full lg:col-span-3">
+            <SelectCategoriaClient
+              name={"idCategoria"}
+              onChange={handleInputChange}
+              value={formData.idCategoria}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-7">
+
+          </div>
           <div className="col-span-full lg:col-span-3">
             <SelectProveedorClient
               name={"$ACTION_IGNORE"}
@@ -251,30 +242,6 @@ export const CargaProductoBuscadorClient = () => {
               placeholder="Agregue proveedores"
               dataList={formData.proveedores}
               dataFilterKey={"id"}
-              onChange={handleInputChange}
-              onRemove={deleteProveedorById}
-              tabIndex={-1}
-            />
-          </div>
-          <div className="col-span-full lg:col-span-3">
-            <SelectProveedorClient
-              name={"$ACTION_IGNORE"}
-              valueField="id"
-              textField="nombre"
-              label="Proveedor"
-              placeholder="Elija un Proveedor"
-              onChange={handleProveedoresSelected}
-              value={formData.proveedores}
-            />
-          </div>
-          <div className="col-span-full lg:col-span-7">
-            <InputArrayListProveedores
-              name="Provedores"
-              label="Proveedores"
-              placeholder="Agregue proveedores"
-              dataList={formData.proveedores}
-              dataFilterKey={"id"}
-              onChange={handleInputChange}
               onRemove={deleteProveedorById}
               tabIndex={-1}
             />

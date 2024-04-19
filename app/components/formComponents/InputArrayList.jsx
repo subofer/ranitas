@@ -24,17 +24,15 @@ const Pill = ({ value, onRemove }) => {
 
 const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, ...props }) => {
  const [altura, setAltura] = useState(120)
-  
+
   useEffect(() => {
     let a = ((5/4)*40)
     setAltura(250)
-    console.log(altura)
-
   },[setAltura, value, altura])
 
   return (
   <div className="relative">
-    <div className={`flex flex-row form-input w-full min-h-[52px] h-[3rem]
+    <div className={`flex flex-row form-input w-full min-h-[49px] h-[2.5rem]
         border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
         focus:border-slate-400 peer
       `}
@@ -49,13 +47,22 @@ const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, .
       <div className="flex flex-row justify-end align-middle flex-wrap ml-20 gap-2 h-full w-full">
         {value.length > 0
           ? value.map((item, index) => (
-            <>
               <div key={index} className="transition-opacity duration-300 ease-in-out opacity-0 animate-fade-in">
                 <Pill value={item} onRemove={onRemove} />
               </div>
-            </>
             ))
-          : <span className="text-gray-500 mt-4 transition-opacity duration-300 ease-in-out opacity-0 animate-fade-in">{placeholder}</span>
+          : <span
+              className="
+                text-gray-500
+                mt-3.5
+                transition-opacity
+                duration-300
+                ease-in-out
+                opacity-0
+                animate-fade-in"
+            >
+              {placeholder}
+            </span>
         }
       </div>
     </div>
