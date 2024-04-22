@@ -11,6 +11,7 @@ const ImagenProducto = ({item: { imagen, nombre }, size=32, placeholder, classNa
         width={size}
         alt={nombre || "imagen del producto"}
         onClick={onClick}
+        style={{ width: size, height: size }}
       />
     : placeholder == "sin imagen" ? null: <Icon className={`${className} text-center`} icono={"image"}/>
 

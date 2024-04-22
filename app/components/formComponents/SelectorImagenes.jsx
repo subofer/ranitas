@@ -1,5 +1,5 @@
 "use client"
-import { imagenRanita, imagenTransparente } from '@/lib/imagenTransparente';
+import { imagenRanita } from '@/lib/imagenTransparente';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import Icon from './Icon';
