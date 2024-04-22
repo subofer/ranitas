@@ -2,18 +2,18 @@
 import useSelect from "@/app/hooks/useSelect";
 import { getProveedoresCompletos } from "@/prisma/consultas/proveedores";
 import InputArrayList from "../formComponents/InputArrayList";
-import { useMemo } from "react";
+import { useEffect } from "react";
 
 const InputArrayListProveedores = ({dataList, dataFilterKey, ...props}) => {
-  const { filteredByKeyList } = useSelect(getProveedoresCompletos)
+  const { select: proveedores, filterByKeyList } = useSelect(getProveedoresCompletos)
 
-  const value = useMemo( () => (
-    filteredByKeyList(dataList, dataFilterKey)
-  ),[dataFilterKey, dataList, filteredByKeyList])
+  useEffect(() => {
+    filterByKeyList(dataList, dataFilterKey)
+  },[dataFilterKey, dataList, filterByKeyList])
 
   return (
       <InputArrayList
-        value={value}
+        value={proveedores}
         {...props}
       />
   )

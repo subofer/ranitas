@@ -16,6 +16,13 @@ const incluirTodo = {
   }
 }
 
+export const getProveedoresSelect = async () => {
+  return await prisma.contactos.findMany({
+    where: { esProveedor: true },
+    orderBy: { nombre: 'asc' },
+  });
+};
+
 export const getProveedoresCompletos = async () => {
   return await prisma.contactos.findMany({
     where: { esProveedor: true },

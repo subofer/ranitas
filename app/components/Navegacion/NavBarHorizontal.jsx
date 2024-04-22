@@ -17,7 +17,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
   const { push } = useRouter();
   const [activeMenuIndex, setActiveMenuIndex] = useState(-1);
   const [activeSubMenuIndex, setActiveSubMenuIndex] = useState(-1);
-  
+
   const [isNavActive, setIsNavActive] = useState(false); // Nuevo estado para controlar la activación del menú
   const lastFocusedElement = useRef(null);
 

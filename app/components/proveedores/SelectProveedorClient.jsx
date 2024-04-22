@@ -1,19 +1,18 @@
 "use client"
 
 import FilterSelect from "../formComponents/FilterSelect";
-import { getProveedoresCompletos } from "@/prisma/consultas/proveedores";
+import { getProveedoresSelect } from "@/prisma/consultas/proveedores";
 import useSelect from "@/app/hooks/useSelect";
+import { useEffect } from "react";
 
 const SelectProveedorClient =  ({...props}) => {
-  const { data: proveedores, busy } = useSelect(getProveedoresCompletos)
+  const { data: proveedores, busy } = useSelect(getProveedoresSelect)
 
   return (
     <FilterSelect
       options={proveedores}
       valueField={"id"}
       textField={"nombre"}
-      placeholder={"Elija provincia"}
-      label={"Elija provincia"}
       busy={busy}
       {...props}
     />

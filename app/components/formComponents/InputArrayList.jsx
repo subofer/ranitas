@@ -14,7 +14,7 @@ const Pill = ({ value, onRemove }) => {
 
   return (
     <div className={`bg-blue-200 rounded-full px-2 py-1 ${isRemoving ? 'shrink' : 'grow'}`}>
-      <span>{value.nombre}</span>
+      <span>{value?.nombre}</span>
       <button type="button" onClick={handleRemove} className="ml-2 text-slate-600 hover:text-slate-800">
         &times;
       </button>

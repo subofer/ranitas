@@ -3,35 +3,43 @@ import { useEffect, useState, useCallback } from "react";
 
 const useSelect = (geter)  => {
   if(!geter) throw Error('useSelect geter necesita una opcion')
+  const [select, setSelect] = useState([])
   const [data, setData] = useState([])
   const [busy, setBusy] = useState(true)
 
   const actualizarDatos = useCallback(async () => {
+    let result;
     try {
       setBusy(true);
-      const result = await geter();
-      setData(result);
+      result = await geter();
     } catch (error) {
       console.error('Error al obtener datos:', error);
     } finally {
       setBusy(false);
+      setData(result);
     }
   },[geter])
 
-  useEffect(() => { actualizarDatos() }, [actualizarDatos])
-
-
-  const filteredByKeyList = useCallback((list, key) => {
+  const filterByKeyList = useCallback(async (list, key) => {
     setBusy(true)
-    const lista = list?.map((item) => data.find((dataItem) => dataItem[key] == item[key])) || []
-    setBusy(false)
-    return lista;
+    let lista = data;
+    try {
+      lista = list?.map((item) => data.find((dataItem) => dataItem[key] == item[key])) || []
+    } catch (e) {
+      console.log(e)
+    } finally {
+      setBusy(false)
+      setSelect(lista);
+    }
   },[data])
+
+  useEffect(() => { actualizarDatos() }, [actualizarDatos])
 
   return {
     data,
+    select,
     busy,
-    filteredByKeyList,
+    filterByKeyList,
   }
 }
 
