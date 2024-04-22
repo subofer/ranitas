@@ -35,7 +35,6 @@ const Separadores = ({style = {}, stick = null, alto = null, columnas = [], colo
   );
 }
 
-
 export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...props } = {}) => {
   const columnas = convertirArray(cc)
   const captionRef = useRef(null)
@@ -55,7 +54,7 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
   },[alturaCaption])
 
   return (
-    <div className="pepis flex flex-col overflow-auto min-h-[400px] hideScroll">
+    <div className="flex flex-col overflow-auto min-h-[400px] hideScroll">
       <table className="table-auto max-w-full lg:text-sm text-xs text-gray-600 bg-slate-400">
         <caption ref={captionRef} className="table-caption sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
           {titulo}

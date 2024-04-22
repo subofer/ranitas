@@ -2,15 +2,29 @@
 import { forwardRef, useRef } from "react";
 import { useFormStatus } from "react-dom";
 
-const Input = forwardRef(({ transform, name, type = "text",value, label, placeholder, className, onChange, forceClassName, actionIcon,  ...props }, ref) => {
-  const handleOnChange = (e) => {
-    onChange({name: e.target.name, value: e.target.value})
-  }
+const Input = forwardRef(({
+  transform,
+  name = "$ACTION_IGNORE",
+  type = "text",
+  value,
+  label,
+  placeholder,
+  className,
+  onChange,
+  forceClassName,
+  actionIcon,
+  ...props
+}, ref) => {
   const { pending } = useFormStatus();
+
+  const handleOnChange = ({ target: { name, value } }) => onChange({name, value});
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
+      console.log('e.key', e.key)
+    } else {
+      console.log('e.key', e.key)
     }
   };
 
@@ -22,6 +36,7 @@ const Input = forwardRef(({ transform, name, type = "text",value, label, placeho
       handleOnChange({ name, value: useValue });
     }
   };
+
   return (
     <div className="flex relative w-full">
       <input

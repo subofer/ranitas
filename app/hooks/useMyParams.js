@@ -1,8 +1,8 @@
 import { revalidatePath } from "next/cache";
 import {  usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
-export const useMyParams = () => {
+export const useMyParams = (preFiltro) => {
   const { push } = useRouter();
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -26,15 +26,34 @@ export const useMyParams = () => {
     push(pathname)
   },[push, pathname])
 
+  const searchParamsEntries = useMemo(() => [...searchParams.entries()], [searchParams])
+
+  const params = useMemo(() =>
+    searchParamsEntries.reduce((obj, [key, value]) => {
+      obj[key] = value
+      return obj
+    }, {}
+  ),[searchParamsEntries])
+
+  const paramsList = useMemo(() => searchParamsEntries.map(([key]) => key),[searchParamsEntries])
+
+  const param = useMemo(() => params[preFiltro] ,[params, preFiltro])
+
+  const setParam = useCallback((value) => value ? addParam(preFiltro, value) : deleteParam(preFiltro) ,[addParam, deleteParam, preFiltro])
+
   const recarga = () => deleteParam("253j4n")
 
   return {
-    recarga,
-    searchParams,
+    param,
+    setParam,
+    params,
     pathname,
+    paramsList,
+    searchParams,
     clearParams,
     deleteParam,
     addParam,
+    recarga,
   }
 };
 

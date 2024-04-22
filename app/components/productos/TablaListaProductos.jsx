@@ -35,9 +35,7 @@ const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", pro
   };
 
   const toggleSeleccion = (id) => {
-    setseleccionados((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setseleccionados( (prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id] );
   };
 
   const toggleSeleccionButton = useCallback(() => {
@@ -74,7 +72,7 @@ const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", pro
       columnas={cols}
       handleSort={handleSort}
       titulo={ComponenteTituloProp ? ComponenteTituloProp() : ComponenteTituloFiltrero()}
-      
+
       {...props}
     >
       <TbodyTablaProducto

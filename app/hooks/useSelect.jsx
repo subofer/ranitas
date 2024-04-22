@@ -7,15 +7,18 @@ const useSelect = (geter)  => {
   const [busy, setBusy] = useState(true)
 
   const actualizarDatos = useCallback(async () => {
-    setBusy(true)
-    const listadoDatos = await geter()
-    setData(listadoDatos)
-    setBusy(false)
+    try {
+      setBusy(true);
+      const result = await geter();
+      setData(result);
+    } catch (error) {
+      console.error('Error al obtener datos:', error);
+    } finally {
+      setBusy(false);
+    }
   },[geter])
 
-  useEffect(() => {
-    actualizarDatos();
-  }, [actualizarDatos])
+  useEffect(() => { actualizarDatos() }, [actualizarDatos])
 
 
   const filteredByKeyList = useCallback((list, key) => {

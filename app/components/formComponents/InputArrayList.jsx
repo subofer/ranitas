@@ -44,7 +44,7 @@ const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, .
         }>
         {label}
       </span>
-      <div className="flex flex-row justify-end align-middle flex-wrap ml-20 gap-2 h-full w-full">
+      <div className="flex flex-row-reverse justify-start align-middle flex-wrap ml-20 gap-2 h-full w-full">
         {value.length > 0
           ? value.map((item, index) => (
               <div key={index} className="transition-opacity duration-300 ease-in-out opacity-0 animate-fade-in">

@@ -2,9 +2,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Input from "../formComponents/Input";
 
+import useMyParams from "@/app/hooks/useMyParams";
+
 const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
+  const { param, setParam } = useMyParams('filtroListado')
+  const [valorLocal, setValorLocal] = useState(param)
   const inputRef = useRef(null);
-  const [valorLocal, setValorLocal] = useState("")
 
   const evita = (e) => {
     e.preventDefault();
@@ -12,9 +15,14 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   }
 
   const handleChange = useCallback(({value}) => {
+    setParam(value)
     seter(value);
     setValorLocal(value);
-  },[seter])
+  },[setParam, seter])
+
+  useEffect(() => {
+    handleChange({value:param})
+  },[handleChange, param])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -26,7 +34,8 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
         handleChange({value:""})
       }
       if (e.key === 'Escape' && document.activeElement === inputRef.current) {
-        handleChange({value:""})
+        handleChange({value:undefined})
+        setValorLocal("");
         inputRef?.current?.blur?.();
       }
     };

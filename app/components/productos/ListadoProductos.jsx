@@ -17,7 +17,6 @@ const ListadoProductos = async ({cols, ...props}) => {
       tipo={"filtro"}
       {...props}
       />
-
   )
 };
 

@@ -79,7 +79,7 @@ export const CargaProductoBuscadorClient = () => {
     })
   }
 
-  //esto funciona solo con la camara
+  //esto funciona solo con la camara, la camara solo funciona con https.
   const onCapture = (code) => {
     alertaLeerCodigoBarra(code, () => {
       setFormData(prev => ({ ...prev, codigoBarra: code }))

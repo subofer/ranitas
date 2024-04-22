@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import Icon from '../formComponents/Icon';
+import useDeviceAndProtocol from '@/lib/testMobileHttp';
+import alertaCamara from '../alertas/camaraError';
 
 const formatos = [
   'code_128_reader',
@@ -19,6 +21,7 @@ const formatos = [
 
 
 const QrReader = ({ onScan, onError }) => {
+  const { isMobile, isHttps } = useDeviceAndProtocol()
   const [isScanning, setIsScanning] = useState(false);
   const [isFlip, setIsFlip] = useState(false);
   const qrRef = useRef(null);
@@ -41,6 +44,12 @@ const QrReader = ({ onScan, onError }) => {
   const flipCamera = () => setIsFlip((prev) => !prev)
 
   const startScanner = useCallback(async () => {
+    if (isMobile && !isHttps) {
+      console.log("Debe utilizar una conexion https para dispositivos moviles.");
+      alertaCamara()
+      return;
+    }
+
     if (html5QrCodeRef.current) {
       console.log("Scanner is already running.", html5QrCodeRef.current);
       return;
