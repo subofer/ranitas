@@ -11,14 +11,13 @@ import SelectorImagenes from '../formComponents/SelectorImagenes';
 
 import QrCodeScanner from "@/app/components/camara/Scanner"
 import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
+import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
-import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import { textos } from '@/lib/manipularTextos';
 
 export const CargaProductoBuscadorClient = () => {
-  const { searchParams, deleteParam } = useMyParams();
-  const codigoBarraParam = searchParams.get('codigoBarra');
+  const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
 
   const blankForm = useMemo(() => ({
     id:'',
@@ -110,14 +109,11 @@ export const CargaProductoBuscadorClient = () => {
   },[blankForm, deleteParam])
 
   useEffect(() => {
+    console.log("codigoBarraParam", codigoBarraParam)
     if (codigoBarraParam) {
      handleBuscar(codigoBarraParam)
     }
   }, [codigoBarraParam, handleBuscar]);
-
-  useEffect(() => {
-    console.log('forma data ->', formData)
-  }, [formData]);
 
   return (
     <FormCard
@@ -227,10 +223,6 @@ export const CargaProductoBuscadorClient = () => {
           <div className="col-span-full lg:col-span-3">
             <SelectProveedorClient
               name={"$ACTION_IGNORE"}
-              valueField="id"
-              textField="nombre"
-              label="Proveedor"
-              placeholder="Elija un Proveedor"
               onChange={handleProveedoresSelected}
               value={formData.proveedores}
             />

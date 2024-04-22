@@ -3,7 +3,6 @@ import { useFormStatus } from "react-dom";
 import useFormControl from "@/app/hooks/useFormControl";
 import Button from "./Button"
 import FormTitle from "./Title"
-import Icon from "./Icon";
 
 const FormButtons = ({submitButtonText, busy, resetButtonText, order, handleReset}) => {
   const { pending } = useFormStatus()

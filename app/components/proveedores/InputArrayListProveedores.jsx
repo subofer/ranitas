@@ -5,7 +5,7 @@ import InputArrayList from "../formComponents/InputArrayList";
 import { useEffect } from "react";
 
 const InputArrayListProveedores = ({dataList, dataFilterKey, ...props}) => {
-  const { select: proveedores, filterByKeyList } = useSelect(getProveedoresCompletos)
+  const { select: proveedores, filterByKeyList } = useSelect(getProveedoresCompletos, "InputArrayListProveedores")
 
   useEffect(() => {
     filterByKeyList(dataList, dataFilterKey)

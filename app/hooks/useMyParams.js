@@ -6,7 +6,7 @@ export const useMyParams = (preFiltro) => {
   const { push } = useRouter();
   const pathname = usePathname()
   const searchParams = useSearchParams()
-
+/*
   const generateParams = useCallback((constSearch = [], param) => {
     searchParams.forEach((value, key) => {
       if(key !== param) constSearch.push(`${key}=${value}`)
@@ -21,6 +21,25 @@ export const useMyParams = (preFiltro) => {
   const addParam = useCallback((param, value) => {
     generateParams([`${param}=${value}`], param)
   },[generateParams])
+*/
+
+  const generateParams = useCallback((newParams, excludeKey) => {
+    const updatedParams = new URLSearchParams(searchParams);
+    updatedParams.delete(excludeKey);
+    Object.entries(newParams).forEach(([key, value]) => {
+      updatedParams.set(key, value);
+    });
+    push(`${pathname}?${updatedParams.toString()}`);
+  }, [pathname, searchParams, push]);
+
+  const addParam = useCallback((param, value) => {
+    generateParams({ [param]: value }, param);
+  }, [generateParams]);
+  
+  const deleteParam = useCallback((param) => {
+    generateParams({}, param);
+  }, [generateParams]);
+  
 
   const clearParams = useCallback(() => {
     push(pathname)

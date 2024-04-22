@@ -47,12 +47,10 @@ export default function CargarProveedor() {
 
   const onChange = ({name, value}) => setFormData(prev => ({...prev, [name]: value}))
   const onSelectChange = ({name, value, option: { idLocalidadCensal }}) => {
-    console.log("cambia aca?", idLocalidadCensal )
     setFormData(prev => ({...prev, [name]: value, idLocalidadCensal}))
   }
-  
+
   const handleSave = (a,b) => {
-    console.log(a,b)
     upsertProveedor(a,b)
   }
 

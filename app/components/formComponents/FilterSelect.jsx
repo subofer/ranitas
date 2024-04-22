@@ -91,7 +91,6 @@ ref
   }
 
   useEffect(() => {
-    console.log('esta tomando el reset??')
     if (form) form.addEventListener('reset', resetInput);
     return () => { if (form) form.removeEventListener('reset', resetInput)};
   }, [form, resetInput]);
@@ -109,7 +108,7 @@ ref
 
   useEffect(() => {
     const seleccionInicial = options.find((option) => {
-      return (option[valueField] == value[valueField] || option[valueField] == value)
+      return (option?.[valueField] == value?.[valueField] || option?.[valueField] == value)
     });
 
     if (seleccionInicial) {

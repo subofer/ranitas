@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Button from "../formComponents/Button";
 import Input from "../formComponents/Input";
 import SelectOnClientByProps from "../proveedores/SelectOnClientByProps";
@@ -11,7 +11,7 @@ import { guardarFacturaConStock } from "@/prisma/serverActions/facturas";
 import { showImagenProducto } from "../productos/showImagenProducto";
 import { guardarFacturaCompra } from "@/prisma/serverActions/documentos";
 
-const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
+const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   const [guardando, setGuardando] = useState(false);
   const detallesRefs = useRef([]);
   const blankForm = {
@@ -101,7 +101,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
 
   return (
     <FormCard
-      className={"flex flex-col w-full"}
+      className={`flex flex-col w-full bg-slate-300 p-2 ${className}`}
       handleReset={handleReset}
       loading={guardando}
       action={handleSubmit}
@@ -163,7 +163,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps }) => {
 
         <label className="col-span-12 text-2xl text-gray-700">Productos:</label>
 
-        <div className="col-span-12 p-3 bg-slate-300">
+        <div className="col-span-12 p-3 bg-slate-400">
           {formData.detalles.map((detalle, index) => (
             <div key={index} className="flex gap-2 mb-2 justify-between">
               <div className="flex flex-row gap-1 w-8 justify-around text-slate-600">

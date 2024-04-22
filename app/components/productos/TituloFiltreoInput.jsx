@@ -6,7 +6,7 @@ import useMyParams from "@/app/hooks/useMyParams";
 
 const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   const { param, setParam } = useMyParams('filtroListado')
-  const [valorLocal, setValorLocal] = useState(param)
+  const [ valorLocal, setValorLocal ] = useState(param)
   const inputRef = useRef(null);
 
   const evita = (e) => {
@@ -21,8 +21,8 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   },[setParam, seter])
 
   useEffect(() => {
-    handleChange({value:param})
-  },[handleChange, param])
+    seter(param)
+  },[seter, param])
 
   useEffect(() => {
     const handleKeyDown = (e) => {
