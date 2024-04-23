@@ -29,12 +29,13 @@ export async function guardarProducto(formData) {
     };
   }
 
-  if (formData?.idCategoria && formData?.idCategoria != "") {
-    relaciones.create.categoria = {
-      connect: { id: formData.idCategoria },
+  if (formData.categorias) {
+    relaciones.create.categorias = {
+      connect: formData.categorias.map(({id}) => ({id})),
     };
-    relaciones.update.categoria = {
-      ...relaciones.create.categoria,
+    relaciones.update.categorias = {
+      set: [],
+      ...relaciones.create.categorias,
     };
   }
 
@@ -60,7 +61,7 @@ export async function guardarProducto(formData) {
         ...relaciones.create,
       },
       include: {
-        categoria: true,
+        categorias: true,
         precios: true,
         proveedores: true,
       },

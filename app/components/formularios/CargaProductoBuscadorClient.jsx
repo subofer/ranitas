@@ -15,6 +15,7 @@ import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
 import { textos } from '@/lib/manipularTextos';
+import InputArrayListCategorias from '../categorias/InputArrayListCategorias';
 
 export const CargaProductoBuscadorClient = () => {
   const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
@@ -27,10 +28,10 @@ export const CargaProductoBuscadorClient = () => {
     size: '',
     unidad: '',
     precioActual: '',
-    idCategoria: '',
     imagen: '',
     stock: '',
     proveedores: [],
+    categorias: [],
   }), []);
 
   const [formData, setFormData] = useState(blankForm);
@@ -64,19 +65,27 @@ export const CargaProductoBuscadorClient = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 
-  const handleProveedoresSelected = ({ selected }) =>
-    setFormData(({ proveedores, ...prev }) => {
-      const updatedProveedores = [...proveedores, selected];
-      const uniqueProveedores = [...new Map(updatedProveedores.map(item => [item.id, item])).values()];
-      return { ...prev, proveedores: uniqueProveedores };
-  })
+  const handleProveedoresSelected = ({ selected }) => (
+    setFormData(({ proveedores, ...prev }) => (
+      { ...prev, proveedores: [...new Map([...proveedores, selected].map(item => [item.id, item])).values()] }
+    ))
+  );
+  const handleCategoriasSelected = ({ selected }) => (
+    setFormData(({ categorias, ...prev }) => (
+      { ...prev, categorias: [...new Map([...categorias, selected].map(item => [item.id, item])).values()] }
+    ))
+  );
 
-  const deleteProveedorById = (id) => {
-    setFormData(({proveedores, ...prev}) => {
-    const newProveedores =  proveedores.filter(proveedor => proveedor.id !== id)
-    return {...prev, proveedores: newProveedores}
-    })
-  }
+  const deleteProveedorById = (id) => (
+    setFormData(({proveedores, ...prev}) => (
+      {...prev, proveedores: proveedores.filter(proveedor => proveedor.id !== id)}
+    ))
+  );
+  const deleteCategoriaById = (id) => (
+    setFormData(({categorias, ...prev}) => (
+      {...prev, categorias: categorias.filter(categoria => categoria.id !== id)}
+    ))
+  );
 
   //esto funciona solo con la camara, la camara solo funciona con https.
   const onCapture = (code) => {
@@ -115,12 +124,17 @@ export const CargaProductoBuscadorClient = () => {
     }
   }, [codigoBarraParam, handleBuscar]);
 
+  useEffect(() => {
+    console.log("formData", formData)
+
+  }, [formData]);
+
   return (
     <FormCard
       handleReset={handleReset}
       loading={buscando}
       action={handleSave}
-      className={"flex pt-4 max-w-screen  bg-gray-200 md:p-4" }
+      className={`flex pt-4 max-w-screen  bg-gray-200 md:p-4` }
       title={`${local ? "Editar" : "Cargar"} Producto`}
       busy={buscando}
     >
@@ -138,7 +152,7 @@ export const CargaProductoBuscadorClient = () => {
           w-full
           gap-2
           lg:gap-3
-          lg:grid-cols-12
+          lg:grid-cols-10
           lg:mx-auto
           lg:h-fit
         ">
@@ -155,24 +169,28 @@ export const CargaProductoBuscadorClient = () => {
               actionIcon={<QrCodeScanner onScan={onCapture} onError={(error) => console.error(error)}/>}
             />
           </div>
-          <div className="col-span-full  lg:col-span-2">
-            <Input
-              name="size"
-              label="Tamaño"
-              placeholder="Tamaño, cantidad"
-              onChange={handleInputChange}
-              value={formData.size}
-            />
+
+          <div className="grid col-span-full gap-2 grid-cols-1 lg:grid-cols-2 lg:col-span-2">
+            <div className="col-span-full  lg:col-span-1">
+              <Input
+                name="size"
+                label="Tamaño"
+                placeholder="Tamaño, cantidad"
+                onChange={handleInputChange}
+                value={formData.size}
+              />
+            </div>
+            <div className="col-span-full lg:col-span-1">
+              <Input
+                name="unidad"
+                label="Unidad"
+                placeholder="Litros, gramos, etc.."
+                onChange={handleInputChange}
+                value={formData.unidad}
+              />
+            </div>
           </div>
-          <div className="col-span-full lg:col-span-2">
-            <Input
-              name="unidad"
-              label="Unidades"
-              placeholder="Litros, gramos, etc.."
-              onChange={handleInputChange}
-              value={formData.unidad}
-            />
-          </div>
+
           <div className="col-span-full lg:col-span-2">
             <Input
               name="stock"
@@ -211,21 +229,21 @@ export const CargaProductoBuscadorClient = () => {
           </div>
 
           <div className="col-span-full lg:col-span-3">
-            <SelectCategoriaClient
-              name={"idCategoria"}
-              onChange={handleInputChange}
-              value={formData.idCategoria}
-            />
+            <SelectCategoriaClient onChange={handleCategoriasSelected}/>
           </div>
           <div className="col-span-full lg:col-span-7">
-
+            <InputArrayListCategorias
+              name="categorias"
+              label="Categorias"
+              placeholder="Agregue proveedores"
+              dataList={formData.categorias}
+              dataFilterKey={"id"}
+              onRemove={deleteCategoriaById}
+              tabIndex={-1}
+            />
           </div>
           <div className="col-span-full lg:col-span-3">
-            <SelectProveedorClient
-              name={"$ACTION_IGNORE"}
-              onChange={handleProveedoresSelected}
-              value={formData.proveedores}
-            />
+            <SelectProveedorClient onChange={handleProveedoresSelected} />
           </div>
           <div className="col-span-full lg:col-span-7">
             <InputArrayListProveedores

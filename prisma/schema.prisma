@@ -20,8 +20,6 @@ enum TipoDocumento {
 }
 
 
-
-
 //Categorias, va a tener una categoria que sea por ejemplo "consumibles/impuestos/alquiler etc.", donde voy a agrupar los impuestos. luz, gas, alquiler etc..
 model Categorias {
   id        String   @id @default(uuid())
@@ -30,7 +28,6 @@ model Categorias {
   nombre   String      @unique
   products Productos[]
 }
-
 
 
 model Productos {
@@ -43,13 +40,12 @@ model Productos {
   nombre       String
 
   descripcion String?
-  idCategoria String?
   size        Float?
   unidad      String?
   imagen      String? @db.Text
 
-  categoria        Categorias?        @relation(fields: [idCategoria], references: [id])
   precios          Precios[]
+  categorias       Categorias[]
   proveedores      Contactos[]
   detalleDocumento DetalleDocumento[]
 }
@@ -62,9 +58,6 @@ model Precios {
   idProducto String
   producto   Productos @relation(fields: [idProducto], references: [id])
 }
-
-
-
 
 
 //Documentos, facturas, remitos, pedidos de compra, etc..
@@ -113,7 +106,8 @@ model Contactos {
 
   persona         String?
   iva             String?
-  interno         Boolean   @default(false)
+
+  esInterno       Boolean   @default(false)
   esProveedor     Boolean   @default(false)
   esMarca         Boolean   @default(false)
 

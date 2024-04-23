@@ -9,11 +9,10 @@ export const upsertProveedor = async (formData) => {
   let result;
   try{
     const data = formToObject(formData)
-    data.esProveedor = true;
-    data.esInterno = false;
     result = await upsertContacto(data);
   } catch(e) {
     result = e;
+    console.log(e)
   } finally {
     revalidatePath("/proveedores")
     return result

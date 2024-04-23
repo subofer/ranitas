@@ -6,6 +6,7 @@ import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/producto
 import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { showImagenProducto } from './showImagenProducto';
 import Counter from '../formComponents/Counter';
+import RenderCategorias from '../categorias/RenderCategorias';
 
 
 export const tablaListaProductosColumnasNames = {
@@ -25,11 +26,12 @@ export const tablaListaProductosColumnasNames = {
   },
   cat: {
     titulo: "Categoria",
-    key:"categoria.nombre",
+    key:"categorias",
     className:"whitespace-nowrap text-center px-2",
     valorDefecto:"-",
     ordenable: true,
     colw: "w-px",
+    Component: RenderCategorias,
   },
   nombre: {
     titulo: "Nombre",

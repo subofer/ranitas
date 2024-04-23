@@ -2,27 +2,6 @@
 import prisma from "../prisma"
 
 
-/*
-model Contactos {
-  id              String    @id @default(uuid())
-  createdAt       DateTime  @default(now())
-
-  cuit            String    @unique
-  nombre          String    @unique
-  telefono        String    @default("0800-completar-telefono")
-
-  persona         String?
-  iva             String?
-  interno         Boolean   @default(false)
-  esProveedor     Boolean   @default(false)
-
-  emails              Emails[]
-  direcciones         Direcciones[]
-  productos           Productos[]
-  documentosEmitidos  Documentos[]  @relation("EmisorDocumento")
-  documentosRecibidos Documentos[]  @relation("ReceptorDocumento")
-}
-*/
 export const getContactos = async () => {
   return await prisma.contactos.findMany({})
 }
@@ -58,8 +37,9 @@ export const upsertContacto = async (data) => {
       telefono: `${data?.telefono}`,
       persona: `${data?.persona}`,
       iva: `${data?.iva}`,
-      interno: data?.interno ?? false,         //chequear booleano
-      esProveedor: data?.esProveedor ?? false, //chequear booleano
+      esInterno: data?.esInterno == 'on' ? true : false,         //chequear booleano
+      esProveedor: data?.esProveedor == 'on' ? true : false,         //chequear booleano
+      esMarca: data?.esMarca == 'on' ? true : false,         //chequear booleano
     },
     direcciones: [{
       idProvincia: `${data?.idProvincia}`,
@@ -67,9 +47,9 @@ export const upsertContacto = async (data) => {
       idCalle:`${data?.idCalle}`,
       numeroCalle: parseInt(data?.numeroCalle),
     }],
-    emails: [
+    emails: data?.email ? [
       {email: `${data?.email}`},
-    ]
+    ]: []
   }
 
   const posibleId = data?.id ? `${data?.id}` : "IDFALSO123"

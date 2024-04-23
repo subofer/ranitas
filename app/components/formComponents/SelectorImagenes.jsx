@@ -10,7 +10,16 @@ import { showImagenProducto } from '../productos/showImagenProducto';
 
 const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className, ...props}) => {
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [imagenes, setImagenes] = useState([])
+  const [imagenes, setImagenes] = useState(imagenesProp)
+
+  useEffect(() => {
+    console.log(imagenes[currentIndex])
+    if(imagenes?.[currentIndex]?.imagen?.src){ 
+      console.log('cambia', imagenes?.[currentIndex]?.imagen?.src)
+      proceder(imagenes?.[currentIndex]?.imagen?.src)
+    }
+  },[currentIndex, imagenes, proceder])
+
 
   useEffect(() => {
     setImagenes(imagenesProp)

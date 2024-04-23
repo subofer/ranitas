@@ -32,10 +32,13 @@ const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, .
 
   return (
   <div className="relative">
-    <div className={`flex flex-row form-input w-full min-h-[49px] h-[2.5rem]
+    <div 
+      className={`flex flex-row form-input 
+        transition-all duration-500 ease-in-out 
+        w-full min-h-[2.5rem] ${value.length == 0 ? "h-[3.1rem]": "grows"}
         border-0 border-b-2 border-gray-300 appearance-none focus:outline-none focus:ring-0
         focus:border-slate-400 peer
-      `}
+       `}
     >
       <span
         className={`absolute left-0 transition-all px-2.5
@@ -44,7 +47,7 @@ const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, .
         }>
         {label}
       </span>
-      <div className="flex flex-row-reverse justify-start align-middle flex-wrap ml-20 gap-2 h-full w-full">
+      <div className="flex flex-row-reverse justify-start align-middle flex-wrap ml-20 gap-2 w-full">
         {value.length > 0
           ? value.map((item, index) => (
               <div key={index} className="transition-opacity duration-300 ease-in-out opacity-0 animate-fade-in">

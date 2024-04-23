@@ -31,7 +31,7 @@ export const nuevoPrecioProducto = async (idDelProducto, nuevoPrecio) => {
 export const getProductos = async () => {
   const productos = await prisma.productos.findMany({
     include:{
-      categoria: true,
+      categorias: true,
       precios: {
         orderBy: {
           createdAt: 'asc',
@@ -55,7 +55,7 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
       codigoBarra: codigoBarra,
     },
     include: {
-      categoria: true,
+      categorias: true,
       proveedores: true,
       precios: {
         orderBy: {

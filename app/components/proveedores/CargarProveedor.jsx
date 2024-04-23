@@ -12,12 +12,14 @@ import SelectProvinciaClient from "../geoRef/SelectProvinciaClient";
 import SelectLocalidadClient from "../geoRef/SelectLocalidadClient";
 import SelectCalleClient from "../geoRef/SelectCalleClient";
 import useRenderCount from "@/app/hooks/useRenderCount";
+import Switch from "../formComponents/Switch";
 
 const inputStyle = "bg-slate-300 rounded"
 const defautlFormValues = {
   id:'',
-  esProveedor: true,
-  interno: false,
+  esProveedor: '',
+  esInterno: '',
+  esMarca: '',
   cuit:'',
   nombre:'',
   telefono:'',
@@ -129,11 +131,11 @@ export default function CargarProveedor() {
         ref={formRef}
         className={`
           max-w-[900px]
-
           border-gray-300
           bg-gray-200
           rounded-md
           p-4
+          mx-auto
         `}
         action={handleSave}
       >
@@ -233,6 +235,13 @@ export default function CargarProveedor() {
               value={formData?.numeroCalle}
               placeholder={"Ingrese numeracion"}
             />
+          </div>
+          <div className={`col-span-full`}></div>
+          
+          <div className={`flex flex-col gap-3 col-span-3  overflow-visible`}>
+            <Switch value={formData.esProveedor} onChange={onChange} name={"esProveedor"} label={"Es Proveedor"}></Switch>
+            <Switch value={formData.esInterno} onChange={onChange} name={"esInterno"} label={"Es Interno"}></Switch>
+            <Switch value={formData.esMarca} onChange={onChange} name={"esMarca"} label={"Es Marca"}></Switch>
           </div>
           <div className="col-span-full h-1 text-red-500">
             {error && error.msg}
