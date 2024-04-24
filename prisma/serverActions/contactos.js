@@ -1,10 +1,35 @@
 "use server"
 import prisma from "../prisma"
+import { revalidatePath } from "next/cache";
 
+const revalidate = () => {
+  revalidatePath("/contactos")
+}
+
+const incluirTodo = {
+  include:{
+    emails: true,
+    productos: true,
+    direcciones: {
+      include: {
+        provincia: true,
+        localidad: true,
+        calle: true,
+      }
+    }
+  }
+}
 
 export const getContactos = async () => {
   return await prisma.contactos.findMany({})
 }
+
+export const getContactosCompletos = async () => (
+  await prisma.contactos.findMany({
+    orderBy: { nombre: 'asc' },
+    ...incluirTodo,
+  })
+);
 
 export const deleteContacto = async (idContacto) => {
   console.log('id que se quiere borrar:', idContacto)
@@ -18,7 +43,7 @@ export const deleteContacto = async (idContacto) => {
 
   } catch (e) {
     console.error("Error al eliminar el contacto:", e);
-    result = { error: true, msg: "Falló la eliminación del contacto" };
+    result = { error: true, msg: "Falló la eliminación del contacto", e:e, };
   } finally {
 
     return result;
@@ -37,19 +62,18 @@ export const upsertContacto = async (data) => {
       telefono: `${data?.telefono}`,
       persona: `${data?.persona}`,
       iva: `${data?.iva}`,
-      esInterno: data?.esInterno == 'on' ? true : false,         //chequear booleano
-      esProveedor: data?.esProveedor == 'on' ? true : false,         //chequear booleano
-      esMarca: data?.esMarca == 'on' ? true : false,         //chequear booleano
+      esInterno: data?.esInterno || false,         //chequear booleano
+      esProveedor: data?.esProveedor || false,         //chequear booleano
+      esMarca: data?.esMarca || false,         //chequear booleano
     },
-    direcciones: [{
-      idProvincia: `${data?.idProvincia}`,
-      idLocalidad:`${data?.idLocalidad}`,
-      idCalle:`${data?.idCalle}`,
-      numeroCalle: parseInt(data?.numeroCalle),
-    }],
-    emails: data?.email ? [
-      {email: `${data?.email}`},
-    ]: []
+    direcciones: data.direcciones.map((d) => ({
+      provincia: { connect: { id: d?.idProvincia } },
+      localidad: { connect: { id: d?.idLocalidad } },
+      calle: { connect: { id: d?.idCalle } },
+      numeroCalle: parseInt(d?.numeroCalle),
+      idLocalidadCensal:`${d?.idLocalidadCensal}`,
+    })),
+    emails: data?.email?.split?.(",")?.map((email) => ({email: `${email}`})) || [],
   }
 
   const posibleId = data?.id ? `${data?.id}` : "IDFALSO123"
@@ -64,28 +88,20 @@ export const upsertContacto = async (data) => {
         ...transformedData.contacto,
         emails: {
           deleteMany: {}, // Elimina todos los emails actuales (opcional, dependiendo de la lógica de negocio)
-          create: transformedData.emails.map(({email}) => ({
-            email: email
-          }))
+          create: transformedData.emails,
         },
         direcciones: {
           deleteMany: {}, // Elimina todas las direcciones actuales (opcional)
-          create: transformedData.direcciones.map(direccion => ({
-            ...direccion
-          }))
+          create: transformedData.direcciones,
         }
       },
       create: {
         ...transformedData.contacto,
         emails: {
-          create: transformedData.emails.map(({email}) => ({
-            email: email
-          }))
+          create: transformedData.emails,
         },
         direcciones: {
-          create: transformedData.direcciones.map(direccion => ({
-            ...direccion
-          }))
+          create: transformedData.direcciones,
         }
       },
       include: {
@@ -94,9 +110,11 @@ export const upsertContacto = async (data) => {
       }
     });
   }catch (e){
+    console.log(e)
     result = { error: true, msg: e.meta, code: e.code}
   }finally{
     console.log(result)
+    revalidate()
     return result;
   }
 }

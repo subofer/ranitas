@@ -4,14 +4,37 @@ import { obtenerValorPorRuta as vr } from './tablaProductosData';
 import { Td, Tr } from '../Tablas/Tablas ';
 import Skeleton from '../Skeleton';
 
-
-export const RenglonTablaProducto = ({ultimo, item, items, columnas, seleccionado, onToggleseleccionado, ...props}) => {
+export const RenglonTablaProducto = ({
+  ultimo,
+  item,
+  items,
+  columnas,
+  seleccionado,
+  onToggleseleccionado,
+  ...props
+}) => {
   const myParams = useMyParams();
   return (
-    <Tr ultimo={ultimo} seleccionado={seleccionado} className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-300":""}`}>
+    <Tr
+      ultimo={ultimo}
+      seleccionado={seleccionado}
+      className={`${seleccionado? "odd:bg-blue-200 even:bg-blue-200 hover:bg-blue-300":null}`}
+    >
       {
-        columnas && columnas.map((col, index)=> {
-          const { className, onClick, texto, noselect, Component = null, decorador, imagen, valorDefecto, componentClassname, ...resto } = vr(item, col)
+        columnas && columnas.map( (col, index) => {
+          const {
+            className,
+            onClick,
+            texto,
+            noselect,
+            Component = null,
+            decorador,
+            imagen,
+            valorDefecto,
+            componentClassname,
+            ...resto
+          } = vr(item, col);
+
           const handleOnClick = () => {
             const result = onClick(item, items)
             const {
@@ -25,7 +48,11 @@ export const RenglonTablaProducto = ({ultimo, item, items, columnas, seleccionad
           }
 
           return (
-            <Td key={index + col} className={`${className} abg-${index % 2 == 0 ? "red":"blue"}-300`} onClick={() => !noselect && onToggleseleccionado()}>
+            <Td
+              key={`${index}+${col}-item-TD`}
+              className={`${className} abg-${index % 2 == 0 ? "red":"blue"}-300`}
+              onClick={() => !noselect && onToggleseleccionado()}
+            >
               {
                 item.id
                 ? ( Component

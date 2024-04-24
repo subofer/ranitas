@@ -132,18 +132,19 @@ model Direcciones {
   idContacto  String
   contacto    Contactos @relation(fields: [idContacto], references: [id])
 
-  idProvincia String?
-  idLocalidad String?
-  idCalle     String?
-
-  provincia Provincias?  @relation(fields: [idProvincia], references: [id])
-  localidad Localidades? @relation(fields: [idLocalidad], references: [id])
-  calle     Calles?      @relation(fields: [idCalle], references: [id])
+  idProvincia         String?
+  idLocalidad         String?
+  idCalle             String?
+  idLocalidadCensal   String?
 
   numeroCalle   Int?
   piso          String?
   depto         String?
   detalles      String?
+
+  provincia Provincias?  @relation(fields: [idProvincia], references: [id])
+  localidad Localidades? @relation(fields: [idLocalidad], references: [id])
+  calle     Calles?      @relation(fields: [idCalle], references: [id])
 }
 
 model Provincias {

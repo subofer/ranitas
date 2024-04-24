@@ -1,5 +1,5 @@
 "use client"
-import { forwardRef, useRef } from "react";
+import { forwardRef } from "react";
 import { useFormStatus } from "react-dom";
 
 const Input = forwardRef(({
@@ -17,7 +17,7 @@ const Input = forwardRef(({
 }, ref) => {
   const { pending } = useFormStatus();
 
-  const handleOnChange = ({ target: { name, value } }) => onChange({name, value});
+  const handleOnChange = ({ target: { name, value } } = {}) => onChange({name, value});
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -33,7 +33,8 @@ const Input = forwardRef(({
       const direction = e.deltaY < 0 ? 1 : -1; // Determina la dirección del scroll
       const newValue = parseFloat(value || 0) + direction;
       const useValue = newValue > 1 ? newValue.toString() : 1;
-      handleOnChange({ name, value: useValue });
+
+      handleOnChange({target :{ name, value: useValue }});
     }
   };
 

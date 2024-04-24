@@ -1,26 +1,7 @@
 "use client"
 import { useEffect, useState } from "react";
+import Phill from "./Phill";
 
-const Pill = ({ value, onRemove }) => {
-  const [isRemoving, setIsRemoving] = useState(false);
-
-  const handleRemove = async () => {
-    setIsRemoving(true);
-    setTimeout(() => {
-      onRemove(value.id);
-      setIsRemoving(false);
-    }, 300);
-  };
-
-  return (
-    <div className={`bg-blue-200 rounded-full px-2 py-1 ${isRemoving ? 'shrink' : 'grow'}`}>
-      <span>{value?.nombre}</span>
-      <button type="button" onClick={handleRemove} className="ml-2 text-slate-600 hover:text-slate-800">
-        &times;
-      </button>
-    </div>
-  );
-};
 
 const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, ...props }) => {
  const [altura, setAltura] = useState(120)
@@ -51,7 +32,7 @@ const InputArrayList = ({ name, placeholder, label, value, onChange, onRemove, .
         {value.length > 0
           ? value.map((item, index) => (
               <div key={index} className="transition-opacity duration-300 ease-in-out opacity-0 animate-fade-in">
-                <Pill value={item} onRemove={onRemove} />
+                <Phill value={item} onRemove={onRemove} />
               </div>
             ))
           : <span

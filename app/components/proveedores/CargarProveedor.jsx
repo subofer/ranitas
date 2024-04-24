@@ -93,24 +93,23 @@ export default function CargarProveedor() {
   },[condicion])
 
   useEffect(() => {
+    async function completarConCuit() {
+      setBuscando(true)
+      const proveedorEncontrado = {...await getProveedorByCuit(cuitIngresado)}
+      proveedorEncontrado.cuit !== cuitIngresado
+        ? handleReset()
+        : setFormData({
+          ...defautlFormValues,
+          ...proveedorEncontrado?.direcciones?.[0],
+          ...proveedorEncontrado?.direcciones?.[0]?.calle,
+          ...proveedorEncontrado?.emails?.[0],
+          ...proveedorEncontrado,
+        })
+      setBuscando(false)
+    }
+
     if(cuitIngresado){
       setCondicion("editar")
-      async function completarConCuit() {
-        setBuscando(true)
-        const proveedorEncontrado = {...await getProveedorByCuit(cuitIngresado)}
-
-        console.log('aca', proveedorEncontrado)
-        proveedorEncontrado.cuit !== cuitIngresado
-          ? handleReset()
-          : setFormData({
-            ...defautlFormValues,
-            ...proveedorEncontrado?.direcciones?.[0],
-            ...proveedorEncontrado?.direcciones?.[0]?.calle,
-            ...proveedorEncontrado?.emails?.[0],
-            ...proveedorEncontrado,
-          })
-        setBuscando(false)
-      }
       completarConCuit();
     } else {
       setCondicion(null)
@@ -237,7 +236,7 @@ export default function CargarProveedor() {
             />
           </div>
           <div className={`col-span-full`}></div>
-          
+
           <div className={`flex flex-col gap-3 col-span-3  overflow-visible`}>
             <Switch value={formData.esProveedor} onChange={onChange} name={"esProveedor"} label={"Es Proveedor"}></Switch>
             <Switch value={formData.esInterno} onChange={onChange} name={"esInterno"} label={"Es Interno"}></Switch>
