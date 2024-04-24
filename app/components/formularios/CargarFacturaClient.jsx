@@ -1,5 +1,5 @@
 "use client"
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "../formComponents/Button";
 import Input from "../formComponents/Input";
 import SelectOnClientByProps from "../proveedores/SelectOnClientByProps";
@@ -10,6 +10,8 @@ import ImagenProducto from "../productos/ImagenProducto";
 import { guardarFacturaConStock } from "@/prisma/serverActions/facturas";
 import { showImagenProducto } from "../productos/showImagenProducto";
 import { guardarFacturaCompra } from "@/prisma/serverActions/documentos";
+import FormTitle from "../formComponents/Title";
+import Switch from "../formComponents/Switch";
 
 const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   const [guardando, setGuardando] = useState(false);
@@ -26,22 +28,17 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   const handleReset = () => {
     setFormData(blankForm)
   }
-  const optionProductosFiltradoPorProveedor = useMemo(() => {
-    const { options } = productosProps;
-    if(formData.idProveedor != ''){
-      return {options: options.filter((item) => item.proveedores.some(({id}) => id == formData.idProveedor))}
-    }
-    return {options};
-  },[productosProps, formData.idProveedor])
 
-  const handleInputChange = useCallback((e) => {
-    const { name, value, type, checked } = e.target;
-    const actualValue = type === 'checkbox' ? checked : value;
-    setFormData((prev) => ({ ...prev, [name]: actualValue }));
+  const optionProductosFiltradoPorProveedor = useMemo(() => ({
+    options: productosProps.options.filter(({ proveedores: p }) =>
+      !formData.idProveedor || p.some(({id}) => id == formData.idProveedor)
+  )}),[productosProps, formData.idProveedor])
+
+  const handleInputChange = useCallback(({name, value}) => {
+    setFormData((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  const handleDetalleChange = useCallback((index, e) => {
-    const { name, value } = e.target;
+  const handleDetalleChange = useCallback((index, {name, value}) => {
     const updated = formData.detalles
     updated[index][name] = value
     setFormData((prev) => ({ ...prev, detalles: updated }));
@@ -52,6 +49,9 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
     updated[index].item = item
     setFormData((prev) => ({ ...prev, detalles: updated }));
   }
+  useEffect(() => {
+    console.log('aca la formaData', formData)
+  },[formData])
 
   const handleAgregarDetalle = useCallback(() => {
     setFormData(({detalles, ...prev}) => ({
@@ -89,9 +89,21 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   },[formData]);
 
   const Titulo = () => (
-    <span className="text-4xl font-bold text-gray-600">
-      Cargar Factura
-    </span>
+      <FormTitle textClass={"text-3xl font-bold text-slate-500"} className="col-span-full">
+      <div className="flex items-center w-full">
+        <div className="flex-initial">
+        <Icon icono={"receipt"}/>
+
+        </div>
+        <div className="flex-grow text-center">
+          Cargar Factura
+        </div>
+        <div className="flex-initial invisible">
+          <Icon regular icono={"address-card"} />
+        </div>
+      </div>
+    </FormTitle>
+
   )
   const handleFormKeyDown = (e) => {
     if (e.key === 'Enter') {
@@ -116,10 +128,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
           label="Proveedor"
           placeholder="Ingrese Proveedor"
           name="idProveedor"
-          onChange={(_, value) => {
-            handleInputChange({ target:{ value, name: "idProveedor" } })}
-          }
-
+          onChange={handleInputChange}
           {...proveedoresProps}
         />
       </div>
@@ -141,19 +150,12 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
         />
       </div>
 
-      <div className="col-span-1">
-        <Input
-          label="Factura"
-          name="tieneImpuestos"
-          type="checkbox"
-          checked={formData.tieneImpuestos}
-          onChange={handleInputChange}
-        />
-        <Input
+      <div className="col-span-2">
+        <Switch
           label="Remito"
+          seconLabel="Factura"
           name="tieneImpuestos"
-          type="checkbox"
-          checked={!formData.tieneImpuestos}
+          value={formData.tieneImpuestos}
           onChange={handleInputChange}
         />
       </div>
@@ -176,9 +178,9 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   label="Producto"
                   placeholder="Ingrese producto"
                   name="idProducto"
-                  onChange={(name, value, item) => {
-                    handleDetalleChange(index, { target: { value, name:"idProducto" } })
-                    setItem(item, index)
+                  onChange={({name, value, option}) => {
+                    handleDetalleChange(index, { name, value })
+                    setItem(option, index)
                   }}
                   value={detalle.idProducto}
                   save={true}
@@ -192,7 +194,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   label="cantidad"
                   type="number"
                   value={detalle.cantidad}
-                  onChange={(e) => handleDetalleChange(index, e)}
+                  onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Cantidad"
                   />
               </div>
@@ -202,9 +204,9 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   label="Precio"
                   type="number"
                   value={detalle.precioUnitario}
-                  onChange={(e) => handleDetalleChange(index, e)}
+                  onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Precio Unitario"
-                  onKeyDown={(e) => handleDetalleKeyDown(index, e) }
+                  onKeyDown={(data) => handleDetalleKeyDown(index, data) }
                 />
               </div>
               <div className="w-[150px]">
@@ -214,23 +216,22 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   type="text"
                   disabled
                   value={textos.monedaDecimales(detalle.precioUnitario * detalle.cantidad)}
-                  onChange={(e) => handleDetalleChange(index, e)}
+                  onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Precio Unitario"
                 />
               </div>
-              <div className="w-[74px] h-[55px]  justify-center align-middle text-center">
-                <ImagenProducto
-                 onClick={() => showImagenProducto(formData?.detalles[index]?.item)}
-                size={35} className={"p-0 m-0 w-full"} item={formData?.detalles[index]?.item || {}}/>
+              <ImagenProducto
+                onClick={() => showImagenProducto(formData?.detalles[index]?.item)}
+                size={49} className={"p-0 m-0 w-full"} item={formData?.detalles[index]?.item || {}}
+              />
+              <div  className="flex flex-col w-[40px] text-slate-600">
+                {index == formData.detalles.length -1 &&
+                  <div onClick={handleAgregarDetalle} className="flex flex-col gap-1">
+                      <Icon tabIndex={-1} type="button" icono={"plus"}/>
+                      <Icon regular tabIndex={-1} type="button" icono={"file-lines"} />
+                  </div>
+                }
               </div>
-                <div  className="flex flex-col w-[40px] text-slate-600">
-                  {index == formData.detalles.length -1 &&
-                    <div onClick={handleAgregarDetalle} className="flex flex-col gap-1">
-                        <Icon tabIndex={-1} type="button" icono={"plus"}/>
-                        <Icon regular tabIndex={-1} type="button" icono={"file-lines"} />
-                    </div>
-                  }
-                </div>
             </div>
           ))}
           {
@@ -248,7 +249,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
             label="Subtotal"
             type="text"
             disabled
-            value={
+            value= {
               formData.tieneImpuestos ?
               textos.monedaDecimales(formData.detalles.reduce((suma, {precioUnitario, cantidad}) => suma + (precioUnitario * cantidad), 0))
               : "Remito"

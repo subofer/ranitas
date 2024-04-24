@@ -31,6 +31,16 @@ export const getContactosCompletos = async () => (
   })
 );
 
+export const getContactoByCuit = async (cuitBuscado) => (
+  await prisma.contactos.findFirst({
+    where: {
+      cuit: cuitBuscado,
+    },
+    ...incluirTodo,
+  })
+);
+
+
 export const deleteContacto = async (idContacto) => {
   console.log('id que se quiere borrar:', idContacto)
   let result;

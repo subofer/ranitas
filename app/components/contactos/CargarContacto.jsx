@@ -5,14 +5,13 @@ import Button from "../formComponents/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buscar } from "@/app/(paginas)/proveedores/actions/handleAction";
 import Input from "../formComponents/Input";
-import { getProveedorByCuit } from "@/prisma/consultas/proveedores";
 import useMyParams from "@/app/hooks/useMyParams";
 import SelectProvinciaClient from "../geoRef/SelectProvinciaClient";
 import SelectLocalidadClient from "../geoRef/SelectLocalidadClient";
 import SelectCalleClient from "../geoRef/SelectCalleClient";
 import useRenderCount from "@/app/hooks/useRenderCount";
 import Switch from "../formComponents/Switch";
-import { upsertContacto } from "@/prisma/serverActions/contactos";
+import { getContactoByCuit, upsertContacto } from "@/prisma/serverActions/contactos";
 import Icon from "../formComponents/Icon";
 
 const inputStyle = "bg-slate-300 rounded"
@@ -40,7 +39,7 @@ export default function CargarContacto() {
   useRenderCount("CargarContacto")
 
   const { searchParams, deleteParam } = useMyParams()
-  const [formData, setFormData] = useState({...defautlFormValues})
+  const [formData, setFormData] = useState(defautlFormValues)
   const [buscando, setBuscando] = useState(false)
   const [cuitIngresado, setCuitIngresado] = useState(null)
   const title = "Ficha de Contacto";
@@ -50,9 +49,13 @@ export default function CargarContacto() {
 
   const onChange = ({name, value}) => setFormData(prev => ({...prev, [name]: value}))
 
-  const onSelectChange = (index) => ({name, value, option: { idLocalidadCensal } = {}}) => {
+  const onSelectChange = ({name, value, option: { idLocalidadCensal } = {}}, index) => {
+    
     setFormData(({direcciones, ...prev}) => {
       direcciones[index][name] = value;
+      console.log("direcciones[index][name]", direcciones[index][name])
+      console.log("direcciones[index][name]", index)
+      console.log("direcciones[index][name]", name)
       if(name == "idLocalidad" && idLocalidadCensal){
         direcciones[index].idLocalidadCensal = idLocalidadCensal;
       }
@@ -68,16 +71,18 @@ export default function CargarContacto() {
     deleteParam('cuit')
     setCuitIngresado(null)
     setError({error: false})
-    setFormData({}) ;
-    setFormData({...defautlFormValues}) ;
+    setFormData((prev) => defautlFormValues) ;
   },[deleteParam])
 
   const handleDireccionDelete = (index) => {
+    console.log('index', formData.direcciones.length)
     formData.direcciones.length == 1
       ? setFormData(({direcciones, ...prev}) => ({...prev, direcciones:defautlFormValues.direcciones}))
       : setFormData(({direcciones, ...prev}) => ({...prev, direcciones:[...direcciones.map((d,i) => i != index ? d : null).filter(Boolean)]}))
   }
+
   const handleDireccionAdd = () => {
+    console.log("defautlFormValues", defautlFormValues)
     setFormData(({direcciones, ...prev}) =>
       ({...prev, direcciones:[...direcciones, ...defautlFormValues.direcciones ]})
     )
@@ -88,7 +93,7 @@ export default function CargarContacto() {
     if(formData?.cuit){
       setError({error: true, msg: "Buscando..."})
       const personaEncontrada = await buscar(formData)
-      
+
       if(!personaEncontrada?.error) {
         setFormData({...defautlFormValues, ...personaEncontrada })
         setError({error: false})
@@ -108,15 +113,15 @@ export default function CargarContacto() {
   useEffect(() => {
     async function completarConCuit() {
       setBuscando(true)
-      const proveedorEncontrado = {...await getProveedorByCuit(cuitIngresado)}
-      proveedorEncontrado.cuit !== cuitIngresado
+      const contactoEncontrado = {...await getContactoByCuit(cuitIngresado)}
+      contactoEncontrado.cuit !== cuitIngresado
         ? handleReset()
         : setFormData({
           ...defautlFormValues,
-          ...proveedorEncontrado?.direcciones?.[0],
-          ...proveedorEncontrado?.direcciones?.[0]?.calle,
-          ...proveedorEncontrado,
-          email: proveedorEncontrado.emails.map(({email}) => email).join(','),
+          ...contactoEncontrado?.direcciones?.[0],
+          ...contactoEncontrado?.direcciones?.[0]?.calle,
+          ...contactoEncontrado,
+          email: contactoEncontrado.emails.map(({email}) => email).join(','),
         })
       setBuscando(false)
     }
@@ -134,13 +139,18 @@ export default function CargarContacto() {
     }
   },[buscando])
 
+  useEffect(() => {
+    console.log("formData", formData)
+  },[formData])
+
+
   return (
     <main className='grid grid-cols-1 w-full max-w-full'>
       <form
         ref={formRef}
         className={`max-w-[1200px]
           p-4 mx-auto rounded-md 
-          border-gray-300 bg-gray-200
+          border-gray-300 bg-slate-300
         `}
         action={handleSave}
       >
@@ -233,7 +243,7 @@ export default function CargarContacto() {
                   <SelectProvinciaClient
                     name="idProvincia"
                     value={direccion.idProvincia}
-                    onChange={onSelectChange(index)}
+                    onChange={(item) => onSelectChange(item, index)}
                   />
                 </div>
                 <div className={`lg:col-span-2 ${inputStyle}`}>
@@ -241,7 +251,7 @@ export default function CargarContacto() {
                     idProvincia={direccion.idProvincia}
                     name="idLocalidad"
                     value={direccion.idLocalidad}
-                    onChange={onSelectChange(index)}
+                    onChange={(item) => onSelectChange(item, index)}
                   />
                 </div>
                 <div className={`lg:col-span-2 ${inputStyle}`}>
@@ -250,7 +260,7 @@ export default function CargarContacto() {
                     idLocalidadCensal={direccion.idLocalidadCensal}
                     name={"idCalle"}
                     value={direccion.idCalle}
-                    onChange={onSelectChange(index)}
+                    onChange={(item) => onSelectChange(item, index)}
                   />
                 </div>
                 <div className={`flex flex-row lg:col-span-1 ${inputStyle}`}>
@@ -258,17 +268,18 @@ export default function CargarContacto() {
                     name={"numeroCalle"}
                     label={"Numero"}
                     type={"number"}
-                    onChange={onSelectChange(index)}
+                    onChange={(item) => onSelectChange(item, index)}
                     value={direccion?.numeroCalle}
                     placeholder={"Ingrese numeracion"}
                   />
                   <Icon
                     className={`px-2`}
                     type="button"
+                    disabled={formData.direcciones.length == 1}
                     onClick={() => handleDireccionDelete(index)}
                     icono={"trash-can"}/>
                 </div>
-                <div className={`lg:col-span-full flex justify-end`}>
+                <div className={`lg:col-span-full flex justify-end  pr-3`}>
                   <Icon
                       className={`${index == formData.direcciones.length - 1 ? "pt-2" :"hidden"}`}
                       type="button"

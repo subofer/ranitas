@@ -79,7 +79,6 @@ export async function guardarProducto(formData) {
     }
     return { error: true, msg, data: null };
   } finally {
-    console.log('finaly, revalidar productos')
     revalidarProductos();
   }
 }

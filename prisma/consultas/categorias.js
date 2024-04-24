@@ -2,7 +2,6 @@
 import prisma from "../prisma";
 
 export const getCategorias = async () => {
- console.log('las categorias si las busca?')
  return await prisma.categorias.findMany({orderBy: [{nombre: 'asc'}]})
 };
 

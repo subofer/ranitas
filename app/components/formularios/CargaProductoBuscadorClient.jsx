@@ -1,4 +1,5 @@
 "use client"
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { guardarProducto } from "@/prisma/serverActions/productos";
 
@@ -16,6 +17,8 @@ import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
 import { textos } from '@/lib/manipularTextos';
 import InputArrayListCategorias from '../categorias/InputArrayListCategorias';
+import { LineChart } from '../graficos/LineGraphClient';
+//import LineChart from '../graficos/LineGraph';
 
 export const CargaProductoBuscadorClient = () => {
   const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
@@ -258,6 +261,10 @@ export const CargaProductoBuscadorClient = () => {
           </div>
         </div>
 
+      </div>
+      <div className='bg-slate-100 p-10 w-full h-[400px]'>
+
+      <LineChart data={formData?.precios} />,
       </div>
     </FormCard>
   );

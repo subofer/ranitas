@@ -61,7 +61,6 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
         orderBy: {
           createdAt: 'desc',
         },
-        take: 1,
       },
     },
   });

@@ -3,10 +3,8 @@ import useSelect from "@/app/hooks/useSelect";
 import FilterSelect from "../formComponents/FilterSelect";
 import { getProveedoresSelect} from "@/prisma/consultas/proveedores";
 
-
 const SelectProveedorClient = ({...props}) => {
   const { data: proveedores, busy } = useSelect(getProveedoresSelect, "proveedores")
-
 
   return (
     <FilterSelect

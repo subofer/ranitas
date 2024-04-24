@@ -13,15 +13,21 @@ const Icon = ({className, rotate, children, icono, type = "button", regular, sus
     className={`
       active:scale-[90%]
       transition duration-150 ease-in-out
-      disabled:bg-slate-400
       disabled:cursor-not-allowed
       ring-transparent
       ${className}
       `}
     { ...props }
   >
-    <i className={`${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${rotate ? 'rotate-180' : 'rotate-0'}`}/>
-      {children}
+    <div className="flex flex-row align-middle">
+    <div className="flex h-full w-fit my-auto mx-auto align-middle">
+      <i className={`h-full ${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${rotate ? 'rotate-180' : 'rotate-0'}`}/>
+    </div>
+      <div className={`${children ? "ml-1 align-top" : ""}`}>
+        {children}
+      </div>
+    </div>
+
  </button>
 );
 

@@ -58,7 +58,7 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className
         </div>
 
       <div className='absolute inset-0 flex flex-col justify-between p-4
-        group opacity-60 hover:opacity-100
+        group opacity-20 hover:opacity-100
         transition-opacity ease-in-out duration-500
         '>
 

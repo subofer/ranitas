@@ -17,7 +17,10 @@ const Input = forwardRef(({
 }, ref) => {
   const { pending } = useFormStatus();
 
-  const handleOnChange = ({ target: { name, value } } = {}) => onChange({name, value});
+  const handleOnChange = ({ target: { name, value } } = {}) => {
+   const newValue = type == "checkbox" ? (value == "on" ? true : false) : value
+    onChange({name, value: newValue, type});
+  }
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {

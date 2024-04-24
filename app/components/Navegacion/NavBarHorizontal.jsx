@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef, useCallback, forwardRef } from "rea
 import Link from "next/link";
 import { menuListHorizontal } from "./menuList";
 import { useRouter } from "next/navigation";
+import Icon from "../formComponents/Icon";
 
 const theme = {
   background: 'bg-gray-800',
@@ -83,8 +84,9 @@ const NavBarHorizontal = forwardRef((props, ref) => {
     <div
       style={{ zIndex: zIndexNavBar }}
       className={`${theme.background}
-        px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
+        flex flex-row-reverse justify-between px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
     `}>
+      <Icon className={"text-white mr-5"} regular icono={"user"}/>
       <ul className="flex flex-row flex-wrap gap-0.5" >
         {menuListHorizontal.map(({menu, subMenu, href}, menuIndex) => (
           <li key={menuIndex}

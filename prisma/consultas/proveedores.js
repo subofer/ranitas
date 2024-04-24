@@ -17,7 +17,6 @@ const incluirTodo = {
 }
 
 export const getProveedoresSelect = async () => {
-  console.log('pero lo busca o no?')
   return await prisma.contactos.findMany({
     where: { esProveedor: true },
     orderBy: { nombre: 'asc' },

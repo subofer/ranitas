@@ -3,7 +3,7 @@ import { useState, useRef, useId, useEffect } from "react"
 import { useFormStatus } from "react-dom";
 
 
-const Switch = ({name, value, label, onChange}) => {
+const Switch = ({name, value, label, seconLabel, onChange}) => {
   const id = useId()
   const{ refPadre, reset} = useParentForm()
   const { pending, action } = useFormStatus();
@@ -12,7 +12,7 @@ const Switch = ({name, value, label, onChange}) => {
 
   const handleOnClick = () => {
     inputRef.current.checked = !inputRef.current.checked;
-    onChange?.({name, value: inputRef.current.checked })
+    onChange?.({name, value: inputRef.current.checked, type:"checkbox" })
   }
   useEffect(() => {
     setTouched(false)
@@ -67,7 +67,21 @@ const Switch = ({name, value, label, onChange}) => {
         </div>
       </div>
     </div>
-          </div>
+    {seconLabel && 
+      <label htmlFor={id}
+          className={`
+            appearance-none transition-all duration-500 ease-in-out text-[0.96rem] text-md font-medium text-black
+            ${touched ? `
+            text-sm
+            top-0
+            px-0
+            `:""}
+      `}>
+            <input id={id} altocomplete={"false"} className={`hidden`} name={name} value={value} ref={inputRef} type="checkbox" />
+            {seconLabel}
+        </label>
+          }
+    </div>
   )
 }
 
