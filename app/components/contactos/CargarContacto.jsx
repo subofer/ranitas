@@ -3,7 +3,7 @@
 import FormTitle from "../formComponents/Title";
 import Button from "../formComponents/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { buscar } from "@/app/(paginas)/proveedores/actions/handleAction";
+import { buscar } from "@/app/(paginas)/contactos/actions/handleAction";
 import Input from "../formComponents/Input";
 import useMyParams from "@/app/hooks/useMyParams";
 import SelectProvinciaClient from "../geoRef/SelectProvinciaClient";
