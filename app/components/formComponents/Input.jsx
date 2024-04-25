@@ -13,18 +13,19 @@ const Input = forwardRef(({
   onChange,
   forceClassName,
   actionIcon,
+  doOnEnter,
   ...props
 }, ref) => {
   const { pending } = useFormStatus();
 
   const handleOnChange = ({ target: { name, value } } = {}) => {
    const newValue = type == "checkbox" ? (value == "on" ? true : false) : value
-    onChange({name, value: newValue, type});
+   onChange && onChange({name, value: newValue, type});
   }
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
-      e.preventDefault();
+      !doOnEnter && e.preventDefault();
       console.log('e.key', e.key)
     } else {
       console.log('e.key', e.key)

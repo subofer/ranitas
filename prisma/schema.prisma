@@ -117,6 +117,12 @@ model Contactos {
   documentosEmitidos  Documentos[]  @relation("EmisorDocumento")
   documentosRecibidos Documentos[]  @relation("ReceptorDocumento")
 }
+model Usuarios {
+  id              String    @id @default(uuid())
+  nombre          String    @unique
+  password        String
+  nivel           Int       @default(1)
+}
 
 model Emails {
   id          String      @id @default(uuid())

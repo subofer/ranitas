@@ -3,7 +3,8 @@ import React, { useEffect, useState, useRef, useCallback, forwardRef } from "rea
 import Link from "next/link";
 import { menuListHorizontal } from "./menuList";
 import { useRouter } from "next/navigation";
-import Icon from "../formComponents/Icon";
+import UserMenu from "../userMenu/UserMenu";
+import { tiempo } from "@/lib/manipularTextos";
 
 const theme = {
   background: 'bg-gray-800',
@@ -67,6 +68,13 @@ const NavBarHorizontal = forwardRef((props, ref) => {
         if (activeMenuIndex === -1) {
           lastFocusedElement.current = document.activeElement;
           setIsNavActive(true)
+          /*
+          //setear para que los menues se cierren solos
+          setTimeout(() => {
+            salir(event)
+          }, tiempo.segundos(15));
+          */
+
           setActiveMenuIndex(0);
         } else {
           salir(event)
@@ -86,7 +94,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
       className={`${theme.background}
         flex flex-row-reverse justify-between px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
     `}>
-      <Icon className={"text-white mr-5"} regular icono={"user"}/>
+      <UserMenu/>
       <ul className="flex flex-row flex-wrap gap-0.5" >
         {menuListHorizontal.map(({menu, subMenu, href}, menuIndex) => (
           <li key={menuIndex}

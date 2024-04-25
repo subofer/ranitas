@@ -150,7 +150,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
         />
       </div>
 
-      <div className="col-span-2">
+      <div className="col-span-2 min-w-[195px]">
         <Switch
           label="Remito"
           seconLabel="Factura"
