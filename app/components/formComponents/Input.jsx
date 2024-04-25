@@ -14,6 +14,7 @@ const Input = forwardRef(({
   forceClassName,
   actionIcon,
   doOnEnter,
+  error,
   ...props
 }, ref) => {
   const { pending } = useFormStatus();
@@ -62,7 +63,7 @@ const Input = forwardRef(({
           border-0 border-b-2 border-gray-300
           focus:outline-none focus:ring-0
           focus:border-slate-400 peer
-
+          ${error?.error ? "border-red-300":""}
           ${pending ? "bg-gray-200":""}
           ${forceClassName? forceClassName : "placeholder:translate-y-[2px]"}
           ${type === "checkbox" ? "form-checkbox text-blue-600 mr-1 ml-auto" : ""}
@@ -86,6 +87,17 @@ const Input = forwardRef(({
         >
           {label}
         </label>
+        {error?.error && 
+        <label htmlFor={name}
+          className={`
+            appearance-none absolute px-2 transition-all -bottom-0 -left-1
+            font-medium text-red-400
+            text-xs
+          `}
+        >
+          {error.msg}
+        </label>
+        }
         { actionIcon &&
           <div className={`
             absolute

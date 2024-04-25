@@ -36,6 +36,7 @@
     "react-barcode": "^1.5.0",
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^18",
+    "react-draggable": "^4.4.6",
     "sweetalert2": "^11.10.7",
     "sweetalert2-react-content": "^5.0.7"
   },
