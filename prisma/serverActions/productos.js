@@ -4,7 +4,9 @@ import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
 
 const revalidarProductos = () => revalidatePath("/cargarProductos");
+
 export async function guardarProducto(formData) {
+  console.log("aca", formData)
   // Transformación de datos básicos
   const transformedData = {
     codigoBarra: formData.codigoBarra,
@@ -16,6 +18,10 @@ export async function guardarProducto(formData) {
     precioActual: parseFloat(formData.precioActual) || 0,
     nombre: textos.mayusculas.primeras(formData.nombre),
   };
+
+  if(!transformedData.codigoBarra){
+    return { error: true, msg:"Falta codigo de barras", data: null };
+  }
 
   const relaciones = { update:{}, create:{} }
 

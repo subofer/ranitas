@@ -19,12 +19,7 @@ export default async function cargarDatos() {
           id: `${item.id}`,
           nombre: textos.mayusculas.primeras(item.nombre),
           nombreCompleto: item.nombre_completo,
-          categoria: item.categoria,
-          fuente: item.fuente,
           isoId: item.iso_id,
-          isoNombre: item.iso_nombre,
-          centroideLat: item.centroide_lat,
-          centroideLon: item.centroide_lon
         }
     }));
 
@@ -39,15 +34,11 @@ export default async function cargarDatos() {
         data: localidadesData.map((item, index) => ({
           id: `${item.id}`,
           nombre: textos.mayusculas.primeras(item.nombre),
-          fuente: item.fuente,
           idProvincia: item.provincia.id,
           idDepartamento: item.departamento ? item.departamento.id : null,
           idMunicipio: item.municipio ? item.municipio.id : null,
           idLocalidadCensal: item.localidad_censal.id,
           nombreLocalidadCensal: item.localidad_censal.nombre,
-          categoria: item.categoria,
-          centroideLat: item.centroide?.lat || localidadesData[index-1].centroide?.lat || 1,
-          centroideLon: item.centroide?.lon || localidadesData[index-1].centroide?.lon || 1,
         })),
         skipDuplicates: true,
      });
@@ -67,7 +58,7 @@ async function cargarCalles() {
   const callesDataJson = JSON.parse(readFileSync(`${process.cwd()}/prisma/geoRef/calles.json`, 'utf8'));
   const callesDataLarge = callesDataJson.calles
   const callesData = callesDataLarge
-  
+
   console.log('Cantidad de calles a crear: ', callesData.length)
   try {
     console.log(callesData)

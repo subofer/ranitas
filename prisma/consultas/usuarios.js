@@ -1,15 +1,20 @@
 "use server"
+import { hashPassword, verifyPassword } from "@/lib/sesion/crypto";
 import prisma from "../prisma";
 
-export const getUsuario = async ({nombre, password}) => {
+export const getUsuario = async ({ nombre, password}) => {
+  const usuario = await prisma.usuarios.findUnique({ where: { nombre } });
+    if (!usuario) { return null }
 
-  //tendria que encriptar la contraseña y esas cosas.
-  const usuarioEncontrado = await prisma.usuarios.findUnique({
-    where: {
-      nombre: nombre,
-    }
-  })
-  return usuarioEncontrado
+  const { password: savedPassword, ...user } = usuario;
+
+  const isAuth = await verifyPassword(password, savedPassword);
+    if (!isAuth) { return null }
+
+  return {
+    user,
+    isAuth,
+  };
 };
 
 
@@ -18,25 +23,24 @@ export const deleteUsuario = async (nombre) => {
   try {
     result =  await prisma.usuarios.delete({where: { nombre: nombre }});
   } catch (e) {
-    console.error("Error al eliminar el Usuario:", e);
-    result = { error: true, msg: "Falló la eliminación del contacto", e:e, };
+    result = { error: true, msg: "Falló la eliminación del usuario", e:e, };
   } finally {
     return result;
   }
 }
-
 
 //transformar el formData antes de entregarlo
 export const upsertUsuario = async (data) => {
 
   const transformedData = {
     nombre: `${data?.nombre}`,
-    password: `${data?.password}`,  //faltaria hasearlo y esas cosas.
+    password: await hashPassword(`${data?.password}`),  //faltaria hasearlo y esas cosas.
   }
 
   const posibleId = data?.id ? `${data?.id}` : "IDFALSO123"
 
   let result;
+
   try{
     result = await prisma.usuarios.upsert({
       where: { id: posibleId },

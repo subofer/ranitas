@@ -1,19 +1,8 @@
 "use client"
-import { useKeyDown } from "@/app/hooks/useKeyDown";
-import { useEffect } from "react";
+import useHotkey from "@/app/hooks/useHotkey";
 
 const SelectAllToggle = ({children, seter}) => {
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.ctrlKey && event.key === 'a') {
-        event.preventDefault();
-        seter();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [seter]);
+  useHotkey(['control','a'], null, () => seter())
 
   return(
     <button onClick={seter}

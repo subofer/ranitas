@@ -49,6 +49,8 @@ export const getProductos = async () => {
   return productos
 }
 
+export const contarProductos = async () => await prisma.productos.count();
+
 export const getProductoPorCodigoBarra = async (codigoBarra) => {
   const producto = await prisma.productos.findUnique({
     where: {

@@ -1,0 +1,226 @@
+.
+├── app
+│   ├── components
+│   │   ├── alertas
+│   │   │   ├── alertaBorrarCategoria.js
+│   │   │   ├── alertaBorrarProducto.js
+│   │   │   ├── alertaBorrarProveedor.js
+│   │   │   ├── alertaCrearCodigoDeBarras.js
+│   │   │   ├── alertaLeerCodigoBarra.js
+│   │   │   ├── alertaTotalCompra.js
+│   │   │   ├── camaraError.js
+│   │   │   └── genericas
+│   │   │       └── alertaSiNoAction.js
+│   │   ├── camara
+│   │   │   └── Scanner.jsx
+│   │   ├── categorias
+│   │   │   ├── InputArrayListCategorias.jsx
+│   │   │   ├── ListadoCategorias.jsx
+│   │   │   ├── RenderCategorias.jsx
+│   │   │   ├── RenglonCategorias.jsx
+│   │   │   ├── SelectCategoriaClient.jsx
+│   │   │   └── SelectCategoria.jsx
+│   │   ├── collapseDiv
+│   │   │   └── CollapseDiv.jsx
+│   │   ├── contactos
+│   │   │   ├── CargarContacto.jsx
+│   │   │   ├── ListadoContactos.jsx
+│   │   │   └── RenglonTablaContacto.jsx
+│   │   ├── Fallback
+│   │   │   └── FallbackComponent.jsx
+│   │   ├── formComponents
+│   │   │   ├── Button.jsx
+│   │   │   ├── CameraCapture.jsx
+│   │   │   ├── CheckBox.jsx
+│   │   │   ├── Chevron.jsx
+│   │   │   ├── Counter.jsx
+│   │   │   ├── FilterSelect.jsx
+│   │   │   ├── FormCard.jsx
+│   │   │   ├── Icon.jsx
+│   │   │   ├── InputArrayList.jsx
+│   │   │   ├── Input.jsx
+│   │   │   ├── Label.jsx
+│   │   │   ├── Phill.jsx
+│   │   │   ├── Select.jsx
+│   │   │   ├── SelectorImagenes.jsx
+│   │   │   ├── Switch.jsx
+│   │   │   └── Title.jsx
+│   │   ├── formularios
+│   │   │   ├── CargaProductoBuscadorClient.jsx
+│   │   │   ├── CargarCategoria.jsx
+│   │   │   └── CargarFacturaClient.jsx
+│   │   ├── geoRef
+│   │   │   ├── SelectCalleClient.jsx
+│   │   │   ├── SelectLocalidadClient.jsx
+│   │   │   └── SelectProvinciaClient.jsx
+│   │   ├── graficos
+│   │   │   ├── LineGraphClient.jsx
+│   │   │   └── LineGraph.jsx
+│   │   ├── HiglightMatch.jsx
+│   │   ├── ia
+│   │   │   └── IaPromp.jsx
+│   │   ├── Image.jsx
+│   │   ├── LoadImage64.jsx
+│   │   ├── Navegacion
+│   │   │   ├── menuList.js
+│   │   │   ├── NavBarHorizontal.jsx
+│   │   │   └── NavBarVertical.jsx
+│   │   ├── png
+│   │   │   └── camara.png
+│   │   ├── productos
+│   │   │   ├── BotonEditarProducto.jsx
+│   │   │   ├── BotonEliminarProducto.jsx
+│   │   │   ├── CopyToClipBoard.jsx
+│   │   │   ├── DetalleProducto.jsx
+│   │   │   ├── filtrarPorClave.jsx
+│   │   │   ├── FiltroTablaProductos.jsx
+│   │   │   ├── ImagenProducto.jsx
+│   │   │   ├── ListadoProductos.jsx
+│   │   │   ├── RenglonTablaProducto.jsx
+│   │   │   ├── ResultadoBusqueda.jsx
+│   │   │   ├── SelectAllToggle.jsx
+│   │   │   ├── showImagenProducto.js
+│   │   │   ├── TablaListaProductos.jsx
+│   │   │   ├── TablaListaVenta.jsx
+│   │   │   ├── tablaProductosData.js
+│   │   │   ├── TbodyTablaProducto.jsx
+│   │   │   └── TituloFiltreoInput.jsx
+│   │   ├── proveedores
+│   │   │   ├── InputArrayListProveedores.jsx
+│   │   │   ├── ListadoProveedores.jsx
+│   │   │   ├── RenglonProveedor.jsx
+│   │   │   ├── SelectOnClientByProps.jsx
+│   │   │   └── SelectProveedorClient.jsx
+│   │   ├── Skeleton.jsx
+│   │   ├── Tablas
+│   │   │   └── Tablas .jsx
+│   │   ├── toast
+│   │   │   └── Toast.jsx
+│   │   ├── unidades
+│   │   │   ├── ListadoUnidades.jsx
+│   │   │   ├── RenglonUnidades.jsx
+│   │   │   ├── SelectUnidadesClient.jsx
+│   │   │   └── SelectUnidades.jsx
+│   │   ├── userMenu
+│   │   │   └── UserMenu.jsx
+│   │   └── venta
+│   │       └── ListadoVenta.jsx
+│   ├── favicon.ico
+│   ├── hooks
+│   │   ├── useArrayNavigator.js
+│   │   ├── useBuscarEnGoogle.js
+│   │   ├── useFiltrarProductosPorValor.js
+│   │   ├── useFormControl.js
+│   │   ├── useKeyDown.js
+│   │   ├── useMyParams.js
+│   │   ├── usePantalla.js
+│   │   ├── useParentForm.js
+│   │   ├── useRenderCount.js
+│   │   └── useSelect.js
+│   ├── ia
+│   │   └── consultaIa.js
+│   ├── (paginas)
+│   │   ├── buscarEnGoogle
+│   │   │   └── page.jsx
+│   │   ├── captura
+│   │   │   └── page.jsx
+│   │   ├── cargarProductos
+│   │   │   └── page.jsx
+│   │   ├── categorias
+│   │   │   └── page.jsx
+│   │   ├── compras
+│   │   │   └── page.jsx
+│   │   ├── contactos
+│   │   │   ├── actions
+│   │   │   │   └── handleAction.js
+│   │   │   └── page.jsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── ia
+│   │   │   └── page.jsx
+│   │   ├── layout.js
+│   │   ├── listadoProductos
+│   │   │   └── page.jsx
+│   │   ├── not-found.jsx
+│   │   ├── page.jsx
+│   │   ├── unidades
+│   │   │   └── page.jsx
+│   │   └── venta
+│   │       └── page.jsx
+│   └── (public)
+│       ├── globals.css
+│       ├── layout.js
+│       └── login
+│           └── page.jsx
+├── configEnv
+├── docker-compose.yml
+├── estructura.txt
+├── jsconfig.json
+├── lib
+│   ├── barCodeGenerator.mjs
+│   ├── buscarCuitOnline.js
+│   ├── buscarPorCodigoDeBarras.js
+│   ├── contarObjetos.js
+│   ├── copyCsv.js
+│   ├── copyToClipBoard.js
+│   ├── debounce.js
+│   ├── fetchCuitOnline.js
+│   ├── fetchGoogleResults.js
+│   ├── formToObject.js
+│   ├── imagenTransparente.js
+│   ├── manipularTextos.js
+│   ├── navegarArray.js
+│   ├── pantallaCompleta.js
+│   ├── puppeteerSession.js
+│   ├── sesion
+│   │   ├── crypto.js
+│   │   └── sesion.js
+│   ├── testMobileHttp.js
+│   └── unidades.js
+├── localhost+2-key.pem
+├── localhost+2.pem
+├── middleware.js
+├── next.config.js
+├── package.json
+├── package-lock.json
+├── postcss.config.js
+├── prisma
+│   ├── consultas
+│   │   ├── categorias.js
+│   │   ├── documentos.js
+│   │   ├── productos.js
+│   │   ├── proveedores.js
+│   │   └── usuarios.js
+│   ├── geoRef
+│   │   ├── calles.json
+│   │   ├── createGeoRef.js
+│   │   ├── createGeoRefSeed.js
+│   │   ├── getGeoRefs.js
+│   │   ├── limpiarCalles.js
+│   │   ├── localidades.json
+│   │   ├── origcalles.json
+│   │   ├── origlocalidades.json
+│   │   └── provincias.json
+│   ├── migrations
+│   │   ├── 20240508172645_
+│   │   │   └── migration.sql
+│   │   └── migration_lock.toml
+│   ├── prisma.js
+│   ├── schema.prisma
+│   ├── seed.js
+│   └── serverActions
+│       ├── categorias.js
+│       ├── contactos.js
+│       ├── documentos.js
+│       ├── facturas.js
+│       ├── productos.js
+│       ├── proveedores.js
+│       ├── unidades.js
+│       └── venta.js
+├── public
+├── README.md
+├── serverLocal.js
+├── tailwind.config.js
+└── valores.txt
+
+48 directories, 175 files

@@ -58,6 +58,7 @@ export const deleteCalles = async () => {
   try {
     do {
       // Recupera los IDs de las calles en lotes de 32766
+
       calles = await prisma.calles.findMany({ take: 32766 });
       idsCalles = calles.map(({ id }) => id);
       if (idsCalles.length === 0) {
@@ -71,6 +72,8 @@ export const deleteCalles = async () => {
       const count = await prisma.calles.count();
       console.log(`Calles restantes: ${count}`);
     } while (idsCalles.length > 0);
+    await prisma.localidades.deleteMany();
+    await prisma.provincias.deleteMany();
     console.log('Proceso completado. Todas las calles han sido borradas.');
   } catch (error) {
     console.error('Error durante el proceso de borrado de calles:', error);

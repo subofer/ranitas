@@ -1,7 +1,8 @@
 "use client"
-import { useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { copyCsvToClipBoard } from "@/lib/copyCsv";
 import Button from "../formComponents/Button";
+import useHotkey from "@/app/hooks/useHotkey";
 
 const CopyToClipBoard = ({children, data, selector}) => {
 
@@ -10,21 +11,7 @@ const CopyToClipBoard = ({children, data, selector}) => {
     copyCsvToClipBoard(dataToCopy)
   },[data, selector])
 
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.ctrlKey && event.key === 'c') {
-        event.preventDefault();
-        handleClick();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [handleClick]);
-
+  useHotkey(['control','c'], null, handleClick)
 
   return(
     <Button onClick={handleClick} >{children}</Button>

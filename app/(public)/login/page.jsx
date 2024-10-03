@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { login } from '@/lib/sesion/sesion'
 import useMyParams from '@/app/hooks/useMyParams';
 import { useState } from 'react';
+import Icon from '@/app/components/formComponents/Icon';
 
 export default function Pagelogin() {
   const [result, setResult] = useState(null)
@@ -28,33 +29,42 @@ export default function Pagelogin() {
   }
 
   return (
-    <main className='flex flex-col gap-5 container w-full max-w-full h-screen max-h-screen justify-center align-middle'>
-      <Draggable>
-        <form action={handleLogin} 
+    <main className='flex flex-col container w-full max-w-full h-screen max-h-screen justify-center align-middle'>
+      <Draggable
+          onStart={() => setLoading(true)}
+          onStop={() => setLoading(false)}
+          grid={[10, 10]}
+          cancel={"input, button"}
+      >
+        <form action={handleLogin}
           className='
             flex
-            flex-col 
+            flex-col
             w-fit
             mx-auto
-            bg-slate-300
+            bg-slate-400
             gap-4
             p-4
             px-10
             text-center
-            rounded-md
+            rounded-xl
             shadow-2xl
           '
         >
-          <span className='text-2xl font-medium text-slate-700 mb-2'>Las Ranitas</span>
+          <div className='flex flex-row justify-center w-full'>
+            <Icon icono={"frog"} className={`${loading?"":"hidden"} absolute top-6 left-3 text-3xl`}/>
+            <span className='text-2xl font-medium text-slate-700 mt-2 mb-3'>Las Ranitas</span>
+            <Icon icono={"frog"} className={`${loading?"":"hidden"} absolute top-6 right-3 text-3xl`}/>
+          </div>
           <Input
-            className={"rounded-md"}
+            className={`rounded-md shadow-md ${result?.error?"shadow-red-900":"shadow-slate-700"}`}
             name={"nombre"}
             label={"Nombre de usuario"}
             error={result}
             onChange={handleOnChange}
           />
           <Input
-            className={"rounded-md"}
+            className={`rounded-md shadow-md ${result?.error?"shadow-red-900":"shadow-slate-700"}`}
             name={"password"}
             label={"Contraseña"}
             type={"password"}

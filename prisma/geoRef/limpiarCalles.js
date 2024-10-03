@@ -34,7 +34,7 @@ function filtrarCalles() {
 
     // Guardar el resultado en un nuevo archivo JSON
     fs.writeFileSync('calles_filtradas.json', JSON.stringify(obj));
-    
+
     console.log('Archivo guardado con las calles filtradas. Total de calles filtradas: ', callesFiltradas.length);
     console.log('Total calles removidas:', cantidadOriginal-callesFiltradas.length);
   } catch (err) {
@@ -43,4 +43,33 @@ function filtrarCalles() {
 }
 
 // Ejecutar la función de filtrado
-filtrarCalles();
+//filtrarCalles();
+
+
+
+function limpiarLocalidades() {
+  try {
+    // Leer el archivo JSON con el encoding adecuado
+    const data = fs.readFileSync('localidades.json', 'utf8');
+    const obj = JSON.parse(data);
+
+    // Eliminar los campos "centroide", "categoria" y "fuente" de cada localidad
+    const objNew = obj.map(localidad => ({
+      id: localidad.id,
+      nombre: localidad.nombre,
+      provincia: localidad.provincia,
+      departamento: localidad.departamento,
+      municipio: localidad.municipio,
+      localidad_censal: localidad.localidad_censal
+    }));
+
+    // Guardar el resultado en un nuevo archivo JSON
+    fs.writeFileSync('localidades_limpias.json', JSON.stringify(objNew));
+
+    console.log('Archivo guardado con las localidades limpias.');
+  } catch (err) {
+    console.error('Error al procesar el archivo:', err);
+  }
+}
+
+limpiarLocalidades()

@@ -1,10 +1,13 @@
 "use client"
+import { hashPassword } from "@/lib/sesion/crypto";
+import { upsertUsuario } from "@/prisma/consultas/usuarios";
 import cargarDatos from "@/prisma/geoRef/createGeoRef";
 import { deleteCalles } from "@/prisma/geoRef/getGeoRefs";
 import { deleteContacto } from "@/prisma/serverActions/contactos";
 import convert from "convert"
 import { convertMany } from "convert";
 import Link from "next/link"
+import DolarHoyServer from "../components/dolarHoy/DolarHoyServer";
 
 
 const convertir = (de, a) => {
@@ -38,12 +41,15 @@ export default function Home() {
       <span>
         Inicio?
       </span>
+      <form action={() => upsertUsuario({nombre:"subofer", password: "1234"})}>
+        <button >Cargar Subofer</button>
+      </form>
+      
       <form action={cargarDatos}>
         <button >Cargar GeoRef</button>
 
       </form>
       <form action={deleteContacto}>
-
         <button >borrar contacto  GeoRef</button>
       </form>
       <form action={deleteCalles}>
@@ -55,3 +61,5 @@ export default function Home() {
     </main>
   )
 }
+
+//<DolarHoyServer/>

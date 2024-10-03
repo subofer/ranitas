@@ -18,7 +18,11 @@ import InputArrayListProveedores from '../proveedores/InputArrayListProveedores'
 import { textos } from '@/lib/manipularTextos';
 import InputArrayListCategorias from '../categorias/InputArrayListCategorias';
 import { LineChart } from '../graficos/LineGraphClient';
-//import LineChart from '../graficos/LineGraph';
+import Switch from '../formComponents/Switch';
+import { alertaCrearCodigoDeBarras } from '../alertas/alertaCrearCodigoDeBarras';
+import generateBarCode from '@/lib/barCodeGenerator.mjs';
+import useHotkey from '@/app/hooks/useHotkey';
+
 
 export const CargaProductoBuscadorClient = () => {
   const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
@@ -42,6 +46,8 @@ export const CargaProductoBuscadorClient = () => {
   const [imagenes, setImagenes] = useState([]);
   const [local, setLocal] = useState(null);
 
+  const codigoDeBarraRef = useHotkey(['control','q'])
+
   const handleBuscar = useCallback(async (codigoBarraIngresado) => {
     setBuscando(true);
     const productoLocal = await getProductoPorCodigoBarra(codigoBarraIngresado)
@@ -51,7 +57,8 @@ export const CargaProductoBuscadorClient = () => {
       setFormData((prev) => ({...prev, ...productoLocal}));
       setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
     }else{
-      const { imagenes, primerResultado: { prismaObject = {} } } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+      const { imagenes = [], primerResultado = {} } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
+      const { prismaObject = {} } = primerResultado;
       setImagenes(imagenes)
       setFormData((prev) => ({ ...prev, ...prismaObject}));
     }
@@ -59,10 +66,26 @@ export const CargaProductoBuscadorClient = () => {
     setBuscando(false);
   },[]);
 
+  const handleGuardar = useCallback(async (data = formData) => {
+    const { error } = await guardarProducto(data);
+    if (!error) {
+      await handleBuscar(data.codigoBarra);
+    }
+  }, [formData, handleBuscar]);
+
   const handleSave = async (e) => {
-    await guardarProducto(formData)
-    await handleBuscar(formData.codigoBarra)
-  }
+    if (formData.codigoBarra) {
+      return await handleGuardar();
+    } else {
+      alertaCrearCodigoDeBarras(formData, async () => {
+        setFormData(async (prev) => {
+          const updatedFormData = { ...prev, codigoBarra: await generateBarCode(formData)};
+          handleGuardar(updatedFormData);
+          return updatedFormData;
+        });
+      });
+    }
+  };
 
   const handleInputChange =({name, value}) => {
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -73,6 +96,7 @@ export const CargaProductoBuscadorClient = () => {
       { ...prev, proveedores: [...new Map([...proveedores, selected].map(item => [item.id, item])).values()] }
     ))
   );
+
   const handleCategoriasSelected = ({ selected }) => (
     setFormData(({ categorias, ...prev }) => (
       { ...prev, categorias: [...new Map([...categorias, selected].map(item => [item.id, item])).values()] }
@@ -84,6 +108,7 @@ export const CargaProductoBuscadorClient = () => {
       {...prev, proveedores: proveedores.filter(proveedor => proveedor.id !== id)}
     ))
   );
+
   const deleteCategoriaById = (id) => (
     setFormData(({categorias, ...prev}) => (
       {...prev, categorias: categorias.filter(categoria => categoria.id !== id)}
@@ -162,6 +187,7 @@ export const CargaProductoBuscadorClient = () => {
 
           <div className="col-span-full lg:col-span-4">
             <Input
+              ref={codigoDeBarraRef}
               name="codigoBarra"
               label="Codigo De Barras"
               placeholder="Escanee un codigo de barras"
@@ -194,7 +220,7 @@ export const CargaProductoBuscadorClient = () => {
             </div>
           </div>
 
-          <div className="col-span-full lg:col-span-2">
+          <div className="col-span-full lg:col-span-1">
             <Input
               name="stock"
               label="Stock"
@@ -203,13 +229,23 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.stock}
             />
           </div>
-          <div className="col-span-full lg:col-span-2">
+
+          <div className="col-span-full lg:col-span-1">
             <Input
               name="precioActual"
               label="Precio"
               placeholder="Ingrese el precio Actual"
               onChange={handleInputChange}
               value={formData.precioActual}
+            />
+          </div>
+          <div className="col-span-full lg:col-span-2">
+            <Switch
+              name={"formatoVenta"}
+              label={"Unidad"}
+              seconLabel={"Suelto"}
+              onChange={handleInputChange}
+              value={formData.formatoVenta}
             />
           </div>
           <div className="col-span-full lg:col-span-4">
@@ -262,10 +298,19 @@ export const CargaProductoBuscadorClient = () => {
         </div>
 
       </div>
-      <div className='bg-slate-100 p-10 w-full h-[400px]'>
-
-      <LineChart data={formData?.precios} />,
+      <div className='hidden w-0 h-0'>
+        <div className='bg-slate-100 p-10 w-full h-[200px]'>
+          <LineChart data={formData?.precios} />,
+        </div>
       </div>
+
+      <div className="etiqueta">
+        <div className="nombre">Nombre del Producto</div>
+        <div className="codigo">Código de Barras</div>
+        <div className="precio">Precio: $XX.XX</div>
+        <div className="precioKg">Precio por Kg: $XX.XX</div>
+      </div>
+
     </FormCard>
   );
 }

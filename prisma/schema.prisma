@@ -12,6 +12,12 @@ enum TipoMovimiento {
   SALIDA
 }
 
+enum TipoVenta {
+  GRANEL
+  UNIDAD
+  BULTO
+}
+
 enum TipoDocumento {
   FACTURA
   REMITO
@@ -43,6 +49,7 @@ model Productos {
   size        Float?
   unidad      String?
   imagen      String? @db.Text
+  tipoVenta   TipoVenta @default(UNIDAD)
 
   precios          Precios[]
   categorias       Categorias[]
@@ -157,12 +164,7 @@ model Provincias {
   id             String        @id
   nombre         String
   nombreCompleto String
-  categoria      String
-  fuente         String
   isoId          String
-  isoNombre      String
-  centroideLat   Float
-  centroideLon   Float
   localidades    Localidades[]
   calles         Calles[]
   Direcciones    Direcciones[]
@@ -171,16 +173,12 @@ model Provincias {
 model Localidades {
   id                    String  @id
   nombre                String
-  fuente                String
+
   idProvincia           String
   idDepartamento        String?
   idMunicipio           String?
   idLocalidadCensal     String
   nombreLocalidadCensal String
-  categoria             String
-  centroideLon          Float
-  centroideLat          Float
-
   provincia   Provincias    @relation(fields: [idProvincia], references: [id])
   Direcciones Direcciones[]
 }
