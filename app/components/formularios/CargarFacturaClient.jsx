@@ -30,9 +30,11 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   }
 
   const optionProductosFiltradoPorProveedor = useMemo(() => ({
-    options: productosProps.options.filter(({ proveedores: p }) =>
-      !formData.idProveedor || p.some(({id}) => id == formData.idProveedor)
-  )}),[productosProps, formData.idProveedor])
+    options: productosProps.options.filter(({ proveedores }) =>
+      formData.idProveedor && proveedores.some(({ proveedorId }) => proveedorId === formData.idProveedor)
+    )
+  }), [productosProps, formData.idProveedor]);
+
 
   const handleInputChange = useCallback(({name, value}) => {
     setFormData((prev) => ({ ...prev, [name]: value }));

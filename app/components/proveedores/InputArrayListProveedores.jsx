@@ -8,6 +8,8 @@ const InputArrayListProveedores = ({dataList, dataFilterKey, ...props}) => {
   const { select: proveedores, filterByKeyList } = useSelect(getProveedoresCompletos, "InputArrayListProveedores")
 
   useEffect(() => {
+    console.log('aca dataList', dataList)
+    console.log('aca dataFilterKey', dataFilterKey)
     filterByKeyList(dataList, dataFilterKey)
   },[dataFilterKey, dataList, filterByKeyList])
 

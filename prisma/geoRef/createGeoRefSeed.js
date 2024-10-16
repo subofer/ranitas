@@ -115,6 +115,6 @@ async function cargarCalles() {
   }
 }
 
-module.exports= {
+module.exports = {
   cargarDatos
 }

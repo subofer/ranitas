@@ -1,6 +1,6 @@
 "use server"
+import prisma from '../prisma.js';
 import { readFileSync } from 'fs';
-import prisma from '../prisma';
 import { textos } from '@/lib/manipularTextos';
 
 const cargar = {

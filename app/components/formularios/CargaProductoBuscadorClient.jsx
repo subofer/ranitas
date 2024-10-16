@@ -91,11 +91,12 @@ export const CargaProductoBuscadorClient = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 
-  const handleProveedoresSelected = ({ selected }) => (
-    setFormData(({ proveedores, ...prev }) => (
-      { ...prev, proveedores: [...new Map([...proveedores, selected].map(item => [item.id, item])).values()] }
-    ))
-  );
+  const handleProveedoresSelected = ({ selected }) => {
+    setFormData(prev => ({
+      ...prev,
+      proveedores: [...new Set([...prev.proveedores, {proveedorId: selected.id, proveedor:selected}])]
+    }));
+  };
 
   const handleCategoriasSelected = ({ selected }) => (
     setFormData(({ categorias, ...prev }) => (
@@ -103,11 +104,11 @@ export const CargaProductoBuscadorClient = () => {
     ))
   );
 
-  const deleteProveedorById = (id) => (
+  const deleteProveedorById = (id) => {
     setFormData(({proveedores, ...prev}) => (
-      {...prev, proveedores: proveedores.filter(proveedor => proveedor.id !== id)}
-    ))
-  );
+      {...prev, proveedores: proveedores.filter(proveedor => proveedor.proveedorId !== id)}
+    ));
+  };
 
   const deleteCategoriaById = (id) => (
     setFormData(({categorias, ...prev}) => (
@@ -274,7 +275,7 @@ export const CargaProductoBuscadorClient = () => {
             <InputArrayListCategorias
               name="categorias"
               label="Categorias"
-              placeholder="Agregue proveedores"
+              placeholder="Agregue Categoria"
               dataList={formData.categorias}
               dataFilterKey={"id"}
               onRemove={deleteCategoriaById}
@@ -289,7 +290,7 @@ export const CargaProductoBuscadorClient = () => {
               name="Provedores"
               label="Proveedores"
               placeholder="Agregue proveedores"
-              dataList={formData.proveedores}
+              dataList={formData.proveedores?.map(p => p.proveedor)}
               dataFilterKey={"id"}
               onRemove={deleteProveedorById}
               tabIndex={-1}
@@ -298,10 +299,13 @@ export const CargaProductoBuscadorClient = () => {
         </div>
 
       </div>
-      <div className='hidden w-0 h-0'>
-        <div className='bg-slate-100 p-10 w-full h-[200px]'>
-          <LineChart data={formData?.precios} />,
+      <div className='bg-slate-100 p-10 w-full h-[200px] hidden'>
+          {/**
+          <LineChart data={formData?.precios} />
+          Solo para que no cargue por ahora
+          */}
         </div>
+            <div className='hidden w-0 h-0'>``
       </div>
 
       <div className="etiqueta">
@@ -310,7 +314,6 @@ export const CargaProductoBuscadorClient = () => {
         <div className="precio">Precio: $XX.XX</div>
         <div className="precioKg">Precio por Kg: $XX.XX</div>
       </div>
-
     </FormCard>
   );
 }

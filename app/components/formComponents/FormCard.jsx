@@ -17,11 +17,24 @@ const FormButtons = ({submitButtonText, busy, resetButtonText, order, handleRese
   )
 }
 
-export const FormCard = ({children, title, busy, loading, buttons, action, handleReset,className, ...props}) => {
+export const FormCard = ({
+  children,
+  title,
+  busy,
+  loading,
+  buttons,
+  action,
+  handleReset,
+  className,
+  ...props
+}) => {
   const {
     state,
     ...formControl
   } = useFormControl(action);
+
+  const classNameDef = `flex flex-col w-full h-fit p-2 ${className}`
+  console.log(classNameDef)
 
   return(
     <form

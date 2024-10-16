@@ -60,6 +60,7 @@ const Input = forwardRef(({
           text-right
           block w-full
           px-2 pb-[3px] pt-[20px]
+          h-[46px]
           border-0 border-b-2 border-gray-300
           focus:outline-none focus:ring-0
           focus:border-slate-400 peer

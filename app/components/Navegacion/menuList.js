@@ -16,6 +16,7 @@ export const menuListHorizontal = [
   { menu: "Home", href: "/", subMenu: [] },
   { menu: "Listados", href: "/venta", subMenu: [
     { menu: "Productos", href: "/listadoProductos" },
+    { menu: "Productos x proveedor", href: "/productosProveedor" },
     { menu: "Busqueda", href: "/buscarEnGoogle" },
   ] },
   { menu: "Ventas", href: "/venta", subMenu: [

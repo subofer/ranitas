@@ -68,6 +68,19 @@ const tiposBotones ={
     rounded
     focus:outline-none
     focus:shadow-outline
+  `,
+  inline:`
+    inline-block
+    flex items-center justify-center
+    h-full
+    px-4 py-2
+    bg-slate-500
+    text-white
+    font-semibold
+    rounded
+    hover:bg-slate-600
+    transition duration-200
+    focus:outline-none focus:ring-2 focus:ring-slate-400
   `
 };
 

@@ -15,7 +15,7 @@ const Switch = ({ name, value, label, seconLabel, onChange }) => {
     onChange?.({ name, value: inputRef.current.checked, type: "checkbox" });
   };
 
-  useHotkey([' '], refPadre, handleOnClick);
+  //useHotkey([' '], refPadre, handleOnClick, true);
   useHotkey(['Enter'], refPadre, handleOnClick);
   useHotkey(['ArrowRight'], refPadre, handleOnClick);
   useHotkey(['ArrowLeft'], refPadre, handleOnClick);

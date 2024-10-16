@@ -6,8 +6,6 @@ import { revalidatePath } from 'next/cache'
 const revalidarProductos = () => revalidatePath("/cargarProductos");
 
 export async function guardarProducto(formData) {
-  console.log("aca", formData)
-  // Transformación de datos básicos
   const transformedData = {
     codigoBarra: formData.codigoBarra,
     descripcion: formData.descripcion,
@@ -19,43 +17,52 @@ export async function guardarProducto(formData) {
     nombre: textos.mayusculas.primeras(formData.nombre),
   };
 
-  if(!transformedData.codigoBarra){
-    return { error: true, msg:"Falta codigo de barras", data: null };
-  }
+  const relaciones = { update: {}, create: {} };
 
-  const relaciones = { update:{}, create:{} }
-
-  // Preparación de los datos de relaciones
   if (formData.precioActual) {
     relaciones.create.precios = {
       create: [{ precio: transformedData.precioActual }],
     };
-    relaciones.update.precios = {
-      ...relaciones.create.precios,
-    };
+    relaciones.update.precios = relaciones.create.precios;
   }
 
   if (formData.categorias) {
     relaciones.create.categorias = {
-      connect: formData.categorias.map(({id}) => ({id})),
+      connect: formData.categorias.map(({ id }) => ({ id })),
     };
-    relaciones.update.categorias = {
-      set: [],
-      ...relaciones.create.categorias,
-    };
+    relaciones.update.categorias = relaciones.create.categorias;
   }
 
-  if (formData.proveedores) {
+  if (formData.proveedores.length > 0) {
+    const proveedoresValidos = formData.proveedores.map(p => p.proveedor).filter(p => p.id); // Solo con ID
+
     relaciones.create.proveedores = {
-      connect: formData.proveedores.map(({id}) => ({id})),
+      connectOrCreate: proveedoresValidos.map(({ id, codigoProveedor }) => ({
+        where: {
+          proveedorId_productoId: {
+            proveedorId: id, // Usa el ID del proveedor
+            productoId: formData.id || productoId, // Usa el ID del producto
+          },
+        },
+        create: {
+          proveedor: { connect: { id } }, // Conectá el proveedor existente
+          codigo: codigoProveedor || formData.nombre, // Usá el código o el nombre del producto
+        },
+      })),
     };
-    relaciones.update.proveedores = {
-      set: [],
-      ...relaciones.create.proveedores,
-    };
+    relaciones.update.proveedores = relaciones.create.proveedores;
   }
 
   try {
+    // Paso 1: Eliminar relaciones de proveedores anteriores que no están en el form
+    await prisma.productoProveedor.deleteMany({
+      where: {
+        productoId: formData.id,
+        proveedorId: { notIn: formData.proveedores.map(p => p.proveedor.id) }
+      }
+    });
+
+    // Paso 2: Upsert del producto
     const producto = await prisma.productos.upsert({
       where: { codigoBarra: formData.codigoBarra },
       update: {
@@ -69,12 +76,9 @@ export async function guardarProducto(formData) {
       include: {
         categorias: true,
         precios: true,
-        proveedores: true,
+        proveedores: true, // Esto incluye los códigos por proveedor
       },
     });
-
-
-
 
     return { error: false, msg: "Producto procesado con éxito", data: producto };
   } catch (error) {
@@ -88,6 +92,14 @@ export async function guardarProducto(formData) {
     revalidarProductos();
   }
 }
+
+
+
+
+
+
+
+
 
 export async function guardarProductoBuscado(productObject) {
   const response = await guardarProducto(productObject)

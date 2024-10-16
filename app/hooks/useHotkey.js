@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-const useHotkey = (keys, ref = null, handleKeyDown = null) => {
+const useHotkey = (keys, ref = null, handleKeyDown = null, focusRequired = false) => {
   const internalRef = useRef(null);
   const targetRef = ref || internalRef;
 
@@ -10,10 +10,11 @@ const useHotkey = (keys, ref = null, handleKeyDown = null) => {
         if (key.toLowerCase() === 'control') return event.ctrlKey;
         if (key.toLowerCase() === 'shift') return event.shiftKey;
         if (key.toLowerCase() === 'alt') return event.altKey;
-        return event.key.toLowerCase() === key.toLowerCase();
+        return event.key?.toLowerCase() === key.toLowerCase();
       });
+      const shouldTrigger = !focusRequired || (focusRequired && document.activeElement === targetRef.current);
 
-      if (keyCombo) {
+      if (keyCombo && shouldTrigger) {
         event.preventDefault();
         if (targetRef && targetRef.current) {
           targetRef.current.focus();
@@ -32,6 +33,6 @@ const useHotkey = (keys, ref = null, handleKeyDown = null) => {
   }, [keys, targetRef, handleKeyDown]);
 
   return targetRef;
-};
+}; 
 
 export default useHotkey;
