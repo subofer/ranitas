@@ -35,13 +35,13 @@ export async function guardarProducto(formData) {
 
   if (formData.proveedores.length > 0) {
     const proveedoresValidos = formData.proveedores.map(p => p.proveedor).filter(p => p.id); // Solo con ID
-
+    console.log('proveedoresValidos', proveedoresValidos)
     relaciones.create.proveedores = {
       connectOrCreate: proveedoresValidos.map(({ id, codigoProveedor }) => ({
         where: {
           proveedorId_productoId: {
             proveedorId: id, // Usa el ID del proveedor
-            productoId: formData.id || productoId, // Usa el ID del producto
+            productoId: formData.id
           },
         },
         create: {

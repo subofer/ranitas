@@ -98,8 +98,8 @@ const Button = ({suspense, children, loading = false, className, tipo = "default
       ${tiposBotones[tipo]}
       ${className ? className : ""}
     ` }
-    { ...props }
     disabled={loading}
+    { ...props }
   >
   <span className="flex justify-center text-justify tex">
     {children}

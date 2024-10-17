@@ -12,6 +12,7 @@ import { showImagenProducto } from "../productos/showImagenProducto";
 import { guardarFacturaCompra } from "@/prisma/serverActions/documentos";
 import FormTitle from "../formComponents/Title";
 import Switch from "../formComponents/Switch";
+import { obtenerProductosPorProveedor } from "@/prisma/serverActions/proveedores";
 
 const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   const [guardando, setGuardando] = useState(false);
@@ -29,11 +30,36 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
     setFormData(blankForm)
   }
 
-  const optionProductosFiltradoPorProveedor = useMemo(() => ({
+  const [optionProductosFiltradoPorProveedor, setProductosProveedor] = useState({options:[]});
+
+  const optionProductosFiltradoPorProveedor2 = useMemo(() => ({
     options: productosProps.options.filter(({ proveedores }) =>
       formData.idProveedor && proveedores.some(({ proveedorId }) => proveedorId === formData.idProveedor)
     )
   }), [productosProps, formData.idProveedor]);
+  
+  useEffect(() => {
+    const fetchProductos = async () => {
+      if (formData.idProveedor) {
+        const productos = await obtenerProductosPorProveedor(formData.idProveedor);
+        console.log(productos)
+        const newList = productos.map(({producto, ...resto}) => (
+          {
+            ...producto,
+            ...resto,
+            nombre: `${resto.codigo} -/- ${producto.nombre}`
+          }
+        ))
+        setProductosProveedor({options:newList});
+        console.log(newList)
+        console.log(optionProductosFiltradoPorProveedor2)
+      }
+    };
+  
+    fetchProductos();
+  }, [formData.idProveedor, optionProductosFiltradoPorProveedor2]);
+
+
 
 
   const handleInputChange = useCallback(({name, value}) => {
@@ -51,9 +77,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
     updated[index].item = item
     setFormData((prev) => ({ ...prev, detalles: updated }));
   }
-  useEffect(() => {
-    console.log('aca la formaData', formData)
-  },[formData])
+
 
   const handleAgregarDetalle = useCallback(() => {
     setFormData(({detalles, ...prev}) => ({

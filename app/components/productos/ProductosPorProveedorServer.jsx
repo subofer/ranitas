@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 export default function ProductosPorProveedorServer({ proveedorId }) {
   const [productos, setProductos] = useState([]);
+  
   const refreshData = useCallback( async () => {
     setProductos(await obtenerProductosPorProveedor(proveedorId));
   },[proveedorId])
@@ -13,20 +14,20 @@ export default function ProductosPorProveedorServer({ proveedorId }) {
     refreshData()
   },[refreshData])
 
-  useEffect(() => {
-    console.log(productos)
-  },[productos])
-
-
   return (
     <div>
       <h2>Productos del Proveedor</h2>
       <ul>
         {productos.map(({ codigo, producto }) => (
           <li key={producto.id}>
-            Nombre Propio: {producto.nombre}<br/>
-            Nombre del Proveedor: {codigo}<br/>
-            <EditarCodigoForm dale={refreshData} codigo={codigo} proveedorId={proveedorId} producto={producto} />
+            Nombre Propio: {producto.nombre} <br/>
+            Nombre del Proveedor: {codigo} <br/>
+            <EditarCodigoForm 
+              after={refreshData}
+              codigo={codigo}
+              proveedorId={proveedorId}
+              producto={producto}
+              />
           </li>
         ))}
       </ul>

@@ -1,4 +1,5 @@
 "use server";
+/*
 import { getlastDocumentosVenta } from "../consultas/documentos";
 import prisma from "../prisma";
 
@@ -56,3 +57,4 @@ export async function guardarVentaConStock({imagen, ...detalleVenta}) {
 
   return facturaCreada;
 }
+*/

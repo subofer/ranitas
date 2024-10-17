@@ -78,11 +78,10 @@ export const CargaProductoBuscadorClient = () => {
       return await handleGuardar();
     } else {
       alertaCrearCodigoDeBarras(formData, async () => {
-        setFormData(async (prev) => {
-          const updatedFormData = { ...prev, codigoBarra: await generateBarCode(formData)};
-          handleGuardar(updatedFormData);
-          return updatedFormData;
-        });
+        const generarCodigoDeBarras = await generateBarCode(formData)
+        const newFormData = { ...formData, codigoBarra: generarCodigoDeBarras}
+        setFormData(newFormData)
+        handleGuardar(newFormData);
       });
     }
   };
@@ -306,13 +305,6 @@ export const CargaProductoBuscadorClient = () => {
           */}
         </div>
             <div className='hidden w-0 h-0'>``
-      </div>
-
-      <div className="etiqueta">
-        <div className="nombre">Nombre del Producto</div>
-        <div className="codigo">Código de Barras</div>
-        <div className="precio">Precio: $XX.XX</div>
-        <div className="precioKg">Precio por Kg: $XX.XX</div>
       </div>
     </FormCard>
   );

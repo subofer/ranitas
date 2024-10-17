@@ -82,7 +82,7 @@ const QrReader = ({ onScan, onError }) => {
     } catch (error) {
       onError(error);
     }
-  }, [onScan, onError, stopScanner]);
+  }, [isMobile, isHttps, onScan, stopScanner, onError]);
 
   useEffect(() => {
     const modalElement = document.getElementById("modalUnico");

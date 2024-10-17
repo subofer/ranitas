@@ -27,9 +27,6 @@ const Input = forwardRef(({
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
       !doOnEnter && e.preventDefault();
-      console.log('e.key', e.key)
-    } else {
-      console.log('e.key', e.key)
     }
   };
 

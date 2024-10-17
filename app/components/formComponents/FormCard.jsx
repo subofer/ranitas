@@ -33,9 +33,6 @@ export const FormCard = ({
     ...formControl
   } = useFormControl(action);
 
-  const classNameDef = `flex flex-col w-full h-fit p-2 ${className}`
-  console.log(classNameDef)
-
   return(
     <form
       className={`flex flex-col w-full h-fit p-2 ${className}`}
