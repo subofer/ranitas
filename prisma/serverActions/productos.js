@@ -11,20 +11,11 @@ export async function guardarProducto(formData) {
     descripcion: formData.descripcion,
     unidad: formData.unidad,
     imagen: formData.imagen,
-    stock: parseInt(formData.stock) || 0,
     size: parseFloat(formData.size) || null,
-    precioActual: parseFloat(formData.precioActual) || 0,
     nombre: textos.mayusculas.primeras(formData.nombre),
   };
 
   const relaciones = { update: {}, create: {} };
-
-  if (formData.precioActual) {
-    relaciones.create.precios = {
-      create: [{ precio: transformedData.precioActual }],
-    };
-    relaciones.update.precios = relaciones.create.precios;
-  }
 
   if (formData.categorias) {
     relaciones.create.categorias = {
@@ -35,7 +26,6 @@ export async function guardarProducto(formData) {
 
   if (formData.proveedores.length > 0) {
     const proveedoresValidos = formData.proveedores.map(p => p.proveedor).filter(p => p.id); // Solo con ID
-    console.log('proveedoresValidos', proveedoresValidos)
     relaciones.create.proveedores = {
       connectOrCreate: proveedoresValidos.map(({ id, codigoProveedor }) => ({
         where: {
@@ -54,7 +44,6 @@ export async function guardarProducto(formData) {
   }
 
   try {
-    // Paso 1: Eliminar relaciones de proveedores anteriores que no están en el form
     await prisma.productoProveedor.deleteMany({
       where: {
         productoId: formData.id,
@@ -62,7 +51,6 @@ export async function guardarProducto(formData) {
       }
     });
 
-    // Paso 2: Upsert del producto
     const producto = await prisma.productos.upsert({
       where: { codigoBarra: formData.codigoBarra },
       update: {
@@ -75,7 +63,6 @@ export async function guardarProducto(formData) {
       },
       include: {
         categorias: true,
-        precios: true,
         proveedores: true, // Esto incluye los códigos por proveedor
       },
     });

@@ -34,9 +34,7 @@ export const CargaProductoBuscadorClient = () => {
     descripcion: '',
     size: '',
     unidad: '',
-    precioActual: '',
     imagen: '',
-    stock: '',
     proveedores: [],
     categorias: [],
   }), []);
@@ -219,26 +217,6 @@ export const CargaProductoBuscadorClient = () => {
               />
             </div>
           </div>
-
-          <div className="col-span-full lg:col-span-1">
-            <Input
-              name="stock"
-              label="Stock"
-              placeholder="cantidad"
-              onChange={handleInputChange}
-              value={formData.stock}
-            />
-          </div>
-
-          <div className="col-span-full lg:col-span-1">
-            <Input
-              name="precioActual"
-              label="Precio"
-              placeholder="Ingrese el precio Actual"
-              onChange={handleInputChange}
-              value={formData.precioActual}
-            />
-          </div>
           <div className="col-span-full lg:col-span-2">
             <Switch
               name={"formatoVenta"}
@@ -297,14 +275,6 @@ export const CargaProductoBuscadorClient = () => {
           </div>
         </div>
 
-      </div>
-      <div className='bg-slate-100 p-10 w-full h-[200px] hidden'>
-          {/**
-          <LineChart data={formData?.precios} />
-          Solo para que no cargue por ahora
-          */}
-        </div>
-            <div className='hidden w-0 h-0'>``
       </div>
     </FormCard>
   );

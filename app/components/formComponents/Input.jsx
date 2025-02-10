@@ -21,6 +21,8 @@ const Input = forwardRef(({
 
   const handleOnChange = ({ target: { name, value } } = {}) => {
    const newValue = type == "checkbox" ? (value == "on" ? true : false) : value
+   const isFormula = value?.startsWith("=")
+   console.log("isFormula", isFormula)
    onChange && onChange({name, value: newValue, type});
   }
 

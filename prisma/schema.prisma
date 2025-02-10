@@ -22,21 +22,30 @@ model Productos {
   descripcion      String?
   imagen           String?
   tipoVenta        TipoVenta           @default(UNIDAD)
-  precioActual     Float               @default(0)
   size             Float?
-  stock            Int                 @default(0)
   unidad           String?
   detalleDocumento DetalleDocumento[]
   precios          Precios[]
   proveedores      ProductoProveedor[]
   categorias       Categorias[]        @relation("CategoriasToProductos")
+  presentaciones   Presentaciones[]
+}
+
+model Presentaciones {
+  id              String        @id @default(uuid())
+  createdAt       DateTime      @default(now())
+  nombre          String
+  cantidadUnidad  Float
+  unidadMedida    String
+  productoId      String
+  producto        Productos      @relation(fields: [productoId], references: [id])
 }
 
 model ProductoProveedor {
+  createdAt   DateTime  @default(now())
   productoId  String
   proveedorId String
   codigo      String
-  createdAt   DateTime  @default(now())
   producto    Productos @relation(fields: [productoId], references: [id])
   proveedor   Contactos @relation(fields: [proveedorId], references: [id])
   @@id([proveedorId, productoId])
