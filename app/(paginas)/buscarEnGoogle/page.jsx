@@ -17,7 +17,7 @@ export default function PageBusquedaProductosEnGoogle() {
     setError({})
     setLoading(true)
     if(code.length >= 8){
-      setProductosGoogle({...await buscarPorCodigoDeBarras(code)}.mejoresResultados)
+      setProductosGoogle({...(await buscarPorCodigoDeBarras(code))}.mejoresResultados)
     } else {
       setYaSeBusco(true)
       setError((prev) => ({

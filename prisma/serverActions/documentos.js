@@ -107,37 +107,37 @@ export async function guardarDocumentoConStock(formData, tipoMovimiento, tipoDoc
     await Promise.all(
       factura.detalle.map(async (detalle) => {
 
-          guardaPrecio && await prisma.precios.create({
+          guardaPrecio && (await prisma.precios.create({
             data: {
               idProducto: detalle.idProducto,
               precio: detalle.precioUnitario,
             },
-          });
+          }));
 
-          sumaStock && await prisma.productos.update({
+          sumaStock && (await prisma.productos.update({
             where: { id: detalle.idProducto },
             data: {
               stock: {
                 increment: detalle.cantidad,
               },
             },
-          });
+          }));
 
-          restaStock && await prisma.productos.update({
+          restaStock && (await prisma.productos.update({
             where: { id: detalle.idProducto },
             data: {
               stock: {
                 decrement: detalle.cantidad,
               },
             },
-          });
+          }));
 
-          seteaStock && await prisma.productos.update({
+          seteaStock && (await prisma.productos.update({
             where: { id: detalle.idProducto },
             data: {
               stock: detalle.cantidad,
             },
-          });
+          }));
 
       })
     );

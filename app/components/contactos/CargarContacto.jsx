@@ -113,7 +113,7 @@ export default function CargarContacto() {
   useEffect(() => {
     async function completarConCuit() {
       setBuscando(true)
-      const contactoEncontrado = {...await getContactoByCuit(cuitIngresado)}
+      const contactoEncontrado = {...(await getContactoByCuit(cuitIngresado))}
       contactoEncontrado.cuit !== cuitIngresado
         ? handleReset()
         : setFormData({

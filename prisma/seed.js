@@ -139,14 +139,14 @@ const cargarGeoRef = async () => {
     const provinciasData = JSON.parse(readFileSync(`${process.cwd()}/prisma/geoRef/provincias.json`, 'utf8'));
     console.log('Provincias totales: ', provinciasData.length)
     provinciasData.forEach(async (item) =>
-      cargar.provincias && await prisma.provincias.create({
+      cargar.provincias && (await prisma.provincias.create({
         data: {
           id: `${item.id}`,
           nombre: textos.mayusculas.primeras(item.nombre),
           nombreCompleto: item.nombre_completo,
           isoId: item.iso_id,
         }
-    }));
+    })));
 
     // Cargar y crear Localidades
     const localidadesData = JSON.parse(readFileSync(`${process.cwd()}/prisma/geoRef/localidades.json`, 'utf8'));
@@ -155,7 +155,7 @@ const cargarGeoRef = async () => {
       const indices = localidadesData.map(({nombre}, index) => pepin.includes(nombre) ? index: null).filter(Boolean)
       indices.forEach(indice => localidadesData[indice].centroide = localidadesData[indice-1].centroide)
 
-      cargar.localidades && await prisma.localidades.createMany({
+      cargar.localidades && (await prisma.localidades.createMany({
         data: localidadesData.map((item, index) => ({
           id: `${item.id}`,
           nombre: textos.mayusculas.primeras(item.nombre),
@@ -166,9 +166,9 @@ const cargarGeoRef = async () => {
           nombreLocalidadCensal: item.localidad_censal.nombre,
         })),
         skipDuplicates: true,
-     });
+     }));
 
-     cargar.calles && await cargarCalles();
+     cargar.calles && (await cargarCalles());
 
   }catch (e){
     console.error(e);
