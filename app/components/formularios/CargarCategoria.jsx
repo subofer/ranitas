@@ -20,8 +20,8 @@ const cargarCategorias = {
     }
   ],
 };
-
-export const CargarCategoria = () => {
+    
+export const CargarCategoria = async () => {
   return (
     <FormCard {...cargarCategorias.props} formlength={cargarCategorias.inputs.length}>
       {cargarCategorias.inputs.map(({ Component, ...props }, i) => (

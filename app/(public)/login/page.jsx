@@ -1,5 +1,4 @@
 "use client"
-import Draggable from 'react-draggable'; // The default
 import Button from '@/app/components/formComponents/Button'
 import Input from '@/app/components/formComponents/Input'
 import { redirect } from 'next/navigation';
@@ -30,12 +29,7 @@ export default function Pagelogin() {
 
   return (
     <main className='flex flex-col container w-full max-w-full h-screen max-h-screen justify-center align-middle'>
-      <Draggable
-          onStart={() => setLoading(true)}
-          onStop={() => setLoading(false)}
-          grid={[10, 10]}
-          cancel={"input, button"}
-      >
+
         <form action={handleLogin}
           className='
             flex
@@ -79,7 +73,7 @@ export default function Pagelogin() {
             Ingresar
           </Button>
         </form>
-      </Draggable>
+
     </main>
   )
 }

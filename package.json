@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "devOrigin": "next dev",
+    "devOrigin": "next dev --turbo",
     "dev": "sudo docker compose up -d && next dev",
+    "devt": "sudo docker compose up -d && next dev --turbo",
     "secureDev": "sudo docker compose up -d && node serverLocal.js",
     "build": "prisma generate && next build",
     "start": "next start",

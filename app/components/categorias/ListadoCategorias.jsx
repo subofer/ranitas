@@ -11,6 +11,7 @@ const ListadoCategorias = async (props) => {
     {ordenable: true, titulo:'Cantidad'},
     {ordenable: true, titulo:'Nombre'},
     {titulo:''}]
+
   const categorias = await getCategoriasConteo()
 
   return (

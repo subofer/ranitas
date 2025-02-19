@@ -20,9 +20,9 @@ const Icon = ({className, rotate, children, icono, type = "button", regular, sus
     { ...props }
   >
     <div className="flex flex-row align-middle">
-    <div className="flex h-full w-fit my-auto mx-auto align-middle">
-      <i className={`h-full ${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${rotate ? 'rotate-180' : 'rotate-0'}`}/>
-    </div>
+      <div className="flex h-full w-fit my-auto mx-auto align-middle">
+        <i className={`h-full ${regular?"fa-regular":"fa-solid"} fa-${icons(icono)} ${rotate ? 'rotate-180' : 'rotate-0'}`}/>
+      </div>
       <div className={`${children ? "ml-1 align-top" : ""}`}>
         {children}
       </div>
