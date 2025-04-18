@@ -90,6 +90,7 @@ export const upsertContacto = async (data) => {
   const posibleCuit = data?.id ? `${data?.cuit}`.replace(/-/g, '') : "CUITFALSO123"
   console.log('posibleId -> ', posibleId)
   console.log('posibleCuit -> ', posibleCuit)
+
   let result;
   try{
     result = await prisma.contactos.upsert({

@@ -37,11 +37,26 @@ const seedUsuarios = async () => {
 
 const seedCategorias = async () => {
   const categoriasPorDefecto = [
-    'Frutas secas',
-    'Cereales',
-    'Harinas',
-    'Semillas',
-    'Especias'
+    'Cereales y granos',
+    'Legumbres',
+    'Frutos secos y semillas',
+    'Harinas y premezclas',
+    'Edulcorantes naturales',
+    'Azúcares y mieles',
+    'Superalimentos',
+    'Productos sin gluten',
+    'Productos sin lactosa',
+    'Aceites y vinagres',
+    'Snacks saludables',
+    'Frutas deshidratadas',
+    'Suplementos y proteínas',
+    'Tés e infusiones',
+    'Especias y condimentos',
+    'Productos orgánicos',
+    'Productos veganos',
+    'Chocolates y cacao',
+    'Pastas y fideos integrales',
+    'Panificados y galletas saludables'
   ];
 
   for (const nombre of categoriasPorDefecto) {
@@ -236,9 +251,10 @@ const seed = async (semillero) => {
 };
 
 await seed([
+  /*
   seedUsuarios,
+  cargarGeoRef,
+  seedProveedores
+  */
   seedCategorias,
-  //cargarGeoRef,
-  //seedProveedores
 ]);
-

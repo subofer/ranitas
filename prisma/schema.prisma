@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+   seed = "prisma/seed.mjs"
 }
 
 datasource db {
@@ -105,6 +106,7 @@ model Contactos {
   documentosRecibidos Documentos[]        @relation("ReceptorDocumento")
   emails              Emails[]
   productos           ProductoProveedor[]
+  cuentaBancaria      CuentaBancaria[]
 }
 
 model Usuarios {
@@ -173,6 +175,16 @@ model Calles {
   Direcciones       Direcciones[]
 }
 
+model CuentaBancaria {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  idContacto  String
+  banco       String
+  cbu         String
+  alias       String
+  contacto    Contactos @relation(fields: [idContacto], references: [id])
+}
+
 enum TipoMovimiento {
   ENTRADA
   SALIDA
@@ -189,4 +201,13 @@ enum TipoDocumento {
   REMITO
   PRESUPUESTO
   CONTEO
+}
+
+enum FormaPago {
+  EFECTIVO
+  TARJETA_CREDITO
+  TARJETA_DEBITO
+  TRANSFERENCIA
+  CHEQUE
+  CUENTA_CORRIENTE
 }
