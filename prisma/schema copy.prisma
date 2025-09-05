@@ -1,0 +1,291 @@
+enum Crud {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+model Auditoria {
+  id                String              @id @default(uuid())
+  createdAt         DateTime            @default(now())
+  createdById       String
+  detalle           String?
+  operacion         Crud
+  tabla             String
+
+  createdBy         Contactos           @relation("ContactoCreador", fields: [createdById], references: [id])
+// relaciones a todas las tablas. mantener Aud+relacion
+  categoria         Categorias?         @relation("AudCategoria")
+  producto          Productos?          @relation("AudProducto")
+  presentacion      Presentaciones?     @relation("AudPresentacion")
+  variedades        Variedades?         @relation("AudVariedades")
+  precio            Precios?            @relation("AudPrecio")
+  productoProveedor ProductoProveedor?  @relation("AudProdProv")
+  documento         Documentos?         @relation("AudDocumento")
+  detalleDocumento  DetalleDocumento?   @relation("AudDetDoc")
+  contacto          Contactos?          @relation("AudContacto")
+  usuario           Usuarios?           @relation("AudUsuario")
+  email             Emails?             @relation("AudEmail")
+  direccion         Direcciones?        @relation("AudDireccion")
+  provincia         Provincias?         @relation("AudProvincia")
+  localidad         Localidades?        @relation("AudLocalidad")
+  calle             Calles?             @relation("AudCalle")
+  cuentaBancaria    CuentaBancaria?     @relation("AudCuenta")
+}
+
+model Categorias {
+  id          String     @id @default(uuid())
+  auditoriaId String     @unique
+  auditoria   Auditoria  @relation("AudCategoria", fields: [auditoriaId], references: [id])
+
+  nombre      String     @unique
+  detalles    String?
+  productos   Productos[] @relation("CategoriasToProductos")
+}
+
+model Productos {
+  id               String              @id @default(uuid())
+  auditoriaId      String              @unique
+  auditoria        Auditoria           @relation("AudProducto", fields: [auditoriaId], references: [id])
+
+  nombre           String
+  detalles         String?
+  categorias       Categorias[]        @relation("CategoriasToProductos")
+  variedades       Variedades[]        @relation("VariedadesToProductos")
+}
+
+
+model Variedades {
+  id              String      @id @default(uuid())
+  auditoriaId     String      @unique
+  auditoria       Auditoria   @relation("AudVariedades", fields: [auditoriaId], references: [id])
+
+  nombre          String
+  cantidadUnidad  Float
+  unidadMedida    String
+
+  productoId      String
+  producto        Productos? @relation("VariedadesToProductos", fields: [productoId], references: [id])
+
+
+  presentaciones  Presentaciones[] @relation("VariedadesToPresentaciones")
+
+}
+
+model Presentaciones {
+  id              String      @id @default(uuid())
+  auditoriaId     String      @unique
+  auditoria       Auditoria   @relation("AudPresentacion", fields: [auditoriaId], references: [id])
+
+  nombre          String
+  detalles        String
+  cantidad        String
+  multiplicador   Float
+
+  variedades      Variedades[] @relation("VariedadesToPresentaciones")
+}
+
+
+model ProductoProveedor {
+  auditoriaId       String      @unique
+  auditoria         Auditoria   @relation("AudProdProv", fields: [auditoriaId], references: [id])
+  proveedor         Contactos        @relation(fields: [proveedorId], references: [id])
+
+  nombre            String
+  proveedorId       String
+
+  presentacionId    String
+  variedadId        String
+
+
+
+  @@id([proveedorId, variedadId])
+}
+
+model Precios {
+  id          Int        @id @default(autoincrement())
+  auditoriaId String     @unique
+  auditoria   Auditoria  @relation("AudPrecio", fields: [auditoriaId], references: [id])
+
+  precio      Float
+  idProducto  String
+
+}
+
+model Documentos {
+  id              String             @id @default(uuid())
+  auditoriaId     String             @unique
+  auditoria       Auditoria          @relation("AudDocumento", fields: [auditoriaId], references: [id])
+
+  idContacto      String
+  idDestinatario  String
+  numeroDocumento String
+  fecha           DateTime
+  tieneImpuestos  Boolean            @default(false)
+  tipoDocumento   TipoDocumento
+  tipoMovimiento  TipoMovimiento
+  total           Float              @default(0)
+  detalle         DetalleDocumento[]
+  emisor          Contactos          @relation("EmisorDocumento", fields: [idContacto], references: [id])
+  receptor        Contactos          @relation("ReceptorDocumento", fields: [idDestinatario], references: [id])
+
+  @@unique([idContacto, numeroDocumento])
+}
+
+model DetalleDocumento {
+  id             String       @id @default(uuid())
+  auditoriaId    String       @unique
+  auditoria      Auditoria    @relation("AudDetDoc", fields: [auditoriaId], references: [id])
+
+  docRelacionado String
+  idProducto     String
+  cantidad       Int
+  precioUnitario Float
+  documento      Documentos   @relation(fields: [docRelacionado], references: [id])
+
+}
+
+model Contactos {
+  id                  String              @id @default(uuid())
+  auditoriaId         String              @unique
+  auditoria           Auditoria           @relation("AudContacto", fields: [auditoriaId], references: [id])
+
+  cuit                String              @unique
+  nombre              String              @unique
+  telefono            String              @default("0800-completar-telefono")
+  persona             String?
+  iva                 String?
+  esInterno           Boolean             @default(false)
+  esProveedor         Boolean             @default(false)
+  esMarca             Boolean             @default(false)
+
+  auditoriasCreadas   Auditoria[]         @relation("ContactoCreador")
+  direcciones         Direcciones[]
+  documentosEmitidos  Documentos[]        @relation("EmisorDocumento")
+  documentosRecibidos Documentos[]        @relation("ReceptorDocumento")
+  emails              Emails[]
+  productos           ProductoProveedor[]
+  cuentaBancaria      CuentaBancaria[]
+}
+
+model Usuarios {
+  id          String     @id @default(uuid())
+  auditoriaId String     @unique
+  auditoria   Auditoria  @relation("AudUsuario", fields: [auditoriaId], references: [id])
+
+  nombre      String     @unique
+  password    String
+  nivel       Int        @default(1)
+  email       String?    @unique
+}
+
+model Emails {
+  id          String     @id @default(uuid())
+  auditoriaId String     @unique
+  auditoria   Auditoria  @relation("AudEmail", fields: [auditoriaId], references: [id])
+
+  email       String     @unique
+  idContacto  String
+  contacto    Contactos  @relation(fields: [idContacto], references: [id])
+}
+
+model Direcciones {
+  id                String       @id @default(uuid())
+  auditoriaId       String       @unique
+  auditoria         Auditoria    @relation("AudDireccion", fields: [auditoriaId], references: [id])
+
+  idContacto        String
+  idProvincia       String?
+  idLocalidad       String?
+  depto             String?
+  detalles          String?
+  idCalle           String?
+  idLocalidadCensal String?
+  numeroCalle       Int?
+  piso              String?
+  calle             Calles?      @relation(fields: [idCalle], references: [id])
+  contacto          Contactos    @relation(fields: [idContacto], references: [id])
+  localidad         Localidades? @relation(fields: [idLocalidad], references: [id])
+  provincia         Provincias?  @relation(fields: [idProvincia], references: [id])
+}
+
+model Provincias {
+  id             String       @id
+  auditoriaId    String       @unique
+  auditoria      Auditoria    @relation("AudProvincia", fields: [auditoriaId], references: [id])
+
+  nombre         String
+  nombreCompleto String
+  isoId          String
+  calles         Calles[]
+  Direcciones    Direcciones[]
+  localidades    Localidades[]
+}
+
+model Localidades {
+  id                    String       @id
+  auditoriaId           String       @unique
+  auditoria             Auditoria    @relation("AudLocalidad", fields: [auditoriaId], references: [id])
+
+  nombre                String
+  idProvincia           String
+  nombreLocalidadCensal String
+  idDepartamento        String?
+  idLocalidadCensal     String
+  idMunicipio           String?
+  Direcciones           Direcciones[]
+  provincia             Provincias   @relation(fields: [idProvincia], references: [id])
+}
+
+model Calles {
+  id                String       @id
+  auditoriaId       String       @unique
+  auditoria         Auditoria    @relation("AudCalle", fields: [auditoriaId], references: [id])
+
+  nombre            String
+  categoria         String
+  idProvincia       String
+  alturas           String
+  idLocalidadCensal String
+  provincia         Provincias   @relation(fields: [idProvincia], references: [id])
+  Direcciones       Direcciones[]
+}
+
+model CuentaBancaria {
+  id          String     @id @default(uuid())
+  auditoriaId String     @unique
+  auditoria   Auditoria  @relation("AudCuenta", fields: [auditoriaId], references: [id])
+
+  idContacto  String
+  banco       String
+  cbu         String
+  alias       String
+  contacto    Contactos  @relation(fields: [idContacto], references: [id])
+}
+
+
+enum TipoMovimiento {
+  ENTRADA
+  SALIDA
+}
+
+enum TipoVenta {
+  GRANEL
+  UNIDAD
+  BULTO
+}
+
+enum TipoDocumento {
+  FACTURA
+  REMITO
+  PRESUPUESTO
+  CONTEO
+}
+
+enum FormaPago {
+  EFECTIVO
+  TARJETA_CREDITO
+  TARJETA_DEBITO
+  TRANSFERENCIA
+  CHEQUE
+  CUENTA_CORRIENTE
+}

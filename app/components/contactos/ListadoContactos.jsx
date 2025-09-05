@@ -1,34 +1,16 @@
 "use server"
+import { getContactosCompletos } from "@/prisma/serverActions/contactos"
+import ListadoContactosCliente from "./ListadoContactosCliente"
 
-import { getContactosCompletos } from "@/prisma/serverActions/contactos";
-import { RenglonTablaContacto } from "./RenglonTablaContacto";
-import { Tabla } from "../Tablas/Tablas ";
-
-const ListadoContactos = async (props) => {
-  const columnas = [
-    'id',
-    'Cuit',
-    'Nombre',
-    'E-mail',
-    'Tipo',
-    'telefono',
-    ''
-  ]
+export default async function ListadoContactos(props) {
+  const columnas = ['id', 'Cuit', 'Nombre', 'E-mail', 'Tipo', 'telefono', '']
   const contactos = await getContactosCompletos()
 
   return (
-    <Tabla
+    <ListadoContactosCliente
       columnas={columnas}
-      titulo={"Contactos"}
+      contactos={contactos}
       {...props}
-    >
-    {
-      contactos.map((p,i) => (
-        <RenglonTablaContacto key={i} item={p}/>
-      ))
-    }
-    </Tabla>
+    />
   )
-};
-
-export default ListadoContactos;
+}

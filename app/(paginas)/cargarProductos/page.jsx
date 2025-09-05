@@ -1,14 +1,11 @@
 "use server"
-import ListadoProductos from "@/app/components/productos/ListadoProductos"
-import { CargaProductoBuscadorClient } from "@/app/components/formularios/CargaProductoBuscadorClient"
+import { Suspense } from 'react'
+import CargarProductosPage from './CargarProductosPage'
 
-
-const PageCargarProductos = async () => {
+export default async function Page() {
   return (
-      <section className="flex flex-col gap-3 lg:max-w-[1600px] mx-auto flex-grow w-full h-full">
-        <CargaProductoBuscadorClient/>
-        <ListadoProductos/>
-      </section>
-  );
-};
-export default PageCargarProductos;
+    <Suspense fallback={<div>Cargando formulario...</div>}>
+      <CargarProductosPage />
+    </Suspense>
+  )
+}
