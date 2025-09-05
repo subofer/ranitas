@@ -1,0 +1,150 @@
+diff --git a/package.json b/package.json
+index 1234567..89abcde 100644
+--- a/package.json
++++ b/package.json
+@@ -1,20 +1,26 @@
+ {
+   "name": "proyecto",
+   "private": true,
+   "version": "0.1.0",
+   "scripts": {
+-    "dev": "next dev",
+-    "devOrigin": "sudo next dev",
+-    "devt": "next dev -p 4000",
+-    "secureDev": "sudo next dev --hostname 0.0.0.0 --port 3000",
+-    "build": "next build",
+-    "start": "next start",
+-    "lint": "next lint"
++    "dev": "next dev",
++    "build": "prisma generate && next build",
++    "start": "next start",
++    "lint": "next lint",
++    "db:up": "docker compose up -d postgres",
++    "db:down": "docker compose down",
++    "db:psql": "docker exec -it $(docker ps -qf name=postgres) psql -U postgres",
++    "prisma:gen": "prisma generate",
++    "prisma:migrate": "prisma migrate dev",
++    "prisma:deploy": "prisma migrate deploy",
++    "seed": "node scripts/seed.js",
++    "cypress:open": "cypress open",
++    "cypress:run": "cypress run"
+   },
+   "dependencies": {
+     "@prisma/client": "^5.9.1"
+   }
+ }
+ 
+diff --git a/next.config.js b/next.config.js
+index 1111111..2222222 100644
+--- a/next.config.js
++++ b/next.config.js
+@@ -1,3 +1,8 @@
+-const nextConfig = {}
+-module.exports = nextConfig
++/** @type {import('next').NextConfig} */
++const nextConfig = {
++  reactStrictMode: true,
++  experimental: {
++    serverActions: { bodySizeLimit: '4mb' }
++  }
++};
++module.exports = nextConfig
+diff --git a/tailwind.config.js b/tailwind.config.js
+index aaa1111..bbb2222 100644
+--- a/tailwind.config.js
++++ b/tailwind.config.js
+@@ -1,8 +1,20 @@
+- mode: 'jit',
+- module.exports = {
+-  mode: 'jit',
+-  content: ["./app/**/*.{js,jsx,tsx,mdx}", "./components/**/*.{js,jsx,tsx,mdx}", "./pages/**/*.{js,jsx,tsx,mdx}"],
+-  theme: { extend: {} },
+-  plugins: []
+- };
++/** @type {import('tailwindcss').Config} */
++module.exports = {
++  content: [
++    "./app/**/*.{js,jsx,tsx,mdx}",
++    "./components/**/*.{js,jsx,tsx,mdx}",
++    "./pages/**/*.{js,jsx,tsx,mdx}"
++  ],
++  theme: {
++    extend: {
++      backgroundImage: {
++        'gradient-to-r': 'linear-gradient(to right, #6ee7b7 0%, #6ee7b7 50%, #3b82f6 50%, #3b82f6 100%)',
++      },
++      keyframes: {
++        fadeIn: { '0%': { opacity: '0', transform: 'translateY(0)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
++        spin: { from: { transform: 'rotate(360deg)' }, to: { transform: 'rotate(0deg)' } },
++      },
++      animation: { 'fade-in': 'fadeIn 0.3s ease-out forwards', 'spin-slow': 'spin 3s linear infinite' },
++    },
++  },
++  plugins: [require('@tailwindcss/forms')],
++}
+diff --git a/docker-compose.yml b/docker-compose.yml
+index old1111..new2222 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -1,7 +1,20 @@
+ services:
+-  postgres:
+-    image: postgres:14
+-    environment:
+-      POSTGRES_HOST_AUTH_METHOD: trust
+-    ports:
+-      - "5432:5432"
++  postgres:
++    image: postgres:16-alpine
++    environment:
++      POSTGRES_DB: las_ranitas
++      POSTGRES_USER: postgres
++      POSTGRES_PASSWORD: postgres
++    ports:
++      - "5432:5432"
++    volumes:
++      - dbdata:/var/lib/postgresql/data
++    healthcheck:
++      test: ["CMD-SHELL", "pg_isready -U postgres -d las_ranitas"]
++      interval: 5s
++      timeout: 3s
++      retries: 10
++
++volumes:
++  dbdata:
+diff --git a/app/(paginas)/layout.js b/app/(paginas)/layout.js
+index 3333333..4444444 100644
+--- a/app/(paginas)/layout.js
++++ b/app/(paginas)/layout.js
+@@
++"use server";
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 5555555..6666666 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@
+ generator client {
+-  provider = "prisma-client-js"
+-  seed = "prisma/seed.mjs"
++  provider = "prisma-client-js"
+ }
+diff --git a/app/(paginas)/page.jsx b/app/(paginas)/page.jsx
+index 7777777..8888888 100644
+--- a/app/(paginas)/page.jsx
++++ b/app/(paginas)/page.jsx
+@@
+-import DolarHoyServer from "../components/dolarHoy/DolarHoyServer";
++// import DolarHoyServer from "../components/dolarHoy/DolarHoyServer";
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 0000000..abc1234
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,7 @@
++node_modules
++.next
++.git
++coverage
++cypress
++.env*
++

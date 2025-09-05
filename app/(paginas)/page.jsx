@@ -6,7 +6,7 @@ import { deleteContacto } from "@/prisma/serverActions/contactos";
 import convert from "convert"
 import { convertMany } from "convert";
 import Link from "next/link"
-import DolarHoyServer from "../components/dolarHoy/DolarHoyServer";
+// import DolarHoyServer from "../components/dolarHoy/DolarHoyServer";
 
 
 const convertir = (de, a) => {
