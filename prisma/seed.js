@@ -250,9 +250,35 @@ const seed = async (semillero) => {
   }
 };
 
+const seedTiposPresentacion = async () => {
+  const tipos = [
+    { nombre: 'unidad', descripcion: 'Unidad individual' },
+    { nombre: 'caja', descripcion: 'Caja contenedora' },
+    { nombre: 'bolsa', descripcion: 'Bolsa contenedora' },
+    { nombre: 'botella', descripcion: 'Botella individual' },
+    { nombre: 'paquete', descripcion: 'Paquete' },
+    { nombre: 'pallet', descripcion: 'Pallet' },
+    { nombre: 'granel', descripcion: 'A granel' },
+  ];
+
+  for (const tipo of tipos) {
+    try {
+      await prisma.tiposPresentacion.upsert({
+        where: { nombre: tipo.nombre },
+        update: {},
+        create: tipo,
+      });
+      console.log(`Tipo de presentación "${tipo.nombre}" creado o ya existente.`);
+    } catch (error) {
+      console.error(`Error al crear el tipo de presentación "${tipo.nombre}":`, error);
+    }
+  }
+};
+
 await seed([
-  /*
   seedUsuarios,
+  seedTiposPresentacion,
+  /*
   cargarGeoRef,
   seedProveedores
   */

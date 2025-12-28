@@ -1,4 +1,3 @@
-"use server";
 import NavBarHorizontal from '../components/Navegacion/NavBarHorizontal'
 import './globals.css'
 

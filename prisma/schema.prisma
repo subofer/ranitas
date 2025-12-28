@@ -32,14 +32,40 @@ model Productos {
   presentaciones   Presentaciones[]
 }
 
+model TiposPresentacion {
+  id          String          @id @default(uuid())
+  createdAt   DateTime        @default(now())
+  nombre      String          @unique
+  descripcion String?
+  presentaciones Presentaciones[]
+}
+
 model Presentaciones {
-  id              String        @id @default(uuid())
-  createdAt       DateTime      @default(now())
-  nombre          String
-  cantidadUnidad  Float
-  unidadMedida    String
-  productoId      String
-  producto        Productos      @relation(fields: [productoId], references: [id])
+  id                  String                  @id @default(uuid())
+  createdAt           DateTime                @default(now())
+  nombre              String
+  productoId          String
+  tipoPresentacionId  String
+  cantidad            Float
+  unidadMedida        String
+  contenidoPorUnidad  Float?
+  unidadContenido     String?
+  producto            Productos               @relation(fields: [productoId], references: [id])
+  tipoPresentacion    TiposPresentacion      @relation(fields: [tipoPresentacionId], references: [id])
+  contenidas          AgrupacionPresentaciones[] @relation("PresentacionContenida")
+  contenedoras        AgrupacionPresentaciones[] @relation("PresentacionContenedora")
+}
+
+model AgrupacionPresentaciones {
+  id                        String          @id @default(uuid())
+  createdAt                 DateTime        @default(now())
+  presentacionContenidaId  String
+  presentacionContenedoraId String
+  cantidad                  Float
+  presentacionContenida    Presentaciones  @relation("PresentacionContenida", fields: [presentacionContenidaId], references: [id])
+  presentacionContenedora  Presentaciones  @relation("PresentacionContenedora", fields: [presentacionContenedoraId], references: [id])
+  
+  @@unique([presentacionContenidaId, presentacionContenedoraId])
 }
 
 model ProductoProveedor {

@@ -57,6 +57,7 @@ const Input = forwardRef(({
         className={`
           appearance-none
           text-right
+          text-gray-900
           block w-full
           px-2 pb-[3px] pt-[20px]
           h-[46px]

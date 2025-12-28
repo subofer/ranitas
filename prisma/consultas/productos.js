@@ -14,16 +14,7 @@ export const nuevoPrecioProducto = async (idDelProducto, nuevoPrecio) => {
   await prisma.precios.create({
     data: {
       precio: nuevoPrecio,
-      productoId: idDelProducto,
-    },
-  });
-
-  await prisma.productos.update({
-    where: {
-      id: idDelProducto,
-    },
-    data: {
-      precioActual: nuevoPrecio,
+      idProducto: idDelProducto,
     },
   });
 }
@@ -45,6 +36,29 @@ export const getProductos = async () => {
         },
         include: {
           proveedor: true, // Incluir información del proveedor
+        },
+      },
+      presentaciones: {
+        include: {
+          tipoPresentacion: true,
+          contenidas: {
+            include: {
+              presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
+          contenedoras: {
+            include: {
+              presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
         },
       },
     },
@@ -70,6 +84,29 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
       precios: {
         orderBy: {
           createdAt: 'desc',
+        },
+      },
+      presentaciones: {
+        include: {
+          tipoPresentacion: true,
+          contenidas: {
+            include: {
+              presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
+          contenedoras: {
+            include: {
+              presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
         },
       },
     },

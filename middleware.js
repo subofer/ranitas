@@ -4,7 +4,7 @@ import { getSession } from './lib/sesion/sesion'
 export async function middleware(request) {
   const session = await getSession()
   if(session){
-    return NextResponse.rewrite(request.url)
+    return NextResponse.next()
   }else{
     const goNext = request.nextUrl.pathname
     const loginUrl = new URL(`/login?goNext=${goNext}`, request.url)

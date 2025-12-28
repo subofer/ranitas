@@ -101,7 +101,7 @@ const Button = ({suspense, children, loading = false, className, tipo = "default
     disabled={loading}
     { ...props }
   >
-  <span className="flex justify-center text-justify tex">
+  <span className="flex justify-center text-justify text-gray-900">
     {children}
   </span>
   {loading ? <Spinner/> :null }

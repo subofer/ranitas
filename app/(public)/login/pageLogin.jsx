@@ -1,7 +1,7 @@
 "use client"
 import Button from '@/app/components/formComponents/Button'
 import Input from '@/app/components/formComponents/Input'
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { login } from '@/lib/sesion/sesion'
 import useMyParams from '@/app/hooks/useMyParams';
 import { Suspense, useState } from 'react';
@@ -12,18 +12,25 @@ export default function Pagelogin() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const { param } = useMyParams("goNext")
+  const router = useRouter()
   useViewportHeight()
 
-  const handleLogin = async (formData) => {
+  const handleLogin = async (e) => {
+    e.preventDefault()
     setLoading(true)
+    const formData = new FormData(e.target)
     const response = await login(formData)
     setResult(response)
     if(!response.error){
-      redirect(param || "/")
+      // Pequeño delay para asegurar que la cookie se establezca
+      setTimeout(() => {
+        window.location.href = param || "/"
+      }, 100);
+    } else {
+      setTimeout(() => {
+        setLoading(false)
+      }, 500);
     }
-    setTimeout(() => {
-      setLoading(false)
-    }, 500);
   }
   const handleOnChange = () => {
     setResult(null)
@@ -40,11 +47,12 @@ export default function Pagelogin() {
   
   >
 
-        <form action={handleLogin}
+        <form onSubmit={handleLogin}
     className="
     flex flex-col gap-4
     w-fit max-w-sm mx-auto
     bg-slate-400 p-4 px-10 text-center
+    text-gray-900
     rounded-xl shadow-2xl
     max-h-[90dvh] overflow-y-auto   /* sigue limitado */
   "
