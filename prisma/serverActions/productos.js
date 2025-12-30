@@ -24,7 +24,7 @@ export async function guardarProducto(formData) {
     relaciones.update.categorias = relaciones.create.categorias;
   }
 
-  if (formData.proveedores.length > 0) {
+  if (formData.proveedores?.length > 0) {
     const proveedoresValidos = formData.proveedores.map(p => p.proveedor).filter(p => p.id); // Solo con ID
     relaciones.create.proveedores = {
       connectOrCreate: proveedoresValidos.map(({ id, codigoProveedor }) => ({
@@ -41,6 +41,21 @@ export async function guardarProducto(formData) {
       })),
     };
     relaciones.update.proveedores = relaciones.create.proveedores;
+  }
+
+  // Manejar presentaciones
+  if (formData.presentaciones?.length > 0) {
+    relaciones.create.presentaciones = {
+      create: formData.presentaciones.map(presentacion => ({
+        nombre: presentacion.nombre,
+        tipoPresentacionId: presentacion.tipoPresentacionId,
+        cantidad: parseFloat(presentacion.cantidad) || 1,
+        unidadMedida: presentacion.unidadMedida,
+        contenidoPorUnidad: presentacion.contenidoPorUnidad ? parseFloat(presentacion.contenidoPorUnidad) : null,
+        unidadContenido: presentacion.unidadContenido || null,
+      })),
+    };
+    relaciones.update.presentaciones = relaciones.create.presentaciones;
   }
 
   try {
@@ -64,6 +79,29 @@ export async function guardarProducto(formData) {
       include: {
         categorias: true,
         proveedores: true, // Esto incluye los códigos por proveedor
+        presentaciones: {
+          include: {
+            tipoPresentacion: true,
+            contenidas: {
+              include: {
+                presentacionContenida: {
+                  include: {
+                    tipoPresentacion: true,
+                  },
+                },
+              },
+            },
+            contenedoras: {
+              include: {
+                presentacionContenedora: {
+                  include: {
+                    tipoPresentacion: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 

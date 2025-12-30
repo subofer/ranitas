@@ -11,12 +11,11 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
 
   const handleChange = useCallback(({value}) => {
     setParam(value)
-    seter(value);
     setValorLocal(value || "");
-  },[setParam, seter])
+  },[setParam])
 
   useEffect(() => {
-    seter(param)
+    seter(param || "")
   },[seter, param])
 
   useHotkey(['control', 'q'], inputRef, handleChange)

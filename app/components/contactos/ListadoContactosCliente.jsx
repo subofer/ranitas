@@ -1,6 +1,6 @@
 "use client"
 import { RenglonTablaContacto } from "./RenglonTablaContacto"
-import { Tabla } from "../Tablas/Tablas "
+import { Tabla } from "../Tablas/Tablas"
 
 export default function ListadoContactosCliente({ columnas, contactos, ...props }) {
   return (

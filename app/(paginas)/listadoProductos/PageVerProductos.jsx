@@ -1,4 +1,3 @@
-"use server"
 import ListadoProductos from "@/app/components/productos/ListadoProductos"
 
 const PageVerProductos = async () => {

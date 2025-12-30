@@ -2,7 +2,7 @@
 import { textos } from "@/lib/manipularTextos";
 
 import { calculosFinancieros, contarObjetosEnArray } from "@/lib/contarObjetos";
-import { Tabla, Td, Tr } from "../Tablas/Tablas ";
+import { Tabla, Td, Tr } from "../Tablas/Tablas";
 
 const columnasNames = {
   cantidad:{

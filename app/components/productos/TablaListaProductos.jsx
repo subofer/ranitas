@@ -5,7 +5,7 @@ import TituloFiltrero from './TituloFiltreoInput';
 import useFiltrarProductosPorValor from '@/app/hooks/useFiltrarProductosPorValor';
 import SelectAllToggle from './SelectAllToggle';
 import CopyToClipBoard from './CopyToClipBoard';
-import { Tabla } from '../Tablas/Tablas ';
+import { Tabla } from '../Tablas/Tablas';
 
 const TablaListaProductos = ({ComponenteTituloProp = null, tipo = "listado", productos, columnas, titulo= "Productos", ...props } = {}) => {
   const [

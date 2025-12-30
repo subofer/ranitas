@@ -1,4 +1,3 @@
-"use server"
 import { getProductos } from '@/prisma/consultas/productos';
 import TablaListaProductos from './TablaListaProductos';
 

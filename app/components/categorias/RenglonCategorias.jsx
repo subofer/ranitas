@@ -2,7 +2,7 @@
 import { borrarCategoria } from "@/prisma/serverActions/categorias";
 import { fechas } from "@/lib/manipularTextos";
 import Icon from "../formComponents/Icon";
-import { Td, Tr } from "../Tablas/Tablas ";
+import { Td, Tr } from "../Tablas/Tablas";
 import { alertaBorrarCategoria } from "../alertas/alertaBorrarCategoria";
 
 export const RenglonCategoria = ({item}) => (

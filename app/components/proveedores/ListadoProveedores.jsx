@@ -1,8 +1,7 @@
-"use server"
 
 import { getProveedoresCompletos } from "@/prisma/consultas/proveedores";
 import { RenglonProveedor } from "./RenglonProveedor";
-import { Tabla } from "../Tablas/Tablas ";
+import { Tabla } from "../Tablas/Tablas";
 
 
 const ListadoProveedores = async (props) => {

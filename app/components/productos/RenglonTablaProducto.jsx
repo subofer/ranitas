@@ -1,7 +1,8 @@
 "use client"
+import { useCallback } from 'react';
 import useMyParams from '@/app/hooks/useMyParams';
 import { obtenerValorPorRuta as vr } from './tablaProductosData';
-import { Td, Tr } from '../Tablas/Tablas ';
+import { Td, Tr } from '../Tablas/Tablas';
 import Skeleton from '../Skeleton';
 
 export const RenglonTablaProducto = ({
@@ -14,6 +15,31 @@ export const RenglonTablaProducto = ({
   ...props
 }) => {
   const myParams = useMyParams();
+
+  const handleOnClick = useCallback((onClick, item, items) => {
+    if (onClick) {
+      const result = onClick(item, items)
+      const {
+        action = "",
+        key = '',
+        value = '',
+        isParams = false
+      } = result || {};
+
+      if (isParams) {
+        // Evitar ejecutar durante el render usando setTimeout
+        setTimeout(() => {
+          if (action === "addParam") {
+            myParams.addParam(key, value);
+          } else if (action === "deleteParam") {
+            myParams.deleteParam(key);
+          }
+          props?.trigger?.();
+        }, 0);
+      }
+    }
+  }, [myParams, props]);
+
   return (
     <Tr
       ultimo={ultimo}
@@ -35,18 +61,6 @@ export const RenglonTablaProducto = ({
             ...resto
           } = vr(item, col);
 
-          const handleOnClick = () => {
-            const result = onClick(item, items)
-            const {
-              action = "",
-              key = '',
-              value = '',
-              isParams = false
-            } = result || {};
-            isParams && myParams[action](key, value)
-            props?.trigger?.();
-          }
-
           return (
             <Td
               key={`${index}+${col}-item-TD`}
@@ -56,7 +70,7 @@ export const RenglonTablaProducto = ({
               {
                 item.id
                 ? ( Component
-                  ? <Component onClick={handleOnClick} className={componentClassname} item={item} {...props} {...resto} />
+                  ? <Component onClick={() => handleOnClick(onClick, item, items)} className={componentClassname} item={item} {...props} {...resto} />
                   : decorador(texto ? texto : valorDefecto)
                   ) : <Skeleton className='h-[64px]'/>
               }

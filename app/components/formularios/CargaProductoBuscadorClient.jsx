@@ -13,6 +13,7 @@ import SelectorImagenes from '../formComponents/SelectorImagenes';
 import QrCodeScanner from "@/app/components/camara/Scanner"
 import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
+import GestionPresentaciones from '../productos/GestionPresentaciones';
 import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
 import { textos } from '@/lib/manipularTextos';
@@ -37,6 +38,7 @@ export const CargaProductoBuscadorClient = () => {
     imagen: '',
     proveedores: [],
     categorias: [],
+    presentaciones: [],
   }), []);
 
   const [formData, setFormData] = useState(blankForm);
@@ -52,7 +54,11 @@ export const CargaProductoBuscadorClient = () => {
 
     if (!productoLocal.error) {
       setLocal(true)
-      setFormData((prev) => ({...prev, ...productoLocal}));
+      setFormData((prev) => ({
+        ...prev,
+        ...productoLocal,
+        presentaciones: productoLocal.presentaciones || []
+      }));
       setImagenes([{imagen: {src:productoLocal.imagen, alt:"Imagen Guardada"}}])
     }else{
       const { imagenes = [], primerResultado = {} } = await buscarPorCodigoDeBarras(codigoBarraIngresado);
@@ -112,6 +118,10 @@ export const CargaProductoBuscadorClient = () => {
       {...prev, categorias: categorias.filter(categoria => categoria.id !== id)}
     ))
   );
+
+  const handlePresentacionesChange = (presentaciones) => {
+    setFormData(prev => ({ ...prev, presentaciones }));
+  };
 
   //esto funciona solo con la camara, la camara solo funciona con https.
   const onCapture = (code) => {
@@ -271,6 +281,13 @@ export const CargaProductoBuscadorClient = () => {
               dataFilterKey={"id"}
               onRemove={deleteProveedorById}
               tabIndex={-1}
+            />
+          </div>
+
+          <div className="col-span-full">
+            <GestionPresentaciones
+              presentaciones={formData.presentaciones}
+              onChange={handlePresentacionesChange}
             />
           </div>
         </div>

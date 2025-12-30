@@ -1,4 +1,3 @@
-"use server"
 
 import CargaFacturaForm from "@/app/components/formularios/CargarFacturaClient"
 import { getProductos } from "@/prisma/consultas/productos"

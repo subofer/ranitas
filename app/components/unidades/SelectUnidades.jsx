@@ -1,4 +1,3 @@
-"use server"
 import { getCategorias } from "@/prisma/consultas/categorias"
 import SelectCategoriaClient from "./SelectUnidadesClient";
 

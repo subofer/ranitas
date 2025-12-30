@@ -27,9 +27,9 @@ export default function Pagelogin() {
         window.location.href = param || "/"
       }, 100);
     } else {
-      setTimeout(() => {
-        setLoading(false)
-      }, 500);
+    setTimeout(() => {
+      setLoading(false)
+    }, 500);
     }
   }
   const handleOnChange = () => {

@@ -1,7 +1,6 @@
-"use server"
 import { getCategoriasConteo } from "@/prisma/consultas/categorias";
 import { RenglonCategoria } from "./RenglonCategorias";
-import { Tabla } from "../Tablas/Tablas ";
+import { Tabla } from "../Tablas/Tablas";
 
 
 const ListadoCategorias = async (props) => {

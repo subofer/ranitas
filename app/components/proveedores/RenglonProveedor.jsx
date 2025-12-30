@@ -7,7 +7,7 @@ import { textos } from "@/lib/manipularTextos"
 import useMyParams from "@/app/hooks/useMyParams"
 import { useCallback } from "react"
 import { alertaBorrarProveedor } from "../alertas/alertaBorrarProveedor"
-import { Td, Tr } from "../Tablas/Tablas "
+import { Td, Tr } from "../Tablas/Tablas"
 
 const emailRenderer = (emails) => {
   return (

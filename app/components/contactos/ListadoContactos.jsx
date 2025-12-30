@@ -1,4 +1,3 @@
-"use server"
 import { getContactosCompletos } from "@/prisma/serverActions/contactos"
 import ListadoContactosCliente from "./ListadoContactosCliente"
 
