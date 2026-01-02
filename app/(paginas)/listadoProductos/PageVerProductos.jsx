@@ -1,4 +1,4 @@
-import ListadoProductos from "@/app/components/productos/ListadoProductos"
+import ListadoProductos from "@/components/productos/ListadoProductos"
 
 const PageVerProductos = async () => {
 

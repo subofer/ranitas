@@ -1,5 +1,5 @@
 "use client"
-import useHotkey from "@/app/hooks/useHotkey";
+import useHotkey from "@/hooks/useHotkey";
 
 const SelectAllToggle = ({children, seter}) => {
   useHotkey(['control','a'], null, () => seter())

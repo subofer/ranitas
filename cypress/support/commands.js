@@ -1,58 +1,82 @@
-// ***********************************************
-// This example commands.js shows you how to
-// create various custom commands and overwrite
-// existing commands.
-//
-// For more comprehensive examples of custom
-// commands please read more here:
-// https://on.cypress.io/custom-commands
-// ***********************************************
-//
-//
-// -- This is a parent command --
-// Cypress.Commands.add('login', (email, password) => { ... })
-//
-//
-// -- This is a child command --
-// Cypress.Commands.add('drag', { prevSubject: 'element'}, (subject, options) => { ... })
-//
-//
-// -- This is a dual command --
-// Cypress.Commands.add('dismiss', { prevSubject: 'optional'}, (subject, options) => { ... })
-//
-//
-// -- This will overwrite an existing command --
-// Cypress.Commands.overwrite('visit', (originalFn, url, options) => { ... })
+// Comando personalizado para login
+Cypress.Commands.add('login', (username, password) => {
+  cy.visit('/login')
+  cy.get('input[name="nombre"]').type(username)
+  cy.get('input[name="password"]').type(password)
+  cy.get('button').contains('Ingresar').click()
+  cy.url().should('not.include', '/login')
+})
 
+// Comando para crear producto de prueba
+Cypress.Commands.add('createTestProduct', (codigoBarra, nombre) => {
+  cy.visit('/cargarProductos')
+  cy.get('input[name="codigoBarra"]').type(codigoBarra)
+  cy.get('input[name="nombre"]').type(nombre)
+  cy.get('button').contains('Guardar').click()
+  cy.contains('Producto guardado correctamente').should('be.visible')
+})
 
-Cypress.Commands.add('login', () => {
-  cy.visit('/')
-  cy.wait(1000);
-  cy.get('input[name="nombre"]')
-    .should('be.visible')
-    .focus()
-    .type('subofer', { force: true });
+// Comando para crear categoría de prueba
+Cypress.Commands.add('createTestCategory', (nombre) => {
+  cy.visit('/categorias')
+  cy.contains('Nueva Categoría').click()
+  cy.get('input[name="nombre"]').type(nombre)
+  cy.get('button').contains('Guardar').click()
+  cy.contains('Categoría creada correctamente').should('be.visible')
+})
 
-  cy.get('input[name="password"]')
-    .should('be.visible')
-    .focus()
-    .type('1234', { force: true });
-  const button = cy.get('button').contains('Ingresar').click().then(() => {
-    cy.wait(500); // Esperar un momento después del clic
-  });
-  cy.wait(500);
-  return button;
-});
+// Comando para crear proveedor de prueba
+Cypress.Commands.add('createTestSupplier', (cuit, nombre) => {
+  cy.visit('/contactos')
+  cy.contains('Nuevo Proveedor').click()
+  cy.get('input[name="cuit"]').type(cuit)
+  cy.get('input[name="nombre"]').type(nombre)
+  cy.get('button').contains('Guardar').click()
+  cy.contains('Proveedor guardado correctamente').should('be.visible')
+})
 
+// Comando para limpiar datos de prueba
+Cypress.Commands.add('cleanupTestData', () => {
+  // Limpiar productos de prueba
+  cy.request('DELETE', '/api/test/cleanup')
 
-Cypress.Commands.add('logina', () => {
-  cy.session('loginSession', () => {
-    cy.visit('/login?goNext=/');
-    
-    cy.get('input[name="nombre"]').type('subofer', { force: true });
-    cy.get('input[name="password"]').type('1234', { force: true });
-    cy.get('button').contains('Ingresar').click();
-    
-    cy.url().should('not.include', '/login'); // Verificar que el login fue exitoso
-  });
-});
+  // Limpiar categorías de prueba
+  cy.request('DELETE', '/api/test/cleanup-categories')
+
+  // Limpiar proveedores de prueba
+  cy.request('DELETE', '/api/test/cleanup-suppliers')
+})
+
+// Comando para verificar elementos de tabla
+Cypress.Commands.add('verifyTableRow', (selector, expectedValues) => {
+  cy.get(selector).within(() => {
+    expectedValues.forEach((value, index) => {
+      cy.get('td').eq(index).should('contain', value)
+    })
+  })
+})
+
+// Comando para verificar notificaciones
+Cypress.Commands.add('verifyToast', (message) => {
+  cy.contains(message).should('be.visible')
+  // Las notificaciones suelen desaparecer automáticamente
+  cy.contains(message).should('not.exist')
+})
+
+// Comando para esperar carga de elementos asíncronos
+Cypress.Commands.add('waitForLoading', () => {
+  cy.get('[data-cy="loading"]').should('not.exist')
+})
+
+// Comando para verificar navegación
+Cypress.Commands.add('verifyNavigation', (menuItem, expectedUrl) => {
+  cy.contains(menuItem).click()
+  cy.url().should('include', expectedUrl)
+})
+
+// Comando para verificar formularios
+Cypress.Commands.add('verifyFormValidation', (fieldName, errorMessage) => {
+  cy.get(`input[name="${fieldName}"]`).clear()
+  cy.get('form').submit()
+  cy.contains(errorMessage).should('be.visible')
+})

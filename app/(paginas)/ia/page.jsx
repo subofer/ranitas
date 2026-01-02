@@ -1,4 +1,4 @@
-import IaPrompt from "@/app/components/ia/IaPromp";
+import IaPrompt from "@/components/ia/IaPromp";
 
 export default function PaginIA() {
   return (

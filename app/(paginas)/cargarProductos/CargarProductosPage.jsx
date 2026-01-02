@@ -1,6 +1,6 @@
 "use client"
-import { CargaProductoBuscadorClient } from "@/app/components/formularios/CargaProductoBuscadorClient"
-import ListadoProductos from '@/app/components/productos/ListadoProductos'
+import { CargaProductoBuscadorClient } from "@/components/formularios/CargaProductoBuscadorClient"
+import ListadoProductos from '@/components/productos/ListadoProductos'
 
 export default function CargarProductosPage() {
   return (

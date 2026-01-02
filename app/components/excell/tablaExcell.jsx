@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import Input from "@/app/components/formComponents/Input";
+import Input from "@/components/formComponents/Input";
 
 const generaLetrasColumnas = (cantidadColumnas, letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ") => {
   const base = letras.length;

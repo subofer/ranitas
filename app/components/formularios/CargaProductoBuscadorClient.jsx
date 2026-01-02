@@ -6,11 +6,11 @@ import { guardarProducto } from "@/prisma/serverActions/productos";
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
 import { getProductoPorCodigoBarra } from "@/prisma/consultas/productos";
-import useMyParams from '@/app/hooks/useMyParams';
+import useMyParams from '@/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
 import SelectorImagenes from '../formComponents/SelectorImagenes';
 
-import QrCodeScanner from "@/app/components/camara/Scanner"
+import QrCodeScanner from "@/components/camara/Scanner"
 import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import GestionPresentaciones from '../productos/GestionPresentaciones';
@@ -22,7 +22,7 @@ import { LineChart } from '../graficos/LineGraphClient';
 import Switch from '../formComponents/Switch';
 import { alertaCrearCodigoDeBarras } from '../alertas/alertaCrearCodigoDeBarras';
 import generateBarCode from '@/lib/barCodeGenerator.mjs';
-import useHotkey from '@/app/hooks/useHotkey';
+import useHotkey from '@/hooks/useHotkey';
 
 
 export const CargaProductoBuscadorClient = () => {

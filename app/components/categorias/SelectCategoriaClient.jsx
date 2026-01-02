@@ -1,6 +1,6 @@
 "use client"
 import FilterSelect from "../formComponents/FilterSelect";
-import useSelect from "@/app/hooks/useSelect";
+import useSelect from "@/hooks/useSelect";
 import { getCategorias } from "@/prisma/consultas/categorias";
 
 const SelectCategoriaClient =  ({...props} = {}) => {

@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react"
-import QrCodeScanner from "@/app/components/camara/Scanner"
+import QrCodeScanner from "@/components/camara/Scanner"
 
 export default function CargarFacturaPage() {
   const [captura, setCaptura] = useState(null)

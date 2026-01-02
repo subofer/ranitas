@@ -1,9 +1,9 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from 'react';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
-import Button from '@/app/components/formComponents/Button';
-import ResultadoBusqueda from '@/app/components/productos/ResultadoBusqueda';
-import { useKeyDown } from '@/app/hooks/useKeyDown';
+import Button from '@/components/formComponents/Button';
+import ResultadoBusqueda from '@/components/productos/ResultadoBusqueda';
+import { useKeyDown } from '@/hooks/useKeyDown';
 
 export default function PageBusquedaProductosEnGoogle() {
   const inputRef = useRef(null)

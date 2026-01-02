@@ -18,3 +18,37 @@ import './commands'
 
 // Alternatively you can use CommonJS syntax:
 // require('./commands')
+
+// Configuración global para tests
+beforeEach(() => {
+  // Limpiar localStorage antes de cada test
+  cy.window().then((win) => {
+    win.localStorage.clear()
+  })
+
+  // Configurar interceptores globales si es necesario
+  cy.intercept('GET', '/api/dolar', { fixture: 'dolar.json' }).as('getDolar')
+})
+
+// Configuración para manejar errores no capturados
+Cypress.on('uncaught:exception', (err, runnable) => {
+  // returning false here prevents Cypress from failing the test
+  // útil para errores de librerías externas que no afectan la funcionalidad
+  if (err.message.includes('ResizeObserver loop limit exceeded')) {
+    return false
+  }
+  if (err.message.includes('Script error')) {
+    return false
+  }
+  // Para otros errores, dejar que fallen los tests
+  return true
+})
+
+// Configuración para screenshots automáticos en fallos
+afterEach(function() {
+  if (this.currentTest.state === 'failed') {
+    // Tomar screenshot automático en caso de fallo
+    const screenshotName = `${this.currentTest.title} -- ${Date.now()}`
+    cy.screenshot(screenshotName, { capture: 'fullPage' })
+  }
+})

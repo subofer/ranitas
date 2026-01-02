@@ -86,7 +86,7 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
         </tbody>
       </table>
       </div>
-    
+
   );
 }
 

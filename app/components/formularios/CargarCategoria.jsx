@@ -1,4 +1,3 @@
-"use server"
 import SelectCategoria from "../categorias/SelectCategoria"
 import { guardarCategoria } from "@/prisma/serverActions/categorias";
 import { FormCard } from "../formComponents/FormCard"

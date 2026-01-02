@@ -1,8 +1,8 @@
 "use client"
 import { Suspense, useEffect, useState } from 'react';
-import SelectProveedorClient from '@/app/components/proveedores/SelectProveedorClient';
-import ProductosPorProveedorServer from '@/app/components/productos/ProductosPorProveedorServer';
-import EditarCodigoForm from '@/app/components/formComponents/EditarCodigoForm';
+import SelectProveedorClient from '@/components/proveedores/SelectProveedorClient';
+import ProductosPorProveedorServer from '@/components/productos/ProductosPorProveedorServer';
+import EditarCodigoForm from '@/components/formComponents/EditarCodigoForm';
 
 export default function ClientPage() {
   const [proveedor, setProveedor] = useState(null);

@@ -1,8 +1,8 @@
 "use client"
 import { useCallback, useEffect, useState } from "react";
 import Input from "../formComponents/Input";
-import useMyParams from "@/app/hooks/useMyParams";
-import useHotkey from "@/app/hooks/useHotkey";
+import useMyParams from "@/hooks/useMyParams";
+import useHotkey from "@/hooks/useHotkey";
 
 const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   const { param, setParam } = useMyParams('filtroListado')

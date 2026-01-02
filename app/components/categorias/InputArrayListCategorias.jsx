@@ -1,5 +1,5 @@
 "use client"
-import useSelect from "@/app/hooks/useSelect";
+import useSelect from "@/hooks/useSelect";
 import InputArrayList from "../formComponents/InputArrayList";
 import { useEffect } from "react";
 import { getCategorias } from "@/prisma/consultas/categorias";

@@ -1,12 +1,12 @@
 "use client"
-import Button from '@/app/components/formComponents/Button'
-import Input from '@/app/components/formComponents/Input'
+import Button from '@/components/formComponents/Button'
+import Input from '@/components/formComponents/Input'
 import { useRouter } from 'next/navigation';
 import { login } from '@/lib/sesion/sesion'
-import useMyParams from '@/app/hooks/useMyParams';
+import useMyParams from '@/hooks/useMyParams';
 import { Suspense, useState } from 'react';
-import Icon from '@/app/components/formComponents/Icon';
-import useViewportHeight from '@/app/hooks/useViewportHeight';
+import Icon from '@/components/formComponents/Icon';
+import useViewportHeight from '@/hooks/useViewportHeight';
 
 export default function Pagelogin() {
   const [result, setResult] = useState(null)

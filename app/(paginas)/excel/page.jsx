@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from "react";
-import ExcelTable from "@/app/components/excell/tablaExcell";
-import Input from "@/app/components/formComponents/Input";
+import ExcelTable from "@/components/excell/tablaExcell";
+import Input from "@/components/formComponents/Input";
 
 
 const Page = () => {

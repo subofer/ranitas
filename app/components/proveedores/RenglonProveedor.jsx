@@ -4,7 +4,7 @@ import { deleteProveedor } from "@/prisma/consultas/proveedores"
 
 import Icon from "../formComponents/Icon"
 import { textos } from "@/lib/manipularTextos"
-import useMyParams from "@/app/hooks/useMyParams"
+import useMyParams from "@/hooks/useMyParams"
 import { useCallback } from "react"
 import { alertaBorrarProveedor } from "../alertas/alertaBorrarProveedor"
 import { Td, Tr } from "../Tablas/Tablas"

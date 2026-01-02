@@ -1,7 +1,7 @@
 "use client"
 import { getProvincias } from "@/prisma/geoRef/getGeoRefs";
 import FilterSelect from "../formComponents/FilterSelect";
-import useSelect from "@/app/hooks/useSelect";
+import useSelect from "@/hooks/useSelect";
 
 const SelectProvinciaClient =  ({...props}) => {
   const { data: provincias, busy } = useSelect(getProvincias)

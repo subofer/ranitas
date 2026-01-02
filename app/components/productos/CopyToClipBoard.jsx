@@ -2,7 +2,7 @@
 import { useCallback } from "react";
 import { copyCsvToClipBoard } from "@/lib/copyCsv";
 import Button from "../formComponents/Button";
-import useHotkey from "@/app/hooks/useHotkey";
+import useHotkey from "@/hooks/useHotkey";
 
 const CopyToClipBoard = ({children, data, selector}) => {
 

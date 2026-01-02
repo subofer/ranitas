@@ -2,7 +2,7 @@
 
 import { getLocalidadesPorProvincia } from "@/prisma/geoRef/getGeoRefs";
 import FilterSelect from "../formComponents/FilterSelect";
-import useSelect from "@/app/hooks/useSelect";
+import useSelect from "@/hooks/useSelect";
 import { useCallback, useState } from "react";
 
 const SelectLocalidadClient = ({idProvincia, ...props}) => {

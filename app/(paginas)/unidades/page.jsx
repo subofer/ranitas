@@ -1,5 +1,5 @@
-import ListadoCategorias from '@/app/components/categorias/ListadoCategorias'
-import { CargarCategoria } from '@/app/components/formularios/CargarCategoria'
+import ListadoCategorias from '@/components/categorias/ListadoCategorias'
+import { CargarCategoria } from '@/components/formularios/CargarCategoria'
 
 export default function PageCargarCategorias() {
   return (

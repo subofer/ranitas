@@ -1,6 +1,6 @@
 "use client"
-import CargarContacto from '@/app/components/contactos/CargarContacto'
-import ListadoContactos from '@/app/components/contactos/ListadoContactos'
+import CargarContacto from '@/components/contactos/CargarContacto'
+import ListadoContactos from '@/components/contactos/ListadoContactos'
 
 export default function PageCargarProveedor() {
   return (

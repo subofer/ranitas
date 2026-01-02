@@ -3,7 +3,7 @@
 import { useCallback, useEffect } from "react";
 import { getCallesPorLocalidad } from "@/prisma/geoRef/getGeoRefs";
 import FilterSelect from "../formComponents/FilterSelect";
-import useSelect from "@/app/hooks/useSelect";
+import useSelect from "@/hooks/useSelect";
 
 const SelectCalleClient = ({idProvincia, idLocalidadCensal, ...props}) => {
 

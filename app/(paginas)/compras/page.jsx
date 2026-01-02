@@ -1,5 +1,5 @@
 
-import CargaFacturaForm from "@/app/components/formularios/CargarFacturaClient"
+import CargaFacturaForm from "@/components/formularios/CargarFacturaClient"
 import { getProductos } from "@/prisma/consultas/productos"
 import { getProveedoresCompletos } from "@/prisma/consultas/proveedores"
 

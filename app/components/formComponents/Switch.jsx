@@ -1,7 +1,7 @@
 import { useState, useRef, useId, useEffect } from "react";
-import useParentForm from "@/app/hooks/useParentForm";
+import useParentForm from "@/hooks/useParentForm";
 import { useFormStatus } from "react-dom";
-import useHotkey from "@/app/hooks/useHotkey";  // Asegúrate de importar el hook correctamente
+import useHotkey from "@/hooks/useHotkey";  // Asegúrate de importar el hook correctamente
 
 const Switch = ({ name, value, label, seconLabel, onChange }) => {
   const id = useId();

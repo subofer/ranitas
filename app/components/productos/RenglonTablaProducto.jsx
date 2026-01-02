@@ -1,6 +1,6 @@
 "use client"
 import { useCallback } from 'react';
-import useMyParams from '@/app/hooks/useMyParams';
+import useMyParams from '@/hooks/useMyParams';
 import { obtenerValorPorRuta as vr } from './tablaProductosData';
 import { Td, Tr } from '../Tablas/Tablas';
 import Skeleton from '../Skeleton';

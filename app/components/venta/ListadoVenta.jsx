@@ -1,13 +1,13 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getProductoPorCodigoBarra } from '@/prisma/consultas/productos';
-import Button from '@/app/components/formComponents/Button';
+import Button from '@/components/formComponents/Button';
 import { calculosFinancieros } from '@/lib/contarObjetos';
-import TablaListaProductos from '@/app/components/productos/TablaListaProductos';
-import { useKeyDown } from '@/app/hooks/useKeyDown';
+import TablaListaProductos from '@/components/productos/TablaListaProductos';
+import { useKeyDown } from '@/hooks/useKeyDown';
 import { textos } from '@/lib/manipularTextos';
-import Input from '@/app/components/formComponents/Input';
-import { alertaTotalCompra } from '@/app/components/alertas/alertaTotalCompra';
+import Input from '@/components/formComponents/Input';
+import { alertaTotalCompra } from '@/components/alertas/alertaTotalCompra';
 import { guardarVentaConStock } from '@/prisma/serverActions/venta';
 
 

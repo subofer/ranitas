@@ -1,4 +1,3 @@
-"use server"
 import buscarValoresDolar from '@/lib/dolarHoy';
 import DolarHoy from './DolarHoy';
 

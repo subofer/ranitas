@@ -2,7 +2,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import TbodyTablaProducto from './TbodyTablaProducto';
 import TituloFiltrero from './TituloFiltreoInput';
-import useFiltrarProductosPorValor from '@/app/hooks/useFiltrarProductosPorValor';
+import useFiltrarProductosPorValor from '@/hooks/useFiltrarProductosPorValor';
 import SelectAllToggle from './SelectAllToggle';
 import CopyToClipBoard from './CopyToClipBoard';
 import { Tabla } from '../Tablas/Tablas';

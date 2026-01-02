@@ -1,6 +1,6 @@
 "use server"
 
-import ListadoVenta from "@/app/components/venta/ListadoVenta"
+import ListadoVenta from "@/components/venta/ListadoVenta"
 import { getLastDocumentosVenta } from "@/prisma/consultas/documentos"
 
 export default async function Venta({numeroVenta}) {
