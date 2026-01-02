@@ -76,7 +76,7 @@ const CameraCaptureModal = ({ onCapture }) => {
 
   return (
     <>
-      <Icon className={`rounded-full text-white bg-slate-500 `} onClick={openModal} icono={"camera"}/>
+      <Icon className={`rounded-full text-white bg-blue-500 hover:bg-blue-600 transition-colors duration-200`} onClick={openModal} icono={"camera"}/>
       { isModalOpen && (
       <div className={`fixed inset-0 z-50 overflow-hidden bg-black bg-opacity-75 flex justify-center items-center text-white transition-opacity duration-500 opacity-${isModalOpen?"100":"0"}`}>
         <div className={`relative w-full max-w-3xl max-h-full overflow-hidden transition-opacity duration-500 opacity-${isModalOpen?"100":"0"}`}>
@@ -85,8 +85,8 @@ const CameraCaptureModal = ({ onCapture }) => {
               <>
               <Image src={capturedImage} alt="Captured" width={100} height={100} style={{ width: '100%', height: 'auto' }} />
               <div className="flex flex-row gap-4 absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-3  ">
-                <Icon onClick={handleSave} icono={"check"} className={"bg-slate-500 px-5 py-4 rounded-full text-6xl text-green-400"}/>
-                <Icon onClick={handleRetry} icono={"ban"} className={"bg-slate-500 px-4 py-4 rounded-full text-6xl text-red-400"}/>
+                <Icon onClick={handleSave} icono={"check"} className={"bg-green-500 hover:bg-green-600 px-5 py-4 rounded-full text-6xl text-white transition-colors duration-200"}/>
+                <Icon onClick={handleRetry} icono={"ban"} className={"bg-red-500 hover:bg-red-600 px-4 py-4 rounded-full text-6xl text-white transition-colors duration-200"}/>
               </div>
               </>
             ):(
@@ -95,14 +95,14 @@ const CameraCaptureModal = ({ onCapture }) => {
                 <div className={`absolute inset-0`}>
                   <Image src={overlayImage} alt="Overlay" layout='fill' objectFit='cover'/>
                 </div>
-                <div onClick={takePicture} className='bg-slate-500 rounded-full absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-3 p-1' >
-                  <div className='bg-white rounded-full p-0.5'>
-                    <div className="bg-slate-500 px-4 py-4 rounded-full">
-                      <Icon icono={"camera"} className={"text-6xl"}/>
+                <div onClick={takePicture} className='bg-white rounded-full absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-3 p-1 shadow-lg' >
+                  <div className='bg-blue-500 rounded-full p-0.5'>
+                    <div className="bg-white px-4 py-4 rounded-full">
+                      <Icon icono={"camera"} className={"text-6xl text-blue-500"}/>
                     </div>
                   </div>
                 </div>
-                <Icon onClick={handleCancel} icono={"xmark"} className="absolute bg-slate-500 px-4 py-2 rounded-full top-2 right-2 text-4xl text-red-300"/>
+                <Icon onClick={handleCancel} icono={"xmark"} className="absolute bg-red-500 hover:bg-red-600 px-4 py-2 rounded-full top-2 right-2 text-4xl text-white transition-colors duration-200"/>
               </div>
             )
           }

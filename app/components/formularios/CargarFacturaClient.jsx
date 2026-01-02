@@ -139,7 +139,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
 
   return (
     <FormCard
-      className={`flex flex-col w-full bg-slate-300 p-2 ${className}`}
+      className={className}
       handleReset={handleReset}
       loading={guardando}
       action={handleSubmit}
@@ -191,7 +191,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
 
         <label className="col-span-12 text-2xl text-gray-700">Productos:</label>
 
-        <div className="col-span-12 p-3 bg-slate-400">
+        <div className="col-span-12 p-4 bg-gray-50 border rounded-lg">
           {formData.detalles.map((detalle, index) => (
             <div key={index} className="flex gap-2 mb-2 justify-between">
               <div className="flex flex-row gap-1 w-8 justify-around text-slate-600">

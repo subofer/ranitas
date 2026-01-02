@@ -17,7 +17,7 @@ const SelectAllToggle = ({children, seter}) => {
         transition duration-150 ease-in-out
         ring-2
         ring-slate-300
-        disabled:bg-slate-400
+        disabled:bg-gray-300
         disabled:cursor-not-allowed
       `}
     >

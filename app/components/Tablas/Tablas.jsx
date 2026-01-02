@@ -55,7 +55,7 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
 
   return (
     <div className="flex flex-col overflow-auto min-h-[400px] hideScroll">
-      <table className="table-auto max-w-full lg:text-sm text-xs text-gray-600 bg-slate-400">
+      <table className="table-auto max-w-full lg:text-sm text-xs text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm">
         <caption ref={captionRef} className="table-caption sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
           {titulo}
         </caption>

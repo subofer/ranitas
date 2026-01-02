@@ -35,19 +35,31 @@ export const FormCard = ({
 
   return(
     <form
-      className={`flex flex-col w-full h-fit p-2 ${className}`}
+      className={`
+        flex flex-col w-full h-fit
+        bg-white border border-slate-200 rounded-lg shadow-lg
+        ${className}
+      `}
       {...formControl}
       {...props}
     >
-      { title &&
-        <FormTitle className={`w-full text-3xl font-bold text-slate-500`}>
-          {title}
-        </FormTitle>
-      }
-      { children }
-      { buttons !== false && <FormButtons busy={busy} handleReset={handleReset} order={props?.inputs?.length + 1 || props?.formlength || 0}/> }
-      <div className="mt-2 h-2">
-        { state?.error && state?.msg }
+      <div className="p-6">
+        { title &&
+          <FormTitle className={`w-full text-2xl font-bold text-slate-800 mb-6`}>
+            {title}
+          </FormTitle>
+        }
+        <div className="space-y-6">
+          { children }
+        </div>
+        { buttons !== false &&
+          <div className="mt-8 pt-6 border-t border-slate-200/60">
+            <FormButtons busy={busy} handleReset={handleReset} order={props?.inputs?.length + 1 || props?.formlength || 0}/>
+          </div>
+        }
+        <div className="mt-4 h-2">
+          { state?.error && state?.msg }
+        </div>
       </div>
     </form>
   )

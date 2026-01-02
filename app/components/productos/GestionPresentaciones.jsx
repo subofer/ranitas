@@ -4,6 +4,7 @@ import Input from '../formComponents/Input';
 import Button from '../formComponents/Button';
 import SelectTipoPresentacion from './SelectTipoPresentacion';
 import Icon from '../formComponents/Icon';
+import FormContainer from '../formComponents/FormContainer';
 
 export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
   const [nuevaPresentacion, setNuevaPresentacion] = useState({
@@ -46,8 +47,7 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
   };
 
   return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Presentaciones</h3>
+    <FormContainer title="Presentaciones" variant="section">
 
       {/* Lista de presentaciones existentes */}
       {presentaciones.map((presentacion) => (
@@ -147,7 +147,7 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
           Agregar presentación
         </Button>
       </div>
-    </div>
+    </FormContainer>
   );
 };
 

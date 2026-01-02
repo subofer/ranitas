@@ -5,7 +5,7 @@ import { forwardRef } from "react";
 const MenuItem = ({href, children, ...props}) => {
   return(
     <Link href={href}>
-      <li className="hover:bg-slate-500 bg-slate-400 rounded-md p-1 px-4 text-center" {...props}>
+      <li className="hover:bg-blue-600 bg-blue-500 text-white rounded-lg p-2 px-4 text-center transition-colors duration-200 shadow-sm" {...props}>
         {children}
       </li>
     </Link>
@@ -14,9 +14,9 @@ const MenuItem = ({href, children, ...props}) => {
 
 const NavBarVertical = forwardRef((props, ref) => {
   return(
-    <div className="bg-slate-300 px-2 py-2 border-r-4 border-r-slate-300">
-      <ul className="flex flex-col gap-2 ">
-        {Object.keys(menuList).map((key, index) => 
+    <div className="bg-gray-50 px-3 py-4 border-r-4 border-r-blue-200 min-h-screen">
+      <ul className="flex flex-col gap-3">
+        {Object.keys(menuList).map((key, index) =>
           <MenuItem key={index} href={menuList[key]}>{key}</MenuItem>
         )}
       </ul>

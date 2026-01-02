@@ -4,9 +4,13 @@ import ListadoProductos from '@/components/productos/ListadoProductos'
 
 export default function CargarProductosPage() {
   return (
-    <main className='flex flex-col gap-5 container w-full max-w-full'>
-      <CargaProductoBuscadorClient />
-      <ListadoProductos className="w-1/3" />
+    <main className='min-h-screen bg-slate-50 py-8'>
+      <div className='container mx-auto max-w-6xl px-4'>
+        <div className='flex flex-col gap-8'>
+          <CargaProductoBuscadorClient />
+          <ListadoProductos />
+        </div>
+      </div>
     </main>
   )
 }

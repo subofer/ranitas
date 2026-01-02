@@ -1,6 +1,5 @@
 "use client"
 
-import FormTitle from "../formComponents/Title";
 import Button from "../formComponents/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { buscar } from "@/app/(paginas)/contactos/actions/handleAction";
@@ -13,8 +12,7 @@ import useRenderCount from "@/hooks/useRenderCount";
 import Switch from "../formComponents/Switch";
 import { getContactoByCuit, upsertContacto } from "@/prisma/serverActions/contactos";
 import Icon from "../formComponents/Icon";
-
-const inputStyle = "bg-slate-300 rounded"
+import { FormCard } from "../formComponents/FormCard";
 const defautlFormValues = {
   id:'',
   esProveedor: false,
@@ -145,32 +143,13 @@ export default function CargarContacto() {
 
 
   return (
-    <main className='grid grid-cols-1 w-full max-w-full'>
-      <form
-        ref={formRef}
-        className={`max-w-[1200px]
-          p-4 mx-auto rounded-md 
-          border-gray-300 bg-slate-300
-        `}
-        action={handleSave}
-      >
-        <FormTitle textClass={"text-3xl font-bold text-slate-500"} className="col-span-full">
-          <div className="flex items-center w-full">
-            <div className="flex-initial">
-              <Icon regular icono={"address-card"} />
-            </div>
-            <div className="flex-grow text-center">
-              {title}
-            </div>
-            <div className="flex-initial invisible">
-              <Icon regular icono={"address-card"} />
-            </div>
-          </div>
-        </FormTitle>
-
-        <div className="grid grid-cols-8 gap-3">
+    <main className='min-h-screen bg-slate-50 py-8'>
+      <div className='container mx-auto max-w-6xl px-4'>
+        <FormCard title={title} action={handleSave} formRef={formRef} data-testid="contact-form">
           <input hidden name="id" value={formData.id} readOnly/>
-          <div className={`lg:col-span-2  ${inputStyle}`}>
+
+          {/* Información básica */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
             <Input
               name={"cuit"}
               label={"Cuit"}
@@ -179,82 +158,93 @@ export default function CargarContacto() {
               value={formData.cuit}
               placeholder={"Ingrese cuit"}
             />
-          </div>
-          <div className={`lg:col-span-2 ${inputStyle}`}>
             <Input
               name={"persona"}
               label={"Tipo"}
               onChange={onChange}
               value={formData.persona}
-              placeholder={"Personeria juridica"}
+              placeholder={"Personería jurídica"}
             />
-          </div>
-          <div className={`lg:col-span-2 ${inputStyle}`}>
             <Input
               name={"iva"}
-              label={"Condicion ante el iva"}
+              label={"Condición ante el IVA"}
               onChange={onChange}
               value={formData.iva}
-              placeholder={"Condicion iva"}
+              placeholder={"Condición IVA"}
             />
           </div>
 
-          <div className={`flex flex-col gap-3 lg:col-start-7 lg:col-end-9 row-start-1 row-end-4 overflow-visible`}>
-            <Switch value={formData.esProveedor} onChange={onChange} name={"esProveedor"} label={"Es Proveedor"}></Switch>
-            <Switch value={formData.esInterno} onChange={onChange} name={"esInterno"} label={"Es Interno"}></Switch>
-            <Switch value={formData.esMarca} onChange={onChange} name={"esMarca"} label={"Es Marca"}></Switch>
-          </div>
-
-          <div className={`lg:col-span-3 ${inputStyle}`}>
+          {/* Información de contacto */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             <Input
               name={"nombre"}
               label={"Nombre"}
               onChange={onChange}
               value={formData.nombre}
-              placeholder={"El nombre se carga automaticamente"}
+              placeholder={"El nombre se carga automáticamente"}
             />
-          </div>
-
-          <div className={`lg:col-span-3 ${inputStyle}`}>
             <Input
               name={"telefono"}
-              label={"Telefono"}
+              label={"Teléfono"}
               onChange={onChange}
               value={formData.telefono}
               placeholder={"Sin puntos ni guiones"}
             />
           </div>
-          <div className={`lg:col-span-6 ${inputStyle}`}>
+
+          <div className="mb-6">
             <Input
               name={"email"}
               label={"E-Mails"}
               onChange={onChange}
               value={formData.email}
-              placeholder={"Correro@electron.ico"}
+              placeholder={"correo@electron.ico"}
             />
           </div>
 
-          <div className="p-3 flex flex-col lg:col-span-full gap-4 bg-slate-400 pr-4">
-            <span className="text-2xl">Direcciones:</span>
-          {formData.direcciones.map((direccion, index) => {
-            return(
-              <div key={`${index}-direcciones`} className="grid grid-cols-8 gap-2 lg:col-span-full bg-slate-400">
-                <div className={`lg:col-span-3 ${inputStyle}`}>
+          {/* Switches */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <Switch
+              value={formData.esProveedor}
+              onChange={onChange}
+              name={"esProveedor"}
+              label={"Es Proveedor"}
+            />
+            <Switch
+              value={formData.esInterno}
+              onChange={onChange}
+              name={"esInterno"}
+              label={"Es Interno"}
+            />
+            <Switch
+              value={formData.esMarca}
+              onChange={onChange}
+              name={"esMarca"}
+              label={"Es Marca"}
+            />
+          </div>
+
+          {/* Direcciones */}
+          <div className="border-t pt-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+              <Icon icono={"map-marker-alt"} className="mr-2 text-blue-600" />
+              Direcciones
+            </h3>
+
+            {formData.direcciones.map((direccion, index) => (
+              <div key={`${index}-direcciones`} className="bg-gray-50 rounded-lg p-4 mb-4 border">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-3">
                   <SelectProvinciaClient
                     name="idProvincia"
                     value={direccion.idProvincia}
                     onChange={(item) => onSelectChange(item, index)}
                   />
-                </div>
-                <div className={`lg:col-span-2 ${inputStyle}`}>
                   <SelectLocalidadClient
                     idProvincia={direccion.idProvincia}
                     name="idLocalidad"
                     value={direccion.idLocalidad}
                     onChange={(item) => onSelectChange(item, index)}
                   />
-                </div>
-                <div className={`lg:col-span-2 ${inputStyle}`}>
                   <SelectCalleClient
                     idProvincia={direccion.idProvincia}
                     idLocalidadCensal={direccion.idLocalidadCensal}
@@ -262,45 +252,79 @@ export default function CargarContacto() {
                     value={direccion.idCalle}
                     onChange={(item) => onSelectChange(item, index)}
                   />
+                  <div className="relative">
+                    <Input
+                      name={"numeroCalle"}
+                      label={"Altura"}
+                      type={"number"}
+                      onChange={(item) => onSelectChange(item, index)}
+                      value={direccion?.numeroCalle}
+                      placeholder={"Ej: 1234"}
+                    />
+                    {formData.direcciones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleDireccionDelete(index)}
+                        className="absolute right-2 top-1/2 transform -translate-y-1/2 text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors duration-200"
+                        title="Eliminar dirección"
+                      >
+                        <Icon icono={"trash-can"} className="text-sm" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className={`flex flex-row lg:col-span-1 ${inputStyle}`}>
-                  <Input
-                    name={"numeroCalle"}
-                    label={"Numero"}
-                    type={"number"}
-                    onChange={(item) => onSelectChange(item, index)}
-                    value={direccion?.numeroCalle}
-                    placeholder={"Ingrese numeracion"}
-                  />
-                  <Icon
-                    className={`px-2`}
-                    type="button"
-                    disabled={formData.direcciones.length == 1}
-                    onClick={() => handleDireccionDelete(index)}
-                    icono={"trash-can"}/>
-                </div>
-                <div className={`lg:col-span-full flex justify-end  pr-3`}>
-                  <Icon
-                      className={`${index == formData.direcciones.length - 1 ? "pt-2" :"hidden"}`}
+
+                {index === formData.direcciones.length - 1 && (
+                  <div className="flex justify-end border-t pt-3 mt-3">
+                    <button
                       type="button"
                       onClick={handleDireccionAdd}
-                      icono={"add"}> Agregar direccion </Icon>
-                </div>
+                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md transition-colors duration-200"
+                    >
+                      <Icon icono={"plus"} className="mr-2 text-xs" />
+                      Agregar dirección
+                    </button>
+                  </div>
+                )}
               </div>
-            )
-          })}
+            ))}
           </div>
 
-          <div className="lg:col-span-full h-1 text-red-500">
-            {error && error.msg}
+          {/* Mensaje de error */}
+          {error && error.msg && (
+            <div className="text-red-500 text-center mb-4">
+              {error.msg}
+            </div>
+          )}
+
+          {/* Botones principales del formulario */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 border-t-2 border-gray-200 bg-gray-50 -mx-6 px-6 pb-6 rounded-b-lg">
+            <Button tipo="enviar" type="submit" className="flex-1 sm:flex-initial">
+              <Icon icono={"save"} className="mr-2" />
+              Guardar Contacto
+            </Button>
+            <Button
+              tipo="neutro"
+              loading={buscando}
+              type="button"
+              onClick={handleBuscar}
+              className="flex-1 sm:flex-initial"
+            >
+              <Icon icono={"search"} className="mr-2" />
+              Buscar por CUIT
+            </Button>
+            <Button
+              tipo="borrar"
+              type="reset"
+              onClick={handleReset}
+              className="flex-1 sm:flex-initial"
+            >
+              <Icon icono={"undo"} className="mr-2" />
+              Limpiar Formulario
+            </Button>
           </div>
-        </div>
-        <div className="flex py-3 lg:col-span-full gap-10 justify-center">
-          <Button type="submit">Guardar</Button>
-          <Button loading={buscando} type="button" onClick={handleBuscar}>buscar</Button>
-          <Button type="reset" onClick={handleReset}>Reset</Button>
-        </div>
-      </form>
+        </FormCard>
+      </div>
     </main>
   )
 }

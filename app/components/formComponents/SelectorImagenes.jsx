@@ -65,11 +65,11 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className
         <div className='flex justify-between items-start'>
           <Icon icono="trash-can" regular
                 onClick={deleteCurrentImage}
-                className='text-lg text-white bg-slate-500 px-4 py-2 rounded-full'
+                className='text-lg text-white bg-red-500 hover:bg-red-600 px-4 py-2 rounded-full transition-colors duration-200 shadow-lg'
           />
           <Icon icono="camera"
                 onClick={addImageToGallery}
-                className='text-lg text-white bg-slate-500 px-3 py-2 rounded-full'
+                className='text-lg text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-full transition-colors duration-200 shadow-lg'
           />
         </div>
         <div className='self-center'>

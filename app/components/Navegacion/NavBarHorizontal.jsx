@@ -62,6 +62,20 @@ const NavBarHorizontal = forwardRef((props, ref) => {
   },[activeMenuIndex, activeSubMenuIndex, push, salir])
 
 
+  // Cerrar menú al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isNavActive && !event.target.closest('[data-navbar]')) {
+        salir(event, false);
+      }
+    };
+
+    if (isNavActive) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isNavActive, salir]);
+
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Alt') {
@@ -90,6 +104,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
 
   return (
     <div
+      data-navbar
       style={{ zIndex: zIndexNavBar }}
       className={`${theme.background}
         flex flex-row-reverse justify-between px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
@@ -108,26 +123,27 @@ const NavBarHorizontal = forwardRef((props, ref) => {
                 cursor-pointer
               `}
               onClick={() => {
+                setIsNavActive(true);
                 setActiveMenuIndex(menuIndex);
                 setActiveSubMenuIndex(-1);
-                subMenu?.length ? navigate('ArrowDown') :push(href);
+                subMenu?.length ? navigate('ArrowDown') : push(href);
               }}
               style={{ zIndex: zIndexNavBar + 1 }}
           >
             <span>{menu}</span>
-            {subMenu && subMenu?.length > 0 && activeMenuIndex === menuIndex && (
-              <ul className="absolute left-0 mt-2 bg-gray-500" style={{ zIndex: zIndexNavBar + 2 }}>
+            {subMenu && subMenu?.length > 0 && activeMenuIndex === menuIndex && isNavActive && (
+              <ul className="absolute left-0 top-full mt-1 bg-gray-700 border border-gray-600 rounded shadow-lg min-w-max" style={{ zIndex: zIndexNavBar + 2 }}>
                 {subMenu?.map(({menu, href}, subIndex) => (
                   <li key={subIndex}
                       className={`
                         ${theme.menuItemHover}
-                        ${activeSubMenuIndex === subIndex ? theme.menuItemActive : theme.menuItem}
+                        ${activeSubMenuIndex === subIndex ? theme.menuItemActive : 'bg-gray-600'}
                         ${theme.text}
-                        bg-gray-600
                         px-4
                         py-2
-                        mb-0.5
                         cursor-pointer
+                        hover:bg-gray-500
+                        transition-colors duration-150
                       `}
                       onClick={(e)=> {push(href); salir(e)}}
                       style={{ zIndex: zIndexNavBar + 2 }}

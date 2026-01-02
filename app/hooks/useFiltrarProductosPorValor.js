@@ -23,10 +23,12 @@ const useFiltrarProductosPorValor = (productos, columnas) => {
     ...tablaListaProductosColumnasNames[x],
   })),[columnas])
 
+  const setFiltroMemo = useMemo(() => setFiltro, []);
+
   return [
     cols,
     productosFiltrados,
-    setFiltro,
+    setFiltroMemo,
     productos.length,
     productosFiltrados.length,
     filtro,

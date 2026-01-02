@@ -15,6 +15,7 @@ const Input = forwardRef(({
   actionIcon,
   doOnEnter,
   error,
+  loading,
   ...props
 }, ref) => {
   const { pending } = useFormStatus();
@@ -42,8 +43,10 @@ const Input = forwardRef(({
     }
   };
 
+  const hasValue = value && value !== "";
+
   return (
-    <div className="flex relative w-full">
+    <div className="relative w-full">
       <input
         ref={ref}
         id={name}
@@ -59,35 +62,44 @@ const Input = forwardRef(({
           text-right
           text-gray-900
           block w-full
-          px-2 pb-[3px] pt-[20px]
+          px-2.5 pt-5 pb-2
           h-[46px]
           border-0 border-b-2 border-gray-300
+          bg-transparent
           focus:outline-none focus:ring-0
           focus:border-slate-400 peer
-          ${error?.error ? "border-red-300":""}
-          ${pending ? "bg-gray-200":""}
-          ${forceClassName? forceClassName : "placeholder:translate-y-[2px]"}
-          ${type === "checkbox" ? "form-checkbox text-blue-600 mr-1 ml-auto" : ""}
-          ${actionIcon ? "pr-[32px]":""}
+          transition-all duration-500 ease-in-out
+          disabled:opacity-50 disabled:cursor-not-allowed
+          placeholder:text-gray-500
+          ${error?.error ? "border-red-500" : ""}
+          ${pending || loading ? "bg-gray-50" : ""}
+          ${type === "checkbox" ? "form-checkbox text-gray-900 mr-1 ml-auto h-auto py-0" : ""}
+          ${actionIcon ? "pr-10" : ""}
           ${className}
           `}
-          style={type === "checkbox" ? { marginRight: 0, marginLeft: 'auto' } : {}}
-
+        disabled={loading}
+        style={type === "checkbox" ? { marginRight: 0, marginLeft: 'auto' } : {}}
         {...props}
       />
-        <label htmlFor={name}
-          className={`
-            appearance-none absolute px-2 transition-all top-0.5
-            text-[0.96rem] font-medium text-black
-            peer-placeholder-shown:text-md
-            peer-placeholder-shown:top-1.5
-            peer-focus:text-sm
-            peer-focus:top-0.5
-            peer-focus:px-1.5
-          `}
+
+      {/* Label flotante dentro del input */}
+      {label && (
+        <span
+          className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
+            text-sm font-medium top-0.5 text-black
+            ${hasValue || placeholder ? "top-0.5 text-sm" : "top-2.5 text-md"}`
+          }
         >
           {label}
-        </label>
+        </span>
+      )}
+
+      {/* Icono de acción */}
+      {actionIcon && (
+        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
+          {actionIcon}
+        </div>
+      )}
         {error?.error && 
         <label htmlFor={name}
           className={`

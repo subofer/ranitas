@@ -1,100 +1,79 @@
 import { useState, useRef, useId, useEffect } from "react";
 import useParentForm from "@/hooks/useParentForm";
 import { useFormStatus } from "react-dom";
-import useHotkey from "@/hooks/useHotkey";  // Asegúrate de importar el hook correctamente
+import useHotkey from "@/hooks/useHotkey";
 
 const Switch = ({ name, value, label, seconLabel, onChange }) => {
   const id = useId();
   const { refPadre, reset } = useParentForm();
-  const { pending, action } = useFormStatus();
+  const { pending } = useFormStatus();
   const inputRef = useRef(null);
-  const [touched, setTouched] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const handleOnClick = () => {
     inputRef.current.checked = !inputRef.current.checked;
     onChange?.({ name, value: inputRef.current.checked, type: "checkbox" });
   };
 
-  //useHotkey([' '], refPadre, handleOnClick, true);
   useHotkey(['Enter'], refPadre, handleOnClick);
   useHotkey(['ArrowRight'], refPadre, handleOnClick);
   useHotkey(['ArrowLeft'], refPadre, handleOnClick);
 
   useEffect(() => {
-    setTouched(false);
+    setIsFocused(false);
   }, [reset]);
 
   return (
     <div
       ref={refPadre}
-      onClick={() => setTouched(true)}
-
-      className={`flex relative flex-row form-input justify-between
-        transition-all duration-500 ease-in-out
-        w-full min-h-[2.5rem] px-2
-        border-0 border-b-2 border-gray-300
-        appearance-none
-        hover:border-slate-400
-        focus:outline-none focus:ring-2 focus:ring-blue-500
-        ${pending ? "bg-gray-200" : ""}
-       `}
+      className="flex items-center justify-between p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors duration-200"
     >
-      <label htmlFor={id}
-        className={`
-        appearance-none transition-all duration-500 ease-in-out text-[0.96rem] text-md font-medium text-black
-        ${touched ? `
-        text-sm
-          top-0
-          px-0
-          ` : ""}
-          `}>
-        <input id={id} alt="autocomplete" className={`hidden`} name={name} value={value} ref={inputRef} type="checkbox" />
-        {label}
-      </label>
-      <div onClick={handleOnClick} className="relative">
-        <div className={`
-                transition-all duration-300 ease-in-out
-                  delay-200
-                  h-[2rem] w-[4rem] rounded-full
-                  ring-1
-                  ring-inset
-                  ${value ? 'bg-green-300 ring-green-400' : 'bg-blue-200 ring-blue-300'}
-                  focus:ring-2 focus:ring-white focus:ring-opacity-50
-              `}
+      {/* Labels */}
+      <div className="flex-1">
+        <label
+          htmlFor={id}
+          className="text-sm font-medium text-gray-700 cursor-pointer select-none block"
         >
-          <div
-            tabIndex={0}
-            onFocus={() => setTouched(true)}
-            className={`
-              flex h-full w-1/2
-              rounded-full
-              bg-slate-500
-              ring-1
-              ring-inset
-              ${value ? 'ring-green-400' : 'ring-blue-300'}
-              transition-transform duration-300 ease-in-out
-              transform ${value ? 'translate-x-full' : 'translate-x-0'}
-              focus:outline-none focus:ring-1
-              ${value ? 'focus:ring-green-500' : 'focus:ring-blue-400'}
-            `}
-          >
-          </div>
-        </div>
-      </div>
-      {seconLabel &&
-        <label htmlFor={id}
-          className={`
-            appearance-none transition-all duration-500 ease-in-out text-[0.96rem] text-md font-medium text-black
-            ${touched ? `
-            text-sm
-            top-0
-            px-0
-            ` : ""}
-      `}>
-          <input id={id} alt="autocomplete" className={`hidden`} name={name} value={value} ref={inputRef} type="checkbox" />
-          {seconLabel}
+          {label}
         </label>
-      }
+        {seconLabel && (
+          <span className="text-xs text-gray-500 block mt-0.5">
+            {seconLabel}
+          </span>
+        )}
+      </div>
+
+      {/* Hidden checkbox */}
+      <input
+        id={id}
+        name={name}
+        value={value}
+        ref={inputRef}
+        type="checkbox"
+        className="hidden"
+        readOnly
+      />
+
+      {/* Toggle Switch */}
+      <div
+        onClick={handleOnClick}
+        className={`
+          relative inline-flex h-6 w-11 items-center rounded-full cursor-pointer
+          transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+          ${value ? 'bg-blue-600' : 'bg-gray-300'}
+          ${pending ? 'opacity-50 cursor-not-allowed' : ''}
+        `}
+        tabIndex={0}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+      >
+        <span
+          className={`
+            inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ease-in-out
+            ${value ? 'translate-x-6' : 'translate-x-1'}
+          `}
+        />
+      </div>
     </div>
   );
 }

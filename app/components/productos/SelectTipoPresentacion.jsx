@@ -1,7 +1,7 @@
 "use client"
 import { useEffect, useState } from 'react';
 import { getTiposPresentacion } from '@/prisma/serverActions/tiposPresentacion';
-import Select from '../formComponents/Select';
+import FilterSelect from '../formComponents/FilterSelect';
 
 export const SelectTipoPresentacion = ({ value, onChange, ...props }) => {
   const [tipos, setTipos] = useState([]);
@@ -25,19 +25,20 @@ export const SelectTipoPresentacion = ({ value, onChange, ...props }) => {
   }, []);
 
   const opciones = tipos.map(tipo => ({
-    value: tipo.id,
-    text: tipo.nombre
+    id: tipo.id,
+    nombre: tipo.nombre
   }));
 
   return (
-    <Select
+    <FilterSelect
       value={value}
       onChange={onChange}
       options={opciones}
-      valueField="value"
-      textField="text"
+      valueField="id"
+      textField="nombre"
       loading={loading}
-      placeholder="Seleccionar tipo de presentación"
+      placeholder="Buscar tipo de empaque..."
+      label="Tipo de empaque"
       {...props}
     />
   );

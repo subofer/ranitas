@@ -25,6 +25,7 @@ export const menuListHorizontal = [
   ] },
   { menu: "Compras", subMenu: [
     { menu: "Cargar Factura", href: "/compras" },
+    { menu: "Facturas", href: "/facturas" },
   ] },
   { menu: "ABM", subMenu: [
     { menu: "Productos", href: "/cargarProductos" },

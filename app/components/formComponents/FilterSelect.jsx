@@ -159,6 +159,8 @@ ref
 
   },[busy, filteredOptions?.length, pending])
 
+  const hasValue = opcion || (filtro && filtro.trim() !== "");
+
   return (
     <div ref={refPadre} className="relative">
       <input
@@ -168,40 +170,73 @@ ref
         name={props.name}
         value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value : undefined) || 0)}
       />
-      <Input
-        name={`$ACTION_IGNORE_INPUT_JUST_FOR_LABEL_${props.name}`}
-        ref={inputRef}
-        placeholder={props.placeholder}
-        value={opcion ? opcion[textField] : filtro}
-        onChange={({value}) => phase(null, value, true, -1)}
-        onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
-        tabIndex={props.tabIndex}
-        autoComplete="off"
-        onBlur={() => setIsOpen(false)}
-        label={label}
-        disabled={pending || busy}
-        actionIcon={
+
+      <div className="relative">
+        <input
+          name={`$ACTION_IGNORE_INPUT_JUST_FOR_LABEL_${props.name}`}
+          ref={inputRef}
+          placeholder={props.placeholder || "Buscar y seleccionar..."}
+          value={opcion ? opcion[textField] : filtro}
+          onChange={({target: {value}}) => phase(null, value, true, -1)}
+          onClick={() => setIsOpen(!isOpen)}
+          onKeyDown={handleKeyDown}
+          tabIndex={props.tabIndex}
+          autoComplete="off"
+          onBlur={() => setIsOpen(false)}
+          disabled={pending || busy}
+          className={`
+            appearance-none
+            text-right
+            text-gray-900
+            block w-full
+            px-2.5 pt-5 pb-2 pr-10
+            h-[46px]
+            border-0 border-b-2 border-gray-300
+            bg-transparent
+            focus:outline-none focus:ring-0
+            focus:border-slate-400 peer
+            transition-all duration-500 ease-in-out
+            disabled:opacity-50 disabled:cursor-not-allowed
+            placeholder:text-gray-500
+            ${pending || busy ? "bg-gray-50" : ""}
+          `}
+        />
+
+        {/* Label flotante dentro del input */}
+        {label && (
+          <span
+            className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
+              text-sm font-medium top-0.5 text-black
+              ${hasValue || props.placeholder ? "top-0.5 text-sm" : "top-2.5 text-md"}`
+            }
+          >
+            {label}
+          </span>
+        )}
+
+        {/* Icono del dropdown */}
+        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <Icon
             rotate={isOpen && filteredOptions?.length != 0}
             className={iconoSegunCaso.className}
             tabIndex={-1}
             icono={iconoSegunCaso.icono}
             onClick={() => setIsOpen(prev => !prev)}
-            />
-        }
-      />
+          />
+        </div>
+      </div>
+
       <ul
         className={`${!isOpen ? 'hidden' : 'absolute' } z-10 w-full max-h-60 overflow-auto
-          bg-white shadow-md drop-shadow-[0px_0px_5px_rgba(229,231,235,1)]
+          bg-white border border-gray-200 rounded-md shadow-lg
         `}>
         {filteredOptions.map((option, index) => {
           const active = hgIndex === index
-            ? "bg-slate-300 hover:bg-slate-500"
-            : "hover:bg-slate-400"
+            ? "bg-gray-100"
+            : "hover:bg-gray-50"
           return(
             <li key={index}
-              className={`cursor-pointer p-2 ${active}`}
+              className={`cursor-pointer p-3 text-gray-900 ${active} transition-colors duration-150`}
               ref={(el) => optionRefs.current[index] = el}
               onClick={() => onSelect(option)}
               onMouseDown={(e) => e.preventDefault()}

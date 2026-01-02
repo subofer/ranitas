@@ -70,16 +70,16 @@ export const CargaProductoBuscadorClient = () => {
     setBuscando(false);
   },[]);
 
-  const handleGuardar = useCallback(async (data = formData) => {
+  const handleGuardar = useCallback(async (data) => {
     const { error } = await guardarProducto(data);
     if (!error) {
       await handleBuscar(data.codigoBarra);
     }
-  }, [formData, handleBuscar]);
+  }, [handleBuscar]);
 
   const handleSave = async (e) => {
     if (formData.codigoBarra) {
-      return await handleGuardar();
+      return await handleGuardar(formData);
     } else {
       alertaCrearCodigoDeBarras(formData, async () => {
         const generarCodigoDeBarras = await generateBarCode(formData)
@@ -170,28 +170,22 @@ export const CargaProductoBuscadorClient = () => {
       handleReset={handleReset}
       loading={buscando}
       action={handleSave}
-      className={`flex pt-4 max-w-screen  bg-gray-200 md:p-4` }
+      className="max-w-full"
       title={`${local ? "Editar" : "Cargar"} Producto`}
       busy={buscando}
     >
-      <div className='flex flex-col-reverse lg:flex-row-reverse gap-2'>
-        <div className='p-2 bg-gray-400  h-fit'>
-          <SelectorImagenes
-            className=''
-            nombre={formData.nombre}
-            imagenes={imagenes}
-            proceder={handleImageChange}/>
-        </div>
-        <div className="
-          grid
-          grid-cols-1
-          w-full
-          gap-2
-          lg:gap-3
-          lg:grid-cols-10
-          lg:mx-auto
-          lg:h-fit
-        ">
+      <div className='grid grid-cols-1 lg:grid-cols-12 gap-6'>
+        {/* Panel de formulario principal */}
+        <div className="lg:col-span-8">
+          <div className="
+            grid
+            grid-cols-1
+            w-full
+            gap-4
+            lg:gap-4
+            lg:grid-cols-10
+            lg:h-fit
+          ">
 
           <div className="col-span-full lg:col-span-4">
             <Input
@@ -289,6 +283,19 @@ export const CargaProductoBuscadorClient = () => {
               presentaciones={formData.presentaciones}
               onChange={handlePresentacionesChange}
             />
+          </div>
+          </div>
+        </div>
+
+        {/* Panel de imágenes */}
+        <div className='lg:col-span-4'>
+          <div className='bg-slate-50 border border-slate-200/40 rounded-lg shadow-md p-4 h-fit'>
+            <h4 className="text-sm font-semibold text-slate-700 mb-3">Imágenes del Producto</h4>
+            <SelectorImagenes
+              className=''
+              nombre={formData.nombre}
+              imagenes={imagenes}
+              proceder={handleImageChange}/>
           </div>
         </div>
 

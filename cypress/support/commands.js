@@ -1,5 +1,5 @@
 // Comando personalizado para login
-Cypress.Commands.add('login', (username, password) => {
+Cypress.Commands.add('login', (username = 'subofer', password = '1234') => {
   cy.visit('/login')
   cy.get('input[name="nombre"]').type(username)
   cy.get('input[name="password"]').type(password)

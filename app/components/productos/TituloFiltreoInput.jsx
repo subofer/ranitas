@@ -9,14 +9,24 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   const [ valorLocal, setValorLocal ] = useState(param)
   const inputRef = useHotkey(['control', 'f'])
 
+  const [filtroTemporal, setFiltroTemporal] = useState(param || "");
+
   const handleChange = useCallback(({value}) => {
     setParam(value)
     setValorLocal(value || "");
+    setFiltroTemporal(value || "");
   },[setParam])
 
   useEffect(() => {
-    seter(param || "")
-  },[seter, param])
+    if (param !== valorLocal) {
+      setValorLocal(param || "");
+      setFiltroTemporal(param || "");
+    }
+  },[param])
+
+  useEffect(() => {
+    seter(filtroTemporal);
+  }, [seter, filtroTemporal]);
 
   useHotkey(['control', 'q'], inputRef, handleChange)
 
