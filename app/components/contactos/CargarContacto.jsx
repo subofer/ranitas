@@ -93,7 +93,7 @@ export default function CargarContacto() {
       const personaEncontrada = await buscar(formData)
 
       if(!personaEncontrada?.error) {
-        setFormData({...defautlFormValues, ...personaEncontrada })
+        setFormData(normalizeContactoData(personaEncontrada))
         setError({error: false})
       }else{
         setError(personaEncontrada)
@@ -108,25 +108,59 @@ export default function CargarContacto() {
   },[searchParams])
 
 
+  // Función para limpiar y normalizar datos del contacto
+  const normalizeContactoData = (contacto) => {
+    if (!contacto) return defautlFormValues;
+
+    const primeraDireccion = contacto?.direcciones?.[0] || {};
+
+    return {
+      id: contacto.id || '',
+      cuit: contacto.cuit || '',
+      nombre: contacto.nombre || '',
+      telefono: contacto.telefono || '',
+      persona: contacto.persona || '',
+      iva: contacto.iva || '',
+      esProveedor: Boolean(contacto.esProveedor),
+      esInterno: Boolean(contacto.esInterno),
+      esMarca: Boolean(contacto.esMarca),
+      direcciones: [{
+        idProvincia: primeraDireccion.provincia?.id || primeraDireccion.idProvincia || '',
+        idLocalidad: primeraDireccion.localidad?.id || primeraDireccion.idLocalidad || '',
+        idLocalidadCensal: primeraDireccion.idLocalidadCensal || '',
+        idCalle: primeraDireccion.calle?.id || primeraDireccion.idCalle || '',
+        numeroCalle: primeraDireccion.numeroCalle ? primeraDireccion.numeroCalle.toString() : '',
+      }],
+      email: contacto.emails?.map(({email}) => email).filter(Boolean).join(',') || '',
+    };
+  };
+
   useEffect(() => {
     async function completarConCuit() {
+      if (!cuitIngresado) return;
+
       setBuscando(true)
-      const contactoEncontrado = {...(await getContactoByCuit(cuitIngresado))}
-      contactoEncontrado.cuit !== cuitIngresado
-        ? handleReset()
-        : setFormData({
-          ...defautlFormValues,
-          ...contactoEncontrado?.direcciones?.[0],
-          ...contactoEncontrado?.direcciones?.[0]?.calle,
-          ...contactoEncontrado,
-          email: contactoEncontrado.emails.map(({email}) => email).join(','),
-        })
-      setBuscando(false)
+      try {
+        const contactoEncontrado = await getContactoByCuit(cuitIngresado)
+
+        if (!contactoEncontrado || contactoEncontrado.cuit !== cuitIngresado) {
+          console.log('No se encontró contacto o CUIT no coincide, reseteando formulario')
+          handleReset()
+        } else {
+          console.log('Cargando contacto encontrado:', contactoEncontrado)
+          const normalizedData = normalizeContactoData(contactoEncontrado)
+          console.log('Datos normalizados para formulario:', normalizedData)
+          setFormData(normalizedData)
+        }
+      } catch (error) {
+        console.error('Error al cargar contacto:', error)
+        setError({error: true, msg: "Error al cargar el contacto"})
+      } finally {
+        setBuscando(false)
+      }
     }
 
-    if(cuitIngresado){
-      completarConCuit();
-    }
+    completarConCuit();
   },[cuitIngresado, handleReset])
 
   useEffect(() => {
@@ -145,7 +179,7 @@ export default function CargarContacto() {
   return (
     <main className='min-h-screen bg-slate-50 py-8'>
       <div className='container mx-auto max-w-6xl px-4'>
-        <FormCard title={title} action={handleSave} formRef={formRef} data-testid="contact-form">
+        <FormCard title={title} action={handleSave} formRef={formRef} buttons={false} data-testid="contact-form">
           <input hidden name="id" value={formData.id} readOnly/>
 
           {/* Información básica */}
@@ -153,10 +187,10 @@ export default function CargarContacto() {
             <Input
               name={"cuit"}
               label={"Cuit"}
-              onBlur={handleBuscar}
               onChange={onChange}
               value={formData.cuit}
               placeholder={"Ingrese cuit"}
+              doOnEnter={handleBuscar}
             />
             <Input
               name={"persona"}

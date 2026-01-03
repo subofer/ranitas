@@ -107,6 +107,7 @@ const NavBarHorizontal = forwardRef((props, ref) => {
       data-navbar
       style={{ zIndex: zIndexNavBar }}
       className={`${theme.background}
+        sticky top-0 shadow-lg
         flex flex-row-reverse justify-between px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
     `}>
       <UserMenu/>

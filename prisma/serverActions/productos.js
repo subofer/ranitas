@@ -18,10 +18,23 @@ export async function guardarProducto(formData) {
   const relaciones = { update: {}, create: {} };
 
   if (formData.categorias) {
-    relaciones.create.categorias = {
-      connect: formData.categorias.map(({ id }) => ({ id })),
+    // Para update, primero desconectar todas las categorías existentes
+    if (formData.id) {
+      relaciones.update.categorias = {
+        set: [], // Desconectar todas primero
+        connect: formData.categorias.map(({ id }) => ({ id })), // Luego conectar las nuevas
+      };
+    } else {
+      // Para create, solo conectar
+      relaciones.create.categorias = {
+        connect: formData.categorias.map(({ id }) => ({ id })),
+      };
+    }
+  } else if (formData.id) {
+    // Si no hay categorías pero es update, desconectar todas
+    relaciones.update.categorias = {
+      set: [],
     };
-    relaciones.update.categorias = relaciones.create.categorias;
   }
 
   if (formData.proveedores?.length > 0) {
@@ -43,7 +56,17 @@ export async function guardarProducto(formData) {
     relaciones.update.proveedores = relaciones.create.proveedores;
   }
 
-  // Manejar presentaciones
+  // Manejar presentaciones - Eliminar todas las existentes y crear las nuevas
+  if (formData.id) {
+    // Primero eliminar todas las presentaciones existentes del producto
+    await prisma.presentaciones.deleteMany({
+      where: {
+        productoId: formData.id
+      }
+    });
+  }
+
+  // Crear todas las presentaciones nuevas
   if (formData.presentaciones?.length > 0) {
     relaciones.create.presentaciones = {
       create: formData.presentaciones.map(presentacion => ({

@@ -28,7 +28,7 @@ const Page = () => {
     className="
     w-full
     h-full
-    bg-red-300
+    bg-gray-50
 
     "
     > 

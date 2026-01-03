@@ -275,12 +275,214 @@ const seedTiposPresentacion = async () => {
   }
 };
 
+// Función para poblar datos de prueba
+const seedMockData = async () => {
+  try {
+    console.log('🌱 Creando datos de prueba...');
+
+    // Crear categorías adicionales
+    const categoriasData = [
+      'Proteínas', 'Vitaminas', 'Minerales', 'Superalimentos', 'Tés y Hierbas',
+      'Productos Orgánicos', 'Sin Gluten', 'Sin Lactosa', 'Para Deportistas'
+    ];
+
+    for (const nombre of categoriasData) {
+      await prisma.categorias.upsert({
+        where: { nombre },
+        update: {},
+        create: { nombre }
+      });
+    }
+
+    // Crear proveedores adicionales
+    const proveedoresData = [
+      { nombre: 'Proveedor Salud Natural', telefono: '1123456789', email: 'info@saludnatural.com' },
+      { nombre: 'Distribuidora Nutricional', telefono: '1134567890', email: 'ventas@nutricional.com' },
+      { nombre: 'Importadora Orgánica', telefono: '1145678901', email: 'contacto@importadora.com' }
+    ];
+
+    for (const prov of proveedoresData) {
+      await prisma.contactos.upsert({
+        where: { nombre: prov.nombre },
+        update: {},
+        create: {
+          ...prov,
+          esProveedor: true,
+          cuit: `20${Math.random().toString().substr(2, 8)}9`,
+          persona: 'JURIDICA',
+          iva: 'RESPONSABLE_INSCRIPTO'
+        }
+      });
+    }
+
+    // Crear tipos de presentación adicionales
+    const tiposPresentacionData = [
+      { nombre: 'Sobre', descripcion: 'Presentación en sobre' },
+      { nombre: 'Frasco', descripcion: 'Presentación en frasco' },
+      { nombre: 'Lata', descripcion: 'Presentación en lata' }
+    ];
+
+    for (const tipo of tiposPresentacionData) {
+      await prisma.tiposPresentacion.upsert({
+        where: { nombre: tipo.nombre },
+        update: {},
+        create: tipo
+      });
+    }
+
+    // Crear productos de prueba
+    const productosData = [
+      {
+        codigoBarra: '7790012345001',
+        nombre: 'Proteína Whey Isolada',
+        descripcion: 'Proteína de suero de leche aislada, alto contenido proteico',
+        unidad: 'gramos',
+        size: 1000,
+        categorias: ['Proteínas', 'Para Deportistas']
+      },
+      {
+        codigoBarra: '7790012345002',
+        nombre: 'Omega 3 Concentrado',
+        descripcion: 'Ácidos grasos esenciales EPA y DHA',
+        unidad: 'cápsulas',
+        size: 60,
+        categorias: ['Vitaminas', 'Superalimentos']
+      },
+      {
+        codigoBarra: '7790012345003',
+        nombre: 'Colágeno Hidrolizado',
+        descripcion: 'Colágeno tipo 1 y 3 para piel, cabello y articulaciones',
+        unidad: 'gramos',
+        size: 300,
+        categorias: ['Proteínas', 'Vitaminas']
+      },
+      {
+        codigoBarra: '7790012345004',
+        nombre: 'Té Verde Orgánico',
+        descripcion: 'Té verde premium orgánico, rico en antioxidantes',
+        unidad: 'gramos',
+        size: 100,
+        categorias: ['Tés y Hierbas', 'Productos Orgánicos']
+      },
+      {
+        codigoBarra: '7790012345005',
+        nombre: 'Maca Peruana',
+        descripcion: 'Raíz de maca orgánica en polvo, energizante natural',
+        unidad: 'gramos',
+        size: 200,
+        categorias: ['Superalimentos', 'Productos Orgánicos']
+      }
+    ];
+
+    for (const prod of productosData) {
+      const categoriasIds = [];
+      for (const catNombre of prod.categorias) {
+        const categoria = await prisma.categorias.findUnique({
+          where: { nombre: catNombre }
+        });
+        if (categoria) {
+          categoriasIds.push({ id: categoria.id });
+        }
+      }
+
+      await prisma.productos.upsert({
+        where: { codigoBarra: prod.codigoBarra },
+        update: {},
+        create: {
+          ...prod,
+          tipoVenta: 'UNIDAD',
+          categorias: { connect: categoriasIds }
+        }
+      });
+    }
+
+    // Crear presentaciones para los productos
+    const productos = await prisma.productos.findMany();
+
+    for (const producto of productos) {
+      // Crear algunas presentaciones para cada producto
+      const presentaciones = [
+        {
+          nombre: `Caja x 12 unidades`,
+          tipoPresentacionId: (await prisma.tiposPresentacion.findFirst({ where: { nombre: 'Caja' } }))?.id,
+          cantidad: 12,
+          unidadMedida: 'unidades'
+        },
+        {
+          nombre: `Frasco x 60 unidades`,
+          tipoPresentacionId: (await prisma.tiposPresentacion.findFirst({ where: { nombre: 'Frasco' } }))?.id,
+          cantidad: 60,
+          unidadMedida: 'unidades'
+        }
+      ];
+
+      for (const pres of presentaciones) {
+        if (pres.tipoPresentacionId) {
+          await prisma.presentaciones.upsert({
+            where: {
+              productoId_tipoPresentacionId: {
+                productoId: producto.id,
+                tipoPresentacionId: pres.tipoPresentacionId
+              }
+            },
+            update: {},
+            create: {
+              ...pres,
+              productoId: producto.id
+            }
+          });
+        }
+      }
+    }
+
+    // Crear algunos precios para los productos
+    for (const producto of productos) {
+      await prisma.precios.upsert({
+        where: {
+          idProducto: producto.id
+        },
+        update: {},
+        create: {
+          precio: Math.floor(Math.random() * 5000) + 1000, // Precio entre 1000 y 6000
+          idProducto: producto.id
+        }
+      });
+    }
+
+    // Crear algunos documentos de prueba (facturas)
+    const proveedores = await prisma.contactos.findMany({ where: { esProveedor: true } });
+
+    for (let i = 0; i < 5; i++) {
+      const fecha = new Date();
+      fecha.setDate(fecha.getDate() - i * 7); // Documentos de las últimas 5 semanas
+
+      await prisma.documentos.upsert({
+        where: {
+          numero: `F001-${i + 1}`
+        },
+        update: {},
+        create: {
+          numero: `F001-${i + 1}`,
+          fecha,
+          tipoDocumento: 'FACTURA',
+          tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA', // Alternar entre compras y ventas
+          total: Math.floor(Math.random() * 10000) + 5000,
+          idContacto: proveedores[i % proveedores.length]?.id
+        }
+      });
+    }
+
+    console.log('✅ Datos de prueba creados exitosamente');
+  } catch (error) {
+    console.error('❌ Error creando datos de prueba:', error);
+  }
+};
+
 await seed([
   seedUsuarios,
   seedTiposPresentacion,
-  /*
   cargarGeoRef,
-  seedProveedores
-  */
+  seedProveedores,
   seedCategorias,
+  seedMockData, // Agregar los datos de prueba
 ]);

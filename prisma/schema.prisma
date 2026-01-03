@@ -30,6 +30,7 @@ model Productos {
   proveedores      ProductoProveedor[]
   categorias       Categorias[]        @relation("CategoriasToProductos")
   presentaciones   Presentaciones[]
+  detallePedidos   DetallePedidos[]
 }
 
 model TiposPresentacion {
@@ -133,6 +134,7 @@ model Contactos {
   emails              Emails[]
   productos           ProductoProveedor[]
   cuentaBancaria      CuentaBancaria[]
+  pedidos             Pedidos[]           @relation("PedidoProveedor")
 }
 
 model Usuarios {
@@ -142,6 +144,7 @@ model Usuarios {
   nivel     Int      @default(1)
   createdAt DateTime @default(now())
   email     String?  @unique
+  pedidos   Pedidos[] @relation("PedidoUsuario")
 }
 
 model Emails {
@@ -236,4 +239,40 @@ enum FormaPago {
   TRANSFERENCIA
   CHEQUE
   CUENTA_CORRIENTE
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  ENVIADO
+  RECIBIDO
+  CANCELADO
+}
+
+model Pedidos {
+  id                String            @id @default(uuid())
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  numero            String            @unique
+  fecha             DateTime
+  idProveedor       String?
+  proveedor         Contactos?        @relation("PedidoProveedor", fields: [idProveedor], references: [id])
+  estado            EstadoPedido      @default(PENDIENTE)
+  notas             String?
+  idUsuario         String
+  usuario           Usuarios          @relation("PedidoUsuario", fields: [idUsuario], references: [id])
+  detallePedidos    DetallePedidos[]
+}
+
+model DetallePedidos {
+  id            String      @id @default(uuid())
+  createdAt     DateTime    @default(now())
+  idPedido      String
+  pedido        Pedidos     @relation(fields: [idPedido], references: [id], onDelete: Cascade)
+  idProducto    String
+  producto      Productos   @relation(fields: [idProducto], references: [id])
+  cantidad      Float
+  precioUnitario Float?
+  observaciones String?
+
+  @@unique([idPedido, idProducto])
 }

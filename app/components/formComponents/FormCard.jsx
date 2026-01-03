@@ -26,6 +26,7 @@ export const FormCard = ({
   action,
   handleReset,
   className,
+  formRef,
   ...props
 }) => {
   const {
@@ -35,6 +36,7 @@ export const FormCard = ({
 
   return(
     <form
+      ref={formRef}
       className={`
         flex flex-col w-full h-fit
         bg-white border border-slate-200 rounded-lg shadow-lg
@@ -43,9 +45,9 @@ export const FormCard = ({
       {...formControl}
       {...props}
     >
-      <div className="p-6">
+      <div className="p-4">
         { title &&
-          <FormTitle className={`w-full text-2xl font-bold text-slate-800 mb-6`}>
+          <FormTitle className={`w-full text-2xl font-bold text-slate-800 mb-4`}>
             {title}
           </FormTitle>
         }

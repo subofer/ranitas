@@ -2,7 +2,7 @@ import NavBarHorizontal from '@/components/Navegacion/NavBarHorizontal'
 
 export default async function Layout({ children }) {
   return (
-    <div className={`flex flex-col w-screen min-h-screen overflow-auto`}>
+    <div className={`flex flex-col w-screen min-h-screen`}>
       <div id="modalUnico" hidden={true} className='fixed top-0 left-0 w-screen h-screen bg-black' style={{zIndex:9999}}>
         nada
       </div>

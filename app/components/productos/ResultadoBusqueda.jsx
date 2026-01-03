@@ -33,11 +33,7 @@ const ResultadoBusqueda = ({ resultado, resaltado = false }={}) => {
     }>
       <div className="md:flex">
         <div className="md:flex-shrink-0">
-          {
-            imagen?.src
-              ? <Image className="h-44 w-44 pt-8 object-cover" src={imagen?.src} alt={imagen?.alt} width={140} height={140} />
-              : <div className="h-full w-44 p-8 bg-gray-200">No Image</div>
-          }
+          <Image className="h-44 w-44 pt-8 object-cover" src={imagen?.src || '/ranita.png'} alt={imagen?.alt || 'Producto'} width={140} height={140} />
         </div>
         <div className="p-8">
           <div className="flex flex-row items-center">

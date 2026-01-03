@@ -1,12 +1,12 @@
 import Swal from 'sweetalert2'
 
 export const showImagenProducto = async ({nombre, imagen}) => {
-  
+
   const pregunta = {
     text: `${nombre}?`,
     html: `<div style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
     <span style="text-align: center; font-weight: bold; font-size: 24px; margin-bottom: 20px;">${nombre}</span>
-    <img style="width: 480px; height: auto" src="${imagen}" alt="Imagen del producto"/>
+    <img style="width: 480px; height: auto" src="${imagen || '/ranita.png'}" alt="Imagen del producto" onerror="this.src='/ranita.png'"/>
   </div>
 `,
     toast: true,

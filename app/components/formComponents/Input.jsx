@@ -22,7 +22,7 @@ const Input = forwardRef(({
 
   const handleOnChange = ({ target: { name, value } } = {}) => {
    const newValue = type == "checkbox" ? (value == "on" ? true : false) : value
-   const isFormula = value?.startsWith("=")
+   const isFormula = typeof value === 'string' && value?.startsWith("=")
    console.log("isFormula", isFormula)
    onChange && onChange({name, value: newValue, type});
   }
@@ -62,8 +62,8 @@ const Input = forwardRef(({
           text-right
           text-gray-900
           block w-full
-          px-2.5 pt-5 pb-2
-          h-[46px]
+          px-2.5 pt-6 pb-3
+          h-[52px]
           border-0 border-b-2 border-gray-300
           bg-transparent
           focus:outline-none focus:ring-0
@@ -86,8 +86,8 @@ const Input = forwardRef(({
       {label && (
         <span
           className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
-            text-sm font-medium top-0.5 text-black
-            ${hasValue || placeholder ? "top-0.5 text-sm" : "top-2.5 text-md"}`
+            text-sm font-medium top-1 text-black
+            ${hasValue || placeholder ? "top-1 text-sm" : "top-3 text-base"}`
           }
         >
           {label}

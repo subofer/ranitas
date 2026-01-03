@@ -8,7 +8,7 @@ const ListadoProductos = ({cols, ...props}) => {
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const columnas = cols || ['eliminar',  'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'edit']
+  const columnas = cols || ['eliminar', 'cat', 'nombre', 'desc','size', 'precioActual','stock', 'imagen', 'agregarPedido', 'edit']
 
   useEffect(() => {
     const cargarProductos = async () => {

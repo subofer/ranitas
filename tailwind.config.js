@@ -8,7 +8,7 @@ module.exports = {
   theme: {
     extend: {
       backgroundImage: {
-        'gradient-to-r': 'linear-gradient(to right, #6ee7b7 0%, #6ee7b7 50%, #3b82f6 50%, #3b82f6 100%)'
+        'gradient-to-r': 'linear-gradient(to right, #f9fafb 0%, #f3f4f6 50%, #f9fafb 50%, #f3f4f6 100%)'
       },
       keyframes: {
         fadeIn: { '0%': { opacity: '0', transform: 'translateY(0)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },

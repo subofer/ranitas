@@ -11,7 +11,7 @@ export async function getDashboardMetrics() {
 
     const salesThisMonth = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'VENTA',
+        tipoDocumento: 'FACTURA',
         fecha: {
           gte: currentMonth
         },
@@ -25,7 +25,7 @@ export async function getDashboardMetrics() {
     // Compras del mes (suma de documentos de compra del mes actual)
     const purchasesThisMonth = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'COMPRA',
+        tipoDocumento: 'FACTURA',
         fecha: {
           gte: currentMonth
         },
@@ -67,16 +67,36 @@ export async function getDashboardMetrics() {
     const totalPurchases = purchasesThisMonth._sum.total || 0;
     const profitMargin = totalSales > 0 ? ((totalSales - totalPurchases) / totalSales * 100) : 0;
 
+    // Productos con stock bajo (tamaño < 10 unidades o sin precio definido)
+    const lowStockProducts = await prisma.productos.findMany({
+      where: {
+        OR: [
+          { size: { lt: 10 } },
+          { precios: { none: {} } }
+        ]
+      },
+      include: {
+        categorias: true,
+        precios: {
+          orderBy: { createdAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { size: 'asc' }
+    });
+
     // Valor del inventario (esto requeriría precios de costo)
     // Por simplicidad, calculamos un valor aproximado
     const inventoryValue = productsCount * 100; // Valor aproximado
 
-    return {
-      salesThisMonth: totalSales,
-      purchasesThisMonth: totalPurchases,
-      productsCount,
-      suppliersCount,
-      pendingInvoices: pendingInvoices._sum.total || 0,
+  return {
+    salesThisMonth: totalSales,
+    purchasesThisMonth: totalPurchases,
+    productsCount,
+    suppliersCount,
+    pendingInvoices: pendingInvoices._sum.total || 0,
+    lowStockProducts,
+    lowStockCount: lowStockProducts.length,
       cashFlow,
       profitMargin: Math.round(profitMargin * 100) / 100,
       inventoryValue
@@ -143,7 +163,7 @@ export async function getExecutiveSummary() {
     const [currentSales, lastMonthSales] = await Promise.all([
       prisma.documentos.aggregate({
         where: {
-          tipoDocumento: 'VENTA',
+          tipoDocumento: 'FACTURA',
           fecha: { gte: currentMonth },
           tipoMovimiento: 'SALIDA'
         },
@@ -151,7 +171,7 @@ export async function getExecutiveSummary() {
       }),
       prisma.documentos.aggregate({
         where: {
-          tipoDocumento: 'VENTA',
+          tipoDocumento: 'FACTURA',
           fecha: { gte: lastMonth, lt: currentMonth },
           tipoMovimiento: 'SALIDA'
         },
@@ -167,7 +187,7 @@ export async function getExecutiveSummary() {
     // Compras del mes
     const purchases = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'COMPRA',
+        tipoDocumento: 'FACTURA',
         fecha: { gte: currentMonth },
         tipoMovimiento: 'ENTRADA'
       },

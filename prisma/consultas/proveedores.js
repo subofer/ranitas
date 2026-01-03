@@ -65,3 +65,63 @@ export const getProveedorById = async (idProveedor) => (
 export const deleteProveedor = async (idProveedor) => (
   await deleteContacto(idProveedor)
 );
+
+// Obtener productos de un proveedor específico con precios
+export const getProductosPorProveedor = async (idProveedor) => {
+  const proveedor = await prisma.contactos.findUnique({
+    where: { id: idProveedor },
+    select: {
+      id: true,
+      nombre: true,
+      telefono: true,
+      email: true,
+      cuit: true
+    }
+  });
+
+  const productos = await prisma.productos.findMany({
+    where: {
+      proveedores: {
+        some: {
+          idProveedor: idProveedor
+        }
+      }
+    },
+    include: {
+      categorias: true,
+      precios: {
+        orderBy: { createdAt: 'desc' },
+        take: 1
+      }
+    },
+    orderBy: { nombre: 'asc' }
+  });
+
+  return {
+    proveedor,
+    productos
+  };
+};
+
+// Obtener todos los proveedores con sus productos y precios
+export const getProveedoresConProductos = async () => {
+  return await prisma.contactos.findMany({
+    where: { esProveedor: true },
+    include: {
+      productos: {
+        include: {
+          producto: {
+            include: {
+              categorias: true,
+              precios: {
+                orderBy: { createdAt: 'desc' },
+                take: 1
+              }
+            }
+          }
+        }
+      }
+    },
+    orderBy: { nombre: 'asc' }
+  });
+};

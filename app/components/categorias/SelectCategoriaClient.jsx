@@ -3,8 +3,14 @@ import FilterSelect from "../formComponents/FilterSelect";
 import useSelect from "@/hooks/useSelect";
 import { getCategorias } from "@/prisma/consultas/categorias";
 
-const SelectCategoriaClient =  ({...props} = {}) => {
+const SelectCategoriaClient =  ({onChange, ...props} = {}) => {
   const { data: categorias, busy } = useSelect(getCategorias, "categorias")
+
+  const handleSelect = (option) => {
+    if (onChange) {
+      onChange(option);
+    }
+  };
 
   return (
     <FilterSelect
@@ -14,6 +20,7 @@ const SelectCategoriaClient =  ({...props} = {}) => {
       placeholder="Elija una categoría"
       label="Categoria"
       busy={busy}
+      onChange={handleSelect}
       {...props}
     />
   )

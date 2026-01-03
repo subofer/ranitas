@@ -174,16 +174,16 @@ export const CargaProductoBuscadorClient = () => {
       title={`${local ? "Editar" : "Cargar"} Producto`}
       busy={buscando}
     >
-      <div className='grid grid-cols-1 lg:grid-cols-12 gap-6'>
+      <div className='grid grid-cols-1 lg:grid-cols-12 gap-3'>
         {/* Panel de formulario principal */}
-        <div className="lg:col-span-8">
+        <div className="lg:col-span-9">
           <div className="
             grid
             grid-cols-1
             w-full
-            gap-4
-            lg:gap-4
-            lg:grid-cols-10
+            gap-3
+            lg:gap-3
+            lg:grid-cols-12
             lg:h-fit
           ">
 
@@ -201,7 +201,7 @@ export const CargaProductoBuscadorClient = () => {
             />
           </div>
 
-          <div className="grid col-span-full gap-2 grid-cols-1 lg:grid-cols-2 lg:col-span-2">
+          <div className="grid col-span-full gap-1 grid-cols-1 lg:grid-cols-2 lg:col-span-3">
             <div className="col-span-full  lg:col-span-1">
               <Input
                 name="size"
@@ -230,7 +230,7 @@ export const CargaProductoBuscadorClient = () => {
               value={formData.formatoVenta}
             />
           </div>
-          <div className="col-span-full lg:col-span-4">
+          <div className="col-span-full lg:col-span-5">
             <Input
               name="nombre"
               label="Nombre"
@@ -252,7 +252,7 @@ export const CargaProductoBuscadorClient = () => {
           <div className="col-span-full lg:col-span-3">
             <SelectCategoriaClient onChange={handleCategoriasSelected}/>
           </div>
-          <div className="col-span-full lg:col-span-7">
+          <div className="col-span-full lg:col-span-9">
             <InputArrayListCategorias
               name="categorias"
               label="Categorias"
@@ -266,7 +266,7 @@ export const CargaProductoBuscadorClient = () => {
           <div className="col-span-full lg:col-span-3">
             <SelectProveedorClient onChange={handleProveedoresSelected} />
           </div>
-          <div className="col-span-full lg:col-span-7">
+          <div className="col-span-full lg:col-span-9">
             <InputArrayListProveedores
               name="Provedores"
               label="Proveedores"
@@ -288,9 +288,9 @@ export const CargaProductoBuscadorClient = () => {
         </div>
 
         {/* Panel de imágenes */}
-        <div className='lg:col-span-4'>
-          <div className='bg-slate-50 border border-slate-200/40 rounded-lg shadow-md p-4 h-fit'>
-            <h4 className="text-sm font-semibold text-slate-700 mb-3">Imágenes del Producto</h4>
+        <div className='lg:col-span-3'>
+          <div className='bg-slate-50 border border-slate-200/40 rounded-lg shadow-md p-3 h-fit'>
+            <h4 className="text-sm font-semibold text-slate-700 mb-2">Imágenes del Producto</h4>
             <SelectorImagenes
               className=''
               nombre={formData.nombre}

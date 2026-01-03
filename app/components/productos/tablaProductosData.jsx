@@ -7,6 +7,7 @@ import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { showImagenProducto } from './showImagenProducto';
 import Counter from '../formComponents/Counter';
 import RenderCategorias from '../categorias/RenderCategorias';
+import BotonAgregarPedidoTabla from './BotonAgregarPedidoTabla';
 
 
 export const tablaListaProductosColumnasNames = {
@@ -96,6 +97,13 @@ export const tablaListaProductosColumnasNames = {
     onClick: showImagenProducto,
     componentClassname: "mx-0 self-center cursor-zoom-in",
     colw:"w-[70px] min-w-[70px] ",
+    noselect: true,
+  },
+  agregarPedido: {
+    titulo: "Pedido",
+    Component: BotonAgregarPedidoTabla,
+    className: "text-center px-2",
+    colw: "w-[80px]",
     noselect: true,
   },
   eliminar: {

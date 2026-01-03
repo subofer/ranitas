@@ -65,18 +65,18 @@ export default function Home() {
 
   return (
     <main className='min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50'>
-      <div className='container mx-auto px-4 py-12'>
+      <div className='container mx-auto px-2 py-6'>
         {/* Dashboard Section */}
-        <div className="mb-12">
+        <div className="mb-8">
           <Dashboard />
         </div>
 
         {/* Menu Cards Grid */}
-        <div className="mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-4 text-center">
             Funcionalidades
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {menuItems.map((item, index) => (
               <DashboardCard key={index} {...item} />
             ))}
