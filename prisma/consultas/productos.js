@@ -26,7 +26,7 @@ export const getProductos = async () => {
       categorias: true,
       precios: {
         orderBy: {
-          createdAt: 'asc',
+          createdAt: 'desc',
         },
         take: 1,
       },

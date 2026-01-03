@@ -18,15 +18,13 @@ const TituloFiltrero = ({cantidades, titulo, seter, children}) => {
   },[setParam])
 
   useEffect(() => {
-    if (param !== valorLocal) {
-      setValorLocal(param || "");
-      setFiltroTemporal(param || "");
-    }
+    setValorLocal(param || "");
+    setFiltroTemporal(param || "");
   },[param])
 
   useEffect(() => {
     seter(filtroTemporal);
-  }, [seter, filtroTemporal]);
+  }, [seter, filtroTemporal]); // filtroTemporal ya está incluido
 
   useHotkey(['control', 'q'], inputRef, handleChange)
 

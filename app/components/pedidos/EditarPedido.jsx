@@ -4,10 +4,12 @@ import { agregarProductoPedido } from '@/prisma/serverActions/pedidos';
 import { getProductos } from '@/prisma/consultas/productos';
 import Icon from '../formComponents/Icon';
 import Select from '../formComponents/Select';
-import SelectSearch from '../formComponents/SelectSearch';
+import FilterSelect from '../formComponents/FilterSelect';
 import Input from '../formComponents/Input';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const EditarPedido = ({ pedido, onClose, onUpdate }) => {
+  const { showError } = useErrorNotification();
   const [productosActuales, setProductosActuales] = useState([]);
   const [showAgregarProducto, setShowAgregarProducto] = useState(false);
   const [cargando, setCargando] = useState(false);
@@ -21,7 +23,7 @@ const EditarPedido = ({ pedido, onClose, onUpdate }) => {
     setCargando(true);
     try {
       const resultado = await agregarProductoPedido(pedido.id, {
-        idProducto: nuevoProducto.id,
+        id: nuevoProducto.id,
         cantidad: nuevoProducto.cantidad || 1,
         precioUnitario: nuevoProducto.precioUnitario,
         observaciones: nuevoProducto.observaciones || ''
@@ -31,13 +33,13 @@ const EditarPedido = ({ pedido, onClose, onUpdate }) => {
         // Actualizar la lista de productos
         setProductosActuales(prev => [...prev, resultado.detalle]);
         onUpdate && onUpdate();
-        alert('Producto agregado exitosamente');
+        showError('Producto agregado exitosamente', 3000);
       } else {
-        alert('Error agregando producto: ' + resultado.error);
+        showError('Error agregando producto: ' + resultado.error);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error inesperado al agregar producto');
+      showError('Error inesperado al agregar producto: ' + error.message);
     } finally {
       setCargando(false);
       setShowAgregarProducto(false);
@@ -214,7 +216,7 @@ const AgregarProductoAPedido = ({ pedido, productosActuales, onAgregar, onClose,
     const producto = productosDisponibles.find(p => p.id === productoSeleccionado);
     if (producto) {
       onAgregar({
-        id: producto.id,
+        idProducto: producto.id,
         cantidad: parseFloat(cantidad),
         precioUnitario: producto.precios?.[0]?.precio || 0,
         observaciones
@@ -248,12 +250,12 @@ const AgregarProductoAPedido = ({ pedido, productosActuales, onAgregar, onClose,
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Seleccionar Producto
             </label>
-            <SelectSearch
+            <FilterSelect
               label="Seleccionar Producto"
               placeholder="Buscar producto..."
               value={productoSeleccionado}
-              onChange={(e) => setProductoSeleccionado(e.target.value)}
-              loading={cargandoProductos}
+              onChange={(data) => setProductoSeleccionado(data.value)}
+              busy={cargandoProductos}
               options={productosDisponibles.map((producto) => ({
                 id: producto.id,
                 nombre: `${producto.nombre} (${producto.codigoBarra})`

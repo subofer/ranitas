@@ -24,11 +24,12 @@ export const getProveedoresSelect = async () => {
 };
 
 export const getProveedoresByIds = async (idList) => {
-  return await prisma.user.findMany({
+  return await prisma.contactos.findMany({
     where: {
       id: {
         in: idList,
       },
+      esProveedor: true,
     },
   });
 }

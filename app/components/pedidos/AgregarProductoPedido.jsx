@@ -2,12 +2,15 @@
 import { useState, useEffect } from 'react';
 import { getPedidos, crearPedido } from '@/prisma/consultas/pedidos';
 import { agregarProductoPedido } from '@/prisma/serverActions/pedidos';
+import { getSession } from '@/lib/sesion/sesion';
 import Icon from '../formComponents/Icon';
 import Select from '../formComponents/Select';
-import SelectSearch from '../formComponents/SelectSearch';
+import FilterSelect from '../formComponents/FilterSelect';
 import Input from '../formComponents/Input';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
+  const { showError } = useErrorNotification();
   const [pedidos, setPedidos] = useState([]);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState('');
   const [cantidad, setCantidad] = useState(1);
@@ -16,6 +19,7 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
   const [showCrearNuevo, setShowCrearNuevo] = useState(false);
   const [modoCrearNuevo, setModoCrearNuevo] = useState('conProveedor'); // 'conProveedor' o 'sinProveedor'
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
 
   const cargarPedidosPendientes = async () => {
     try {
@@ -30,7 +34,17 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
 
   useEffect(() => {
     cargarPedidosPendientes();
+    cargarUsuarioActual();
   }, []);
+
+  const cargarUsuarioActual = async () => {
+    try {
+      const session = await getSession();
+      setCurrentUser(session?.user || null);
+    } catch (error) {
+      console.error('Error obteniendo usuario actual:', error);
+    }
+  };
 
   const handleAgregar = async () => {
     if (showCrearNuevo) {
@@ -46,7 +60,7 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
     setCargando(true);
     try {
       const resultado = await agregarProductoPedido(pedidoSeleccionado, {
-        idProducto: producto.id,
+        id: producto.id,
         cantidad: parseFloat(cantidad),
         precioUnitario: producto.precios?.[0]?.precio,
         observaciones
@@ -55,13 +69,13 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
       if (resultado.success) {
         onSuccess && onSuccess();
         onClose && onClose();
-        alert('Producto agregado al pedido exitosamente');
+        showError('Producto agregado al pedido exitosamente', 3000);
       } else {
-        alert('Error agregando producto: ' + resultado.error);
+        showError('Error agregando producto: ' + resultado.error);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error inesperado al agregar producto');
+      showError('Error inesperado al agregar producto: ' + error.message);
     } finally {
       setCargando(false);
     }
@@ -81,24 +95,24 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
       const resultado = await crearPedido({
         idProveedor,
         productos: [{
-          id: producto.id,
+          idProducto: producto.id,
           cantidad: parseFloat(cantidad),
           precioUnitario: producto.precios?.[0]?.precio,
           observaciones
         }],
-        idUsuario: 'default-user',
+        idUsuario: currentUser?.id || 'default-user',
         notas: idProveedor ? `Pedido creado desde catálogo` : `Pedido sin proveedor asignado - requiere revisión`
       });
 
       onSuccess && onSuccess();
       onClose && onClose();
-      alert(idProveedor
+      showError(idProveedor
         ? `Nuevo pedido creado al proveedor ${resultado.proveedor?.nombre || 'desconocido'}`
-        : 'Nuevo pedido creado sin proveedor asignado'
+        : 'Nuevo pedido creado sin proveedor asignado', 3000
       );
     } catch (error) {
       console.error('Error creando pedido:', error);
-      alert('Error creando pedido: ' + error.message);
+      showError('Error creando pedido: ' + error.message);
     } finally {
       setCargando(false);
     }
@@ -174,11 +188,11 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
 
           {!showCrearNuevo ? (
             /* Seleccionar pedido existente */
-            <SelectSearch
+            <FilterSelect
               label="Seleccionar Pedido"
               placeholder="Buscar pedido..."
               value={pedidoSeleccionado}
-              onChange={(e) => setPedidoSeleccionado(e.target.value)}
+              onChange={(data) => setPedidoSeleccionado(data.value)}
               options={pedidos.map((pedido) => ({
                 id: pedido.id,
                 nombre: `${pedido.numero} - ${pedido.proveedor ? pedido.proveedor.nombre : 'Sin proveedor asignado'} (${pedido.detallePedidos?.length || 0} productos)`
@@ -220,11 +234,11 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
                   </div>
 
                   {modoCrearNuevo === 'conProveedor' && (
-                    <SelectSearch
+                    <FilterSelect
                       label="Seleccionar Proveedor"
                       placeholder="Buscar proveedor..."
                       value={proveedorSeleccionado}
-                      onChange={(e) => setProveedorSeleccionado(e.target.value)}
+                      onChange={(data) => setProveedorSeleccionado(data.value)}
                       options={producto.proveedores.map((provRel) => ({
                         id: provRel.proveedor.id,
                         nombre: provRel.proveedor.nombre

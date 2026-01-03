@@ -1,8 +1,10 @@
 "use client"
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { crearNuevoPedido } from '@/prisma/serverActions/pedidos';
+import { getSession } from '@/lib/sesion/sesion';
 import Icon from '../formComponents/Icon';
 import AgregarProductoPedido from './AgregarProductoPedido';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const BotonAgregarPedido = ({
   producto,
@@ -12,8 +14,22 @@ const BotonAgregarPedido = ({
   onSuccess,
   yaPedido = false
 }) => {
+  const { showError } = useErrorNotification();
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const cargarUsuarioActual = async () => {
+      try {
+        const session = await getSession();
+        setCurrentUser(session?.user || null);
+      } catch (error) {
+        console.error('Error obteniendo usuario actual:', error);
+      }
+    };
+    cargarUsuarioActual();
+  }, []);
 
   const handleClick = async () => {
     // Si el producto ya está pedido, no hacer nada
@@ -33,7 +49,7 @@ const BotonAgregarPedido = ({
       }
     } catch (error) {
       console.error('Error procesando pedido:', error);
-      alert('Error al procesar el pedido');
+      showError('Error al procesar el pedido: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -49,19 +65,19 @@ const BotonAgregarPedido = ({
           precioUnitario: producto.precios?.[0]?.precio,
           observaciones: 'Pedido automático desde catálogo'
         }],
-        idUsuario: 'default-user',
+        idUsuario: currentUser?.id || 'default-user',
         notas: `Pedido automático para ${producto.nombre}`
       });
 
       if (resultado.success) {
-        alert(`Pedido creado automáticamente al proveedor ${resultado.pedido.proveedor.nombre}`);
+        showError(`Pedido creado automáticamente al proveedor ${resultado.pedido.proveedor.nombre}`, 3000);
         onSuccess && onSuccess();
       } else {
         throw new Error(resultado.error);
       }
     } catch (error) {
       console.error('Error creando pedido automático:', error);
-      alert('Error creando pedido automático: ' + error.message);
+      showError('Error creando pedido automático: ' + error.message);
     }
   };
 

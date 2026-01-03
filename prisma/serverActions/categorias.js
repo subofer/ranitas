@@ -1,9 +1,9 @@
-'use server'
+"use server"
 import prisma from "../prisma";
 import formToObject from "@/lib/formToObject"
 import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
-const revalidadCategorias = () => revalidatePath('/categorias');
+const revalidarCategorias = () => revalidatePath('/categorias');
 
 // Las categorias se guardaran con las primeras letras en mayusculas.
 export async function guardarCategoria(formData) {
@@ -43,7 +43,7 @@ export async function guardarCategoria(formData) {
     }
 
   }finally{
-    revalidadCategorias()
+    revalidarCategorias()
     return response
   }
 }
@@ -57,7 +57,7 @@ export async function borrarCategoria(categoriaId) {
   } catch(e) {
       result = {error: e,}
   } finally {
-    revalidadCategorias()
+    revalidarCategorias()
     return result;
   }
 }

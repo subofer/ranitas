@@ -21,15 +21,17 @@ const Input = forwardRef(({
   const { pending } = useFormStatus();
 
   const handleOnChange = ({ target: { name, value } } = {}) => {
-   const newValue = type == "checkbox" ? (value == "on" ? true : false) : value
+   const newValue = type === "checkbox" ? (value === "on" ? true : false) : value
    const isFormula = typeof value === 'string' && value?.startsWith("=")
-   console.log("isFormula", isFormula)
    onChange && onChange({name, value: newValue, type});
   }
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter") {
-      !doOnEnter && e.preventDefault();
+      if (!doOnEnter) {
+        e.preventDefault();
+      }
+      // Si doOnEnter es true, permite el comportamiento por defecto
     }
   };
 
@@ -37,7 +39,7 @@ const Input = forwardRef(({
     if (type === "number") {
       const direction = e.deltaY < 0 ? 1 : -1; // Determina la dirección del scroll
       const newValue = parseFloat(value || 0) + direction;
-      const useValue = newValue > 1 ? newValue.toString() : 1;
+      const useValue = Math.max(0, newValue).toString(); // No permite valores negativos
 
       handleOnChange({target :{ name, value: useValue }});
     }

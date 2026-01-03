@@ -4,8 +4,10 @@ import { guardarCategoria } from "@/prisma/serverActions/categorias";
 import Input from "../formComponents/Input";
 import Button from "../formComponents/Button";
 import Icon from "../formComponents/Icon";
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const EditarCategoriaModal = ({ categoria, isOpen, onClose, onSave }) => {
+  const { showError } = useErrorNotification();
   const [nombre, setNombre] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,7 +27,7 @@ const EditarCategoriaModal = ({ categoria, isOpen, onClose, onSave }) => {
     e.preventDefault();
 
     if (!nombre.trim()) {
-      alert("El nombre de la categoría no puede estar vacío");
+      showError("El nombre de la categoría no puede estar vacío");
       return;
     }
 
@@ -38,15 +40,15 @@ const EditarCategoriaModal = ({ categoria, isOpen, onClose, onSave }) => {
       const result = await guardarCategoria(data);
 
       if (result?.error) {
-        alert(result.msg || `Error al ${isEditing ? 'actualizar' : 'crear'} la categoría`);
+        showError(result.msg || `Error al ${isEditing ? 'actualizar' : 'crear'} la categoría`);
       } else {
-        alert(`Categoría ${isEditing ? 'actualizada' : 'creada'} exitosamente`);
+        showError(`Categoría ${isEditing ? 'actualizada' : 'creada'} exitosamente`, 3000);
         onSave && onSave(result);
         onClose();
       }
     } catch (error) {
       console.error("Error:", error);
-      alert(`Error inesperado al ${isEditing ? 'actualizar' : 'crear'} la categoría`);
+      showError(`Error inesperado al ${isEditing ? 'actualizar' : 'crear'} la categoría: ${error.message}`);
     } finally {
       setLoading(false);
     }

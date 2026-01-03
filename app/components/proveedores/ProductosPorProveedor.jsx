@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { getProductosPorProveedor } from '@/prisma/consultas/proveedores';
 import Icon from '../formComponents/Icon';
 import ImageWithFallback from '../ui/ImageWithFallback';
@@ -9,13 +9,7 @@ const ProductosPorProveedor = ({ idProveedor, onClose }) => {
   const [proveedor, setProveedor] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (idProveedor) {
-      cargarProductos();
-    }
-  }, [idProveedor]);
-
-  const cargarProductos = async () => {
+  const cargarProductos = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getProductosPorProveedor(idProveedor);
@@ -26,7 +20,13 @@ const ProductosPorProveedor = ({ idProveedor, onClose }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [idProveedor]);
+
+  useEffect(() => {
+    if (idProveedor) {
+      cargarProductos();
+    }
+  }, [idProveedor, cargarProductos]);
 
   if (loading) {
     return (

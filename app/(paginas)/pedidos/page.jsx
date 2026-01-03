@@ -7,8 +7,10 @@ import Icon from '@/components/formComponents/Icon';
 import ListaPedidos from '@/components/pedidos/ListaPedidos';
 import PedidosPorProveedor from '@/components/pedidos/PedidosPorProveedor';
 import CrearPedidoAutomatico from '@/components/pedidos/CrearPedidoAutomatico';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 export default function PedidosPage() {
+  const { showError } = useErrorNotification();
   const [pedidos, setPedidos] = useState([]);
   const [productosPorProveedor, setProductosPorProveedor] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,14 +45,14 @@ export default function PedidosPage() {
       const resultado = await crearPedidosAutomaticos('default-user');
 
       if (resultado.success) {
-        alert(`Se crearon ${resultado.pedidos.length} pedidos automáticamente`);
+        showError(`Se crearon ${resultado.pedidos.length} pedidos automáticamente`, 3000);
         cargarDatos();
       } else {
-        alert('Error creando pedidos automáticos: ' + resultado.error);
+        showError('Error creando pedidos automáticos: ' + resultado.error);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error inesperado al crear pedidos automáticos');
+      showError('Error inesperado al crear pedidos automáticos: ' + error.message);
     }
   };
 

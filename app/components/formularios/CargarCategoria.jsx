@@ -4,8 +4,10 @@ import { guardarCategoria } from "@/prisma/serverActions/categorias";
 import Input from "../formComponents/Input";
 import Button from "../formComponents/Button";
 import Icon from "../formComponents/Icon";
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 export const CargarCategoria = ({ onCategoriaCreated }) => {
+  const { showError } = useErrorNotification();
   const [categoriaNombre, setCategoriaNombre] = useState("");
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState([]);
@@ -14,7 +16,7 @@ export const CargarCategoria = ({ onCategoriaCreated }) => {
     e.preventDefault();
 
     if (!categoriaNombre.trim()) {
-      alert("Por favor ingresa un nombre para la categoría");
+      showError("Por favor ingresa un nombre para la categoría");
       return;
     }
 
@@ -23,15 +25,15 @@ export const CargarCategoria = ({ onCategoriaCreated }) => {
       const result = await guardarCategoria({ nombre: categoriaNombre.trim() });
 
       if (result?.error) {
-        alert(result.msg || "Error al guardar la categoría");
+        showError(result.msg || "Error al guardar la categoría");
       } else {
-        alert("Categoría creada exitosamente");
+        showError("Categoría creada exitosamente", 3000);
         setCategoriaNombre("");
         onCategoriaCreated && onCategoriaCreated();
       }
     } catch (error) {
       console.error("Error:", error);
-      alert("Error inesperado al guardar la categoría");
+      showError("Error inesperado al guardar la categoría: " + error.message);
     } finally {
       setLoading(false);
     }

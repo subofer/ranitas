@@ -104,7 +104,7 @@ ref
     return () => {
       document.removeEventListener("mousedown", checkIfClickedOutside);
     };
-  }, [isOpen, open]);
+  }, [isOpen, open]); // open está incluido
 
   useEffect(() => {
     const seleccionInicial = options.find((option) => {
@@ -144,20 +144,18 @@ ref
     }
   };
 
-  //Esto es completamente innecesario, pero queda lindo.
+  //Icono según estado
   const iconoSegunCaso = useMemo(() => {
-    let ocupado = pending || busy ;
-    let vacio = filteredOptions?.length == 0;
+    let ocupado = pending || busy;
 
     return {
-      icono: ocupado ? 'spinner': vacio ? 'xmark' : 'chevron-up',
+      icono: ocupado ? 'spinner' : isOpen ? 'chevron-up' : 'chevron-down',
       className:`
-        ${ocupado ? "spin-slow": "transition-transform "}
-        ${vacio ? "pointer-events-none":""}
+        ${ocupado ? "spin-slow" : "transition-transform duration-200"}
       `,
     }
 
-  },[busy, filteredOptions?.length, pending])
+  },[busy, pending, isOpen])
 
   const hasValue = opcion || (filtro && filtro.trim() !== "");
 
@@ -178,15 +176,15 @@ ref
           placeholder={props.placeholder || "Buscar y seleccionar..."}
           value={opcion ? opcion[textField] : filtro}
           onChange={({target: {value}}) => phase(null, value, true, -1)}
-          onClick={() => setIsOpen(!isOpen)}
+          onFocus={() => !isOpen && setIsOpen(true)}
           onKeyDown={handleKeyDown}
           tabIndex={props.tabIndex}
           autoComplete="off"
-          onBlur={() => setIsOpen(false)}
+          onBlur={() => setTimeout(() => setIsOpen(false), 150)}
           disabled={pending || busy}
           className={`
             appearance-none
-            text-right
+            text-left
             text-gray-900
             block w-full
             px-2.5 pt-5 pb-2 pr-10
@@ -217,7 +215,7 @@ ref
         {/* Icono del dropdown */}
         <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <Icon
-            rotate={isOpen && filteredOptions?.length != 0}
+            rotate={isOpen}
             className={iconoSegunCaso.className}
             tabIndex={-1}
             icono={iconoSegunCaso.icono}

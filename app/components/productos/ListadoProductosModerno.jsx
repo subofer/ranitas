@@ -7,8 +7,10 @@ import Link from 'next/link';
 import Icon from '../formComponents/Icon';
 import BotonAgregarPedido from '../pedidos/BotonAgregarPedido';
 import ImageWithFallback from '../ui/ImageWithFallback';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false }) => {
+  const { showError } = useErrorNotification();
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filtro, setFiltro] = useState('');
@@ -52,7 +54,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
         cargarProductos(); // Recargar la lista después de eliminar
       } catch (error) {
         console.error('Error eliminando producto:', error);
-        alert('Error al eliminar el producto');
+        showError('Error al eliminar el producto: ' + error.message);
       }
     }
   };

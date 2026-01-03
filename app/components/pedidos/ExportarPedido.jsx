@@ -2,8 +2,10 @@
 import { useState } from 'react';
 import { copiarAlPortapapeles } from '@/lib/copyToClipBoard';
 import Icon from '../formComponents/Icon';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const ExportarPedido = ({ pedido, onClose }) => {
+  const { showError } = useErrorNotification();
   const [formatoSeleccionado, setFormatoSeleccionado] = useState('lista');
   const [copiado, setCopiado] = useState(false);
 
@@ -129,7 +131,7 @@ const ExportarPedido = ({ pedido, onClose }) => {
       setTimeout(() => setCopiado(false), 2000);
     } catch (error) {
       console.error('Error copiando:', error);
-      alert('Error al copiar al portapapeles');
+      showError('Error al copiar al portapapeles: ' + error.message);
     }
   };
 

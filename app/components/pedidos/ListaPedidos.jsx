@@ -5,8 +5,10 @@ import { fechas } from '@/lib/manipularTextos';
 import Icon from '../formComponents/Icon';
 import ExportarPedido from './ExportarPedido';
 import EditarPedido from './EditarPedido';
+import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const ListaPedidos = ({ pedidos, onUpdate }) => {
+  const { showError } = useErrorNotification();
   const [cargandoAccion, setCargandoAccion] = useState(null);
   const [pedidoAExportar, setPedidoAExportar] = useState(null);
   const [pedidoAEditar, setPedidoAEditar] = useState(null);
@@ -18,11 +20,11 @@ const ListaPedidos = ({ pedidos, onUpdate }) => {
       if (resultado.success) {
         onUpdate && onUpdate();
       } else {
-        alert('Error cambiando estado: ' + resultado.error);
+        showError('Error cambiando estado: ' + resultado.error);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error inesperado');
+      showError('Error inesperado: ' + error.message);
     } finally {
       setCargandoAccion(null);
     }
@@ -37,11 +39,11 @@ const ListaPedidos = ({ pedidos, onUpdate }) => {
       if (resultado.success) {
         onUpdate && onUpdate();
       } else {
-        alert('Error eliminando pedido: ' + resultado.error);
+        showError('Error eliminando pedido: ' + resultado.error);
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error inesperado');
+      showError('Error inesperado: ' + error.message);
     } finally {
       setCargandoAccion(null);
     }

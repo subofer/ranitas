@@ -30,7 +30,7 @@ const useHotkey = (keys, ref = null, handleKeyDown = null, focusRequired = false
     return () => {
       document.removeEventListener('keydown', internalHandleKeyDown);
     };
-  }, [keys, targetRef, handleKeyDown, focusRequired]);
+  }, [keys, targetRef, handleKeyDown, focusRequired]); // keys está incluido como sugiere ESLint
 
   return targetRef;
 }; 

@@ -1,4 +1,4 @@
-'use server'
+"use server"
 import prisma from "../prisma";
 import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
@@ -82,12 +82,21 @@ export async function guardarProducto(formData) {
   }
 
   try {
-    await prisma.productoProveedor.deleteMany({
-      where: {
-        productoId: formData.id,
-        proveedorId: { notIn: formData.proveedores.map(p => p.proveedor.id) }
+    // Solo eliminar proveedores no deseados si es un update y hay proveedores
+    if (formData.id && formData.proveedores?.length >= 0) {
+      const proveedoresIds = formData.proveedores
+        .map(p => p.proveedor?.id)
+        .filter(id => id); // Filtrar IDs válidos
+
+      if (proveedoresIds.length > 0) {
+        await prisma.productoProveedor.deleteMany({
+          where: {
+            productoId: formData.id,
+            proveedorId: { notIn: proveedoresIds }
+          }
+        });
       }
-    });
+    }
 
     const producto = await prisma.productos.upsert({
       where: { codigoBarra: formData.codigoBarra },
