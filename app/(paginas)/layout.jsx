@@ -1,23 +1,6 @@
 import NavBarHorizontal from '@/components/Navegacion/NavBarHorizontal'
-import { ErrorNotificationProvider, useErrorNotification } from '@/hooks/useErrorNotification'
-import ErrorNotification from '@/components/ui/ErrorNotification'
-
-function NotificationRenderer() {
-  const { notifications, closeError } = useErrorNotification();
-
-  return (
-    <>
-      {notifications.map((notification) => (
-        <ErrorNotification
-          key={notification.id}
-          message={notification.message}
-          duration={notification.duration}
-          onClose={() => closeError(notification.id)}
-        />
-      ))}
-    </>
-  );
-}
+import { ErrorNotificationProvider } from '@/hooks/useErrorNotification'
+import NotificationRenderer from '@/components/ui/NotificationRenderer'
 
 export default async function Layout({ children }) {
   return (
