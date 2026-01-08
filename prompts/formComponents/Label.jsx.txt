@@ -1,0 +1,47 @@
+PROMPT IDEAL PARA REGENERAR Label.jsx
+
+## PROPÓSITO GENERAL
+Componente Label simple y reutilizable para etiquetar campos de formulario.
+
+## PROPS PRINCIPALES
+- children: ReactNode - Contenido del label
+- className: string - Clases CSS adicionales
+- ...props: Otros props estándar de HTML label
+
+## FUNCIONALIDADES
+- Wrapper simple alrededor de <label>
+- Hereda clases de font-sans
+- Propaga todos los props HTML (htmlFor, id, etc)
+
+## COMPORTAMIENTOS CLAVE
+1. Es un componente presentacional puro
+2. Sin estado interno
+3. Flexible con cualquier contenido
+
+## ESTILOS
+- Base: font-sans
+- Custom: className adicionales
+- Responsive: según className
+
+## CASOS DE USO
+- Etiqueta de Input
+- Etiqueta de Select
+- Etiqueta de Checkbox
+- Etiqueta de Switch
+
+## NOTAS TÉCNICAS
+- Componente funcional simple
+- Export por defecto
+- Sin hooks
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Support para required indicator (*)
+- [ ] Tooltip de ayuda
+- [ ] Error message integrado
+- [ ] Dark mode
+- [ ] Accesibilidad mejorada (aria-describedby)
+- [ ] Animación de focus
+- [ ] Validación en tiempo real

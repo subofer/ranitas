@@ -1,0 +1,47 @@
+PROMPT IDEAL PARA REGENERAR ImagenProducto.jsx
+
+## PROPÓSITO GENERAL
+Componente que renderiza imagen de producto con fallback a SVG si no hay imagen.
+
+## PROPS PRINCIPALES
+- item: {imagen: string, nombre: string} - Objeto con datos de producto
+- size: number (default: 32) - Tamaño en píxeles
+- placeholder: string - Tipo de placeholder ("sin imagen", etc)
+- className: string - Clases CSS
+- onClick: function - Callback al clickear
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. RENDERIZADO DE IMAGEN
+- Usa Next.js Image component
+- Alt text: nombre del producto
+- Tamaño dinámico: size prop
+- Style override: width y height
+
+### 2. FALLBACK
+- Si no hay imagen Y placeholder != "sin imagen":
+  - Renderiza SVG de galería vacía
+  - Size dinámico en inline styles
+  - Gris claro de fondo
+
+### 3. CASOS
+- Con imagen: renderiza Image
+- Sin imagen + placeholder="sin imagen": null
+- Sin imagen + otros: SVG genérico
+
+## COMPORTAMIENTOS CLAVE
+1. Next.js optimización de imagen
+2. Fallback automático
+3. Clickeable si onClick proporciona
+4. Tamaño flexible
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Lazy loading
+- [ ] Blur placeholder
+- [ ] Zoom on hover
+- [ ] Lightbox integration
+- [ ] Error boundary
+- [ ] Loading skeleton

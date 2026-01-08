@@ -1,0 +1,37 @@
+PROMPT IDEAL PARA REGENERAR ListadoProductos.jsx
+
+## PROPÓSITO GENERAL
+Componente cliente que carga y renderiza tabla simple de productos sin filtros avanzados.
+
+## PROPS PRINCIPALES
+- cols: array - Columnas a mostrar
+- ...props: Props para pasar a TablaListaProductos
+
+## ESTADO
+- productos: array - Lista de productos
+- loading: boolean - Estado de carga
+
+## FUNCIONALIDADES
+
+### 1. CARGA
+- useEffect al montar
+- Server action: getProductos()
+- Muestra placeholder mientras carga
+
+### 2. RENDERIZADO
+- Delega a TablaListaProductos
+- Pasa columnas y productos
+- Estado vacío con mensaje
+
+## COMPORTAMIENTOS CLAVE
+- Simple y ligero
+- Sin filtrado complejo (ver ListadoProductosModerno)
+- Placeholder para carga
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Refresh button
+- [ ] Error retry
+- [ ] Cache invalidation

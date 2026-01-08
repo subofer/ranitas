@@ -1,0 +1,22 @@
+PROMPT IDEAL PARA REGENERAR alertaBorrarCategoria.jsx
+
+## PROPÓSITO GENERAL
+Alerta SweetAlert2 para confirmar eliminación de categoría.
+
+## PROPS PRINCIPALES
+- {nombre}: object
+- action: function - Server action de eliminación
+
+## FUNCIONALIDADES
+- Alerta modal con confirmación
+- Mensaje de advertencia
+- Botones Sí/No
+- Ejecuta server action si confirma
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Mostrar productos con categoría
+- [ ] Reasignar categoría
+- [ ] Soft delete option

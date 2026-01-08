@@ -1,0 +1,23 @@
+PROMPT IDEAL PARA REGENERAR FormCard.jsx
+
+## PROPÓSITO GENERAL
+Tarjeta contenedora para formularios con estilos consistentes.
+
+## PROPS PRINCIPALES
+- children: ReactNode - Contenido del formulario
+- title: string - Título de la sección
+- className: string - Clases adicionales
+
+## FUNCIONALIDADES
+- Container estilizado
+- Padding consistente
+- Shadow y border
+- Responsive
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Collapsible
+- [ ] Header/Footer
+- [ ] Error state

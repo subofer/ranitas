@@ -1,0 +1,22 @@
+PROMPT IDEAL PARA REGENERAR alertaBorrarProveedor.jsx
+
+## PROPÓSITO GENERAL
+Alerta SweetAlert2 para confirmar eliminación de proveedor con impacto en productos.
+
+## PROPS PRINCIPALES
+- {nombre, productosCount}: object
+- action: function - Server action de eliminación
+
+## FUNCIONALIDADES
+- Alerta modal con confirmación
+- Muestra cantidad de productos afectados
+- Botones Sí/No
+- Ejecuta server action si confirma
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Preview de productos a borrar
+- [ ] Opción de desactivar
+- [ ] Undo/rollback

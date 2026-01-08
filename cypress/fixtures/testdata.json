@@ -1,0 +1,45 @@
+{
+  "usuario": {
+    "nombre": "subofer",
+    "password": "1234",
+    "email": "test@example.com"
+  },
+  "productos": [
+    {
+      "codigoBarra": "7790070410137",
+      "nombre": "Producto Test 1",
+      "precio": 100.00,
+      "categorias": ["Alimentos"]
+    },
+    {
+      "codigoBarra": "7790070410138",
+      "nombre": "Producto Test 2",
+      "precio": 200.00,
+      "categorias": ["Bebidas"]
+    }
+  ],
+  "categorias": [
+    {
+      "nombre": "Alimentos",
+      "descripcion": "Productos alimenticios"
+    },
+    {
+      "nombre": "Bebidas",
+      "descripcion": "Bebidas varias"
+    }
+  ],
+  "proveedores": [
+    {
+      "nombre": "Proveedor Test",
+      "cuit": "20123456789",
+      "email": "proveedor@example.com"
+    }
+  ],
+  "clientes": [
+    {
+      "nombre": "Cliente Test",
+      "cuit": "20987654321",
+      "email": "cliente@example.com"
+    }
+  ]
+}

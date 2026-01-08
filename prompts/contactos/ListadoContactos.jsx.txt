@@ -1,0 +1,49 @@
+PROMPT IDEAL PARA REGENERAR ListadoContactos.jsx
+
+## PROPÓSITO GENERAL
+Componente cliente que carga y muestra lista de contactos con manejo de loading.
+
+## ESTADO (STATE MANAGEMENT)
+- contactos: array - Lista de contactos
+- loading: boolean - Estado de carga
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CARGA DE DATOS
+- useEffect al montar
+- Server action: getContactosCompletos()
+- Manejo de errores con try/catch
+
+### 2. ESTADO DE CARGA
+- Spinner de carga: animate-spin
+- Mientras loading=true
+
+### 3. COLUMNAS
+```
+['id', 'Cuit', 'Nombre', 'E-mail', 'Tipo', 'telefono', '']
+```
+
+### 4. DELEGACIÓN
+- Renderiza ListadoContactosCliente
+- Pasa columnas y contactos
+- Propaga props restantes
+
+## COMPONENTES DEPENDIENTES
+- ListadoContactosCliente: renderizado cliente
+- getContactosCompletos: server action
+
+## COMPORTAMIENTOS CLAVE
+1. Hybrid: servidor + cliente
+2. Loading state visual
+3. Error handling con fallback
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Búsqueda
+- [ ] Filtros
+- [ ] Edición
+- [ ] Eliminación
+- [ ] Crear nuevo
+- [ ] Exportar

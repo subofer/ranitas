@@ -1,0 +1,150 @@
+PROMPT IDEAL PARA REGENERAR Input.jsx
+
+Necesito que generes un componente React/Next.js llamado "Input" que sea un campo de 
+entrada de texto universal y flexible para toda la aplicación. Aquí está la especificación:
+
+## PROPÓSITO GENERAL
+Componente Input reutilizable que soporta múltiples tipos de entrada (text, email, number, 
+checkbox, password, etc.) con label flotante, validación de errores, íconos de acción y 
+comportamientos especiales por tipo.
+
+## CARACTERÍSTICAS PRINCIPALES
+
+### 1. TIPOS DE INPUT SOPORTADOS
+- text: Entrada de texto genérica
+- email: Validación básica
+- number: Con scroll wheel increment/decrement (no negativos)
+- password: Texto oculto
+- checkbox: Checkbox con styling personalizado
+- date, time, datetime-local: Campos temporales
+- url: Con validación
+
+### 2. PROPS PRINCIPALES
+- name: string (default: "$ACTION_IGNORE") - Identificador del input
+- type: string (default: "text") - Tipo de input
+- value: any - Valor actual
+- label: string - Label flotante dentro del input
+- placeholder: string - Texto placeholder
+- className: string - Clases CSS adicionales
+- forceClassName: boolean - Forzar uso de className personalizado
+- onChange: function - Callback al cambiar valor ({name, value, type})
+- onKeyDown: function - Callback de keydown
+- doOnEnter: boolean - Permitir acción en Enter (default: false)
+- actionIcon: ReactElement - Ícono de acción al lado derecho
+- onActionClick: function - Callback al clickear el ícono de acción
+- error: object - Objeto de error: {error: boolean, message: string}
+- loading: boolean - Estado de carga (disabled + background gris)
+- disabled: boolean - Input deshabilitado
+- ref: React.Ref - Referencia forward ref
+- ...props: Otros props estándar de HTML input
+
+### 3. COMPORTAMIENTOS ESPECIALES
+
+#### Para type="number"
+- Scroll wheel: ↑ suma 1, ↓ resta 1
+- No permite valores negativos
+- Convierte a float parseFloat()
+
+#### Para type="checkbox"
+- Value "on" se convierte a boolean true/false
+- Alineación a la derecha (text-right)
+- Styling especial con form-checkbox
+
+#### Para type="text"
+- Detecta fórmulas que empiezan con "="
+- Permite transformación con prop "transform"
+
+#### Enter key
+- Por defecto (doOnEnter=false): previene default
+- Si doOnEnter=true: comportamiento normal de formulario
+
+### 4. LABEL FLOTANTE
+- Se posiciona dentro del input
+- Se anima cuando hay valor o placeholder
+- Clases: top-3/top-1, text-base/text-sm
+- Nunca oculta la entrada
+
+### 5. ÍCONO DE ACCIÓN
+- Se posiciona al lado derecho (pr-10)
+- Clickeable: prop onActionClick
+- Debe ser un ReactElement (Icon, SVG, etc)
+- Visible solo si se proporciona
+
+### 6. VALIDACIÓN DE ERRORES
+- Prop error: {error: boolean, message: string}
+- Si error.error = true: border-red-500
+- Mensaje de error debe mostrarse debajo o en tooltip
+- Afecta el estilo del border
+
+### 7. ESTILOS
+- Framework: Tailwind CSS
+- Diseño moderno con border-bottom (no border completo)
+- Focus: focus:border-slate-400
+- Transiciones suaves: transition-all duration-500
+- Disabled: opacity-50, cursor-not-allowed
+- Height: h-[52px] por defecto
+- Padding: px-2.5, pt-6, pb-3
+- Text align: text-right (RTL friendly)
+- Border: border-0 border-b-2 border-gray-300
+
+### 8. ESTADOS VISUALES
+- Normal: gray-300 border
+- Focus: slate-400 border
+- Disabled: opacity-50, gray-50 background
+- Loading: gray-50 background, disabled
+- Error: red-500 border
+- HasValue: label en posición top
+
+### 9. ACCESIBILIDAD
+- id={name} para asociar label
+- aria-label si no hay label
+- aria-invalid si hay error
+- aria-describedby para mensajes de error
+- forwardRef para acceso directo a input
+
+### 10. CASOS DE USO
+- Formularios de productos (nombre, descripción, precio)
+- Búsqueda con ícono (lupa, borrar)
+- Emails con validación
+- Números con incremento por scroll
+- Checkboxes para selecciones booleanas
+- Cantidad con spinner visual
+
+## COMPORTAMIENTOS CLAVE
+1. El onChange se dispara con {name, value, type}
+2. El value puede ser string, number o boolean según type
+3. Scroll wheel solo funciona en number
+4. Enter key es prevenido por defecto (seguridad)
+5. El placeholder no interfiere con el label
+6. Disabled y loading tienen precedencia visual
+7. El component es forwardRef para acceso directo
+8. Transiciones suaves en todos los cambios
+
+## NOTAS TÉCNICAS
+- "use client" (es componente cliente)
+- Usar forwardRef para exposición de ref
+- useFormStatus hook para capturar estado pending
+- Manejo robusto de tipos (string, number, boolean)
+- preventDefault en comportamientos especiales
+- Clases Tailwind condicionadas con template strings
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Sufijos/prefijos ($ para moneda, % para porcentaje)
+- [ ] Máximo/Mínimo con validación visual
+- [ ] Contador de caracteres
+- [ ] Pattern validation con regex
+- [ ] Sugerencias/autocomplete
+- [ ] Input cleaner (botón X para limpiar)
+- [ ] Tooltip de ayuda
+- [ ] Multi-line textarea variant
+- [ ] Animación de error
+- [ ] Integración con React Hook Form
+- [ ] Clipboard copy/paste handlers
+- [ ] Debounce en onChange
+- [ ] Máscara de entrada (teléfono, ZIP)
+- [ ] Dark mode support
+- [ ] Validación en tiempo real contra servidor
+- [ ] Grupo de inputs (date range, etc)

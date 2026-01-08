@@ -1,0 +1,135 @@
+PROMPT IDEAL PARA REGENERAR BotonAgregarPedido.jsx
+
+Necesito que generes un componente React/Next.js llamado "BotonAgregarPedido" que sea un 
+botón inteligente para agregar un producto a un pedido existente o crear uno nuevo.
+
+## PROPÓSITO GENERAL
+Componente botón que abre un modal para agregar un producto a un pedido. Si el producto 
+tiene un solo proveedor, crea el pedido automáticamente. Si tiene múltiples o ninguno, 
+abre un modal de selección.
+
+## PROPS PRINCIPALES
+- producto: object - Objeto producto con datos
+- variant: string (default: 'default') - Variante visual del botón
+- size: string (default: 'sm') - Tamaño del botón
+- className: string - Clases CSS adicionales
+- onSuccess: function - Callback al éxito (pedido creado)
+- yaPedido: boolean (default: false) - Ya está pedido (deshabilita botón)
+
+## ESTRUCTURA DE DATOS ESPERADA
+
+### Producto
+{
+  id: string,
+  nombre: string,
+  precios: [{precio: number}],
+  proveedores: [{
+    proveedor: {
+      id: string,
+      nombre: string
+    }
+  }]
+}
+
+## ESTADO (STATE MANAGEMENT)
+- showModal: boolean - Modal visible/oculto
+- loading: boolean - En proceso de creación
+- currentUser: object | null - Usuario actual
+- yaPedido: boolean - Ya está en un pedido
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. LÓGICA DEL BOTÓN
+
+#### Al hacer click:
+1. Si yaPedido=true: no hacer nada (botón deshabilitado)
+2. Obtener proveedores del producto
+3. Si 1 proveedor: crear pedido automático
+4. Si 0 o múltiples: abrir modal AgregarProductoPedido
+
+### 2. CREACIÓN AUTOMÁTICA (1 proveedor)
+- Server action: crearNuevoPedido()
+- Parámetros:
+  {
+    idProveedor: proveedor.id,
+    productos: [{
+      id: producto.id,
+      cantidad: 1,
+      precioUnitario: producto.precios[0].precio,
+      observaciones: 'Pedido automático desde catálogo'
+    }],
+    idUsuario: usuario.id,
+    notas: `Pedido automático para ${producto.nombre}`
+  }
+- Si éxito: mostrar notificación y llamar onSuccess()
+- Si error: mostrar error con showError()
+
+### 3. MODAL DE SELECCIÓN (0 o múltiples)
+- Abre componente AgregarProductoPedido
+- Pasa: producto, onClose, onSuccess
+- Modal permite seleccionar proveedor y crear pedido
+
+### 4. USUARIO ACTUAL
+- useEffect al montar: cargar sesión con getSession()
+- Obtener user.id para los pedidos
+- Si no hay sesión: usar 'default-user'
+
+### 5. BOTÓN VISUAL
+- Usa componente Button (con Icon)
+- Icono: "plus" o similar
+- Texto: "Pedir" o "Agregar a Pedido"
+- Disabled si yaPedido=true
+- Loading state con spinner
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Botón integrado con sistema de botones
+- Size sm/md/lg según prop
+- Color según variant (default, primary, etc)
+- Hover y focus estados
+
+## COMPORTAMIENTOS CLAVE
+1. El botón inteligente reduce clics del usuario
+2. Un proveedor = creación automática
+3. Múltiples proveedores = modal de selección
+4. La sesión se carga una sola vez
+5. Los errores se muestran siempre
+6. onSuccess() se llama para recargar datos
+
+## MANEJO DE ERRORES
+- Error al obtener sesión: log + continuar
+- Error al crear pedido: showError()
+- Error al cargar proveedores: try/catch
+
+## CASOS DE USO
+- Click en botón "Pedir" en catálogo
+- Agregar producto a compra de reposición
+- Crear nueva compra rápidamente
+- Desde ListadoProductosModerno
+
+## NOTAS TÉCNICAS
+- "use client"
+- useState para modal y loading
+- useEffect para cargar sesión
+- useErrorNotification() para errores
+- Server action: crearNuevoPedido
+- Componentes: AgregarProductoPedido, Button, Icon
+- Library: getSession para obtener usuario
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Cantidad personalizable antes de crear
+- [ ] Observaciones personalizadas
+- [ ] Elegir fecha de entrega esperada
+- [ ] Agregar múltiples productos a la vez
+- [ ] Historial de pedidos anteriores (sugerencias)
+- [ ] Precio estimado visible antes de confirmar
+- [ ] Negociación de precio (si hay descuentos)
+- [ ] Contacto del proveedor visible
+- [ ] Stock estimado de entrega
+- [ ] Guardar como plantilla de pedido frecuente
+- [ ] Notificación push cuando se entregue
+- [ ] QR del pedido
+- [ ] Tracking en tiempo real

@@ -1,0 +1,124 @@
+// Modelos del sistema para la gestión de productos, proveedores, presentaciones y precios en un sistema de inventario.
+
+// Modelo de Categorías de Productos
+model Categorias {
+  id        String      @id @default(uuid())
+  createdAt DateTime    @default(now())
+  nombre    String      @unique
+  productos Productos[] @relation("CategoriasToProductos")
+}
+
+// Modelo de Productos
+model Productos {
+  id               String              @id @default(uuid())
+  nombre           String              // Nombre del producto
+  marcaId          String              // Marca, que es un contacto del tipo Marca.
+  alias            AliasProductos[]  // Relación con nombres por proveedor
+  categorias       Categorias[]        @relation("CategoriasToProductos")
+  presentaciones   Presentaciones[]    // Relación de varias presentaciones del producto
+}
+
+// Modelo para nombres específicos de un producto por proveedor
+model AliasProductos {
+  id          String      @id @default(uuid())
+  productoId  String
+  proveedorId String
+  alias       String       // Nombre específico del producto según proveedor
+  producto    Productos    @relation(fields: [productoId], references: [id])
+  proveedor   Contactos    @relation(fields: [proveedorId], references: [id])
+  @@unique([productoId, proveedorId])
+}
+// productos, presentaciones, alias, precios
+// contactoProveedor(productos, presentaciones, alias, precios)
+
+// Modelo de Presentaciones de Productos
+model Presentaciones {
+  id               String               @id @default(uuid())
+  codigoBarra      String?              @unique
+  nombre           String               // Nombre de la presentación
+  unidades         Int                  // Cantidad de unidades dentro de esta presentación
+  cantidad         Float                // Cantidad de producto en esta presentación
+  stockActual      Float                @default(0) // Stock actual de esta presentación
+  productoId       String
+  producto         Productos            @relation(fields: [productoId], references: [id])
+  precios          Precios[]            // Relación con los precios históricosx 
+  proveedores      ProductoProveedor[]  // Relación con proveedores para esta presentación
+  historialStock   HistorialStock[]     // Relación con el historial de ajustes de stock
+}
+
+// Modelo de relación entre proveedores y presentaciones de productos
+model ProductoProveedor {
+  id               String             @id @default(uuid())
+  presentacionId   String             // Relación con la presentación específica
+  proveedorId      String             // Relación con el proveedor específico
+  codigo           String             // Código específico para el proveedor
+  presentacion     Presentaciones     @relation(fields: [presentacionId], references: [id])
+  proveedor        Contactos          @relation(fields: [proveedorId], references: [id])
+  @@unique([proveedorId, presentacionId])
+}
+
+// Modelo de Precios
+model Precios {
+  id               Int                @id @default(autoincrement())
+  valor            Float              // Valor del precio
+  proveedorId      String
+  presentacionId   String
+  createdAt        DateTime           @default(now())
+  proveedor        Contactos          @relation(fields: [proveedorId], references: [id])
+  presentacion     Presentaciones     @relation(fields: [presentacionId], references: [id])
+}
+
+// Modelo de Contactos (pueden ser proveedores o clientes)
+model Contactos {
+  id                  String               @id @default(uuid())
+  createdAt           DateTime             @default(now())
+  cuit                String               @unique
+  nombre              String               @unique
+  telefono            String               @default("0800-completar-telefono")
+  persona             String?
+  iva                 String?
+  esInterno           Boolean              @default(false)
+  esProveedor         Boolean              @default(false)
+  esMarca             Boolean              @default(false)
+  direcciones         Direcciones[]
+  emails              Emails[]
+  productos           ProductoProveedor[]  // Relación con productos según el proveedor
+}
+
+// Modelo de Historial de Ajustes de Stock
+model HistorialStock {
+  id               String          @id @default(uuid())
+  presentacionId   String
+  cantidadAjuste   Float           // Cantidad ajustada
+  fecha            DateTime        @default(now())  // Fecha del ajuste
+  motivo           String          // Motivo del ajuste
+  presentacion     Presentaciones  @relation(fields: [presentacionId], references: [id])
+}
+
+// Modelo de Documentos (Ej: Facturas, Remitos, etc.)
+model Documentos {
+  id              String             @id @default(uuid())
+  createdAt       DateTime           @default(now())
+  fechaDocumento  DateTime
+  detalle         DetalleDocumento[]
+  descuento       Float              @default(0)
+  total           Float              @default(0)
+  impuestos       Float[]
+  origenId        String
+  destinoId       String
+  origen          Contactos          @relation("DocumentoOrigen", fields: [origenId], references: [id])
+  destino         Contactos          @relation("DocumentoDestino", fields: [destinoId], references: [id])
+}
+
+// Modelo de Detalle de Documentos
+model DetalleDocumento {
+  id               String            @id @default(uuid())
+  fechaCreacion    DateTime          @default(now())
+  presentacionId   String
+  cantidad         Int
+  precioId         Int
+  descuento        Float             @default(0)
+  impuestos        Float[]
+  presentacion     Presentaciones    @relation(fields: [presentacionId], references: [id])
+  precio           Precios           @relation(fields: [precioId], references: [id])
+}

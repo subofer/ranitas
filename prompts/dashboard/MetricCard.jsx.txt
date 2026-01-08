@@ -1,0 +1,119 @@
+PROMPT IDEAL PARA REGENERAR MetricCard.jsx
+
+Necesito que generes un componente React/Next.js llamado "MetricCard" que sea una tarjeta 
+de métrica visual para mostrar KPIs en el dashboard.
+
+## PROPÓSITO GENERAL
+Componente que renderiza una tarjeta visual con una métrica (título, valor, cambio, ícono, 
+color). Es usado por Dashboard.jsx para mostrar ventas, ganancias, etc.
+
+## PROPS PRINCIPALES
+- title: string - Título de la métrica (ej: "Ventas del Mes")
+- value: string - Valor formateado (ej: "$1,234.56")
+- change: string - Texto del cambio (ej: "+15%", "Positivo")
+- changeType: 'positive' | 'negative' | 'neutral' - Tipo de cambio
+- icon: ReactElement | string | emoji - Icono a mostrar
+- color: string (default: "blue") - Color de la tarjeta
+
+## COLORES SOPORTADOS
+
+Cada color tiene objeto con clases:
+
+### blue
+- bg: "bg-blue-50"
+- text: "text-blue-600"
+- icon: "text-blue-500"
+
+### green
+- bg: "bg-green-50"
+- text: "text-green-600"
+- icon: "text-green-500"
+
+### purple
+- bg: "bg-purple-50"
+- text: "text-purple-600"
+- icon: "text-purple-500"
+
+### orange
+- bg: "bg-orange-50"
+- text: "text-orange-600"
+- icon: "text-orange-500"
+
+### red
+- bg: "bg-red-50"
+- text: "text-red-600"
+- icon: "text-red-500"
+
+### indigo
+- bg: "bg-indigo-50"
+- text: "text-indigo-600"
+- icon: "text-indigo-500"
+
+## ESTRUCTURA VISUAL
+
+### Layout
+- Container principal: bg-white, rounded-xl, border, shadow
+- Flex con space-between: izquierda contenido, derecha icono
+- Espaciado: p-6
+- Border: border border-gray-200
+
+### Lado izquierdo (contenido)
+- Título: text-sm, font-medium, text-gray-600, mb-1
+- Valor: text-3xl, font-bold, text-gray-900
+- Cambio: text-sm, margin-top-2
+  - Si positive: text-green-600
+  - Si negative: text-red-600
+  - Si neutral: text-gray-600
+
+### Lado derecho (icono)
+- Container: p-3, rounded-full, {colorClasses.bg}
+- Icono: text-2xl, {colorClasses.icon}
+- Centrado y alineado al top
+
+### Indicador de cambio
+- Flecha Unicode: ↗ (positive), ↘ (negative), ● (neutral)
+- Mostrado solo si change proporciona
+
+## COMPORTAMIENTOS CLAVE
+1. Es un componente presentacional (solo props)
+2. Sin estado interno
+3. Flexible con cualquier tipo de icono
+4. Los colores se aplican al background y text del icono
+5. El cambio se muestra como texto + indicador
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Responsive: funciona en cualquier tamaño
+- Hover: hover:shadow-md transition-shadow duration-300
+- Colores: predefinidos por color prop
+
+## CASOS DE USO
+- Mostrar ventas del mes en dashboard
+- Mostrar ganancias, caja, stock
+- Mostrar cualquier KPI formateado
+- Grid de métricas
+
+## NOTAS TÉCNICAS
+- Componente funcional puro (sin hooks)
+- Export con function declaration
+- colorClasses es objeto con mapeo color -> clases
+- Índice en colorClasses con prop color
+- Template strings para clases Tailwind
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Gráfico sparkline integrado
+- [ ] Trend línea visual
+- [ ] Porcentaje animado contador
+- [ ] Tooltip con detalles
+- [ ] Clic para drill-down
+- [ ] Comparación periodo anterior
+- [ ] Animación al cargar
+- [ ] Dark mode
+- [ ] Tamaños variables (sm, md, lg)
+- [ ] Acción (botón) integrada
+- [ ] Notificaciones (badge)
+- [ ] Estado de carga/skeleton
+- [ ] Sonido de alerta

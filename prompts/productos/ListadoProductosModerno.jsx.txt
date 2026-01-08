@@ -1,0 +1,190 @@
+PROMPT IDEAL PARA REGENERAR ListadoProductosModerno.jsx
+
+Necesito que generes un componente React/Next.js llamado "ListadoProductosModerno" 
+que sea un listado avanzado de productos con múltiples vistas, filtros y navegación 
+por teclado. Aquí está la especificación completa:
+
+## PROPÓSITO GENERAL
+Componente moderno de catálogo de productos con dos vistas (lista y cuadrícula), 
+búsqueda, filtros, paginación, selección múltiple y navegación completa por teclado.
+
+## PROPS
+- mostrarCodigo: boolean (default: true) - Mostrar columna de código de barras
+- modoCompacto: boolean (default: false) - Modo compacto sin header completo
+
+## DEPENDENCIAS REQUERIDAS
+- Hook: useErrorNotification - Para mostrar notificaciones de error
+- Server Action: getProductos (desde @/prisma/consultas/productos)
+- Server Action: eliminarProductoConPreciosPorId (desde @/prisma/serverActions/productos)
+- Componente: Icon (desde @/components/formComponents/Icon)
+- Componente: FilterSelect (desde @/components/formComponents/FilterSelect)
+- Componente: BotonAgregarPedido (desde @/components/pedidos/BotonAgregarPedido)
+- Componente: ImageWithFallback (desde @/components/ui/ImageWithFallback)
+- Componente: alertaBorrarProducto (desde @/components/alertas/alertaBorrarProducto)
+- Componentes placeholder: ProductListPlaceholder, ProductGridPlaceholder
+- Librerías: React (useState, useEffect, useCallback, useRef), Next.js (Link)
+
+## ESTADO (STATE MANAGEMENT)
+- productos: array de objetos producto
+- loading: boolean
+- busquedaProducto: string
+- categoriaFiltro: string
+- vistaTipo: 'lista' | 'cuadricula'
+- pagina: number
+- perPage: number | 'all'
+- total: number (total sin filtros)
+- categoriasUnicas: array de strings
+- ordenamiento: { columna: string | null, direccion: 'asc' | 'desc' }
+- productoFocused: null | id
+- productosSeleccionados: array de ids
+
+## ESTRUCTURA DE DATOS DEL PRODUCTO
+{
+  id: string,
+  nombre: string,
+  descripcion?: string,
+  codigoBarra: string,
+  imagen: string,
+  size: number (stock),
+  unidad: string,
+  categorias: [{ id, nombre }],
+  precios: [{ precio }],
+  proveedores?: [{ proveedor: { id, nombre } }]
+}
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CARGA Y FILTRADO
+- Cargar todos los productos con getProductos({ take: 10000 })
+- Filtrar por búsqueda de texto en: nombre, descripción, código de barras
+- Filtrar por categoría única
+- Aplicar ordenamiento por: nombre, categoría, tamaño, precio, stock
+- Soportar ordenamiento ascendente/descendente
+
+### 2. PAGINACIÓN
+- Soportar cantidades variables: 5, 10, 25, 50, 100, "all"
+- Calcular automáticamente total de páginas basado en filtrados
+- Botones de navegación: Primera, Anterior, Números de página (máx 5), Siguiente, Última
+- Mantener la página actual al filtrar
+- Mostrar: página actual / total y cantidad mostrada / total filtrado
+
+### 3. VISTA DE LISTA (TABLA)
+Columnas:
+- Checkbox (selección)
+- Producto (imagen + nombre + descripción)
+- Código (si mostrarCodigo = true)
+- Categoría
+- Tamaño (size + unidad)
+- Precio (formateado con localeString)
+- Stock (con indicador rojo si < 10)
+- Acciones (BotonAgregarPedido, Editar, Eliminar)
+
+Características de la tabla:
+- Header con ordenamiento clickeable (muestra ▲▼)
+- Filas enfocables con teclado (tabindex=0)
+- Selección múltiple con checkboxes (incluyendo checkbox en header)
+- Barra de información cuando hay seleccionados con botones: Copiar y Limpiar
+- Hover y focus con estilos visuales (azul para focused, verde para seleccionado)
+- Scroll suave al navegar
+
+### 4. VISTA DE CUADRÍCULA (GRID)
+Cards por producto:
+- Imagen (h-48)
+- Nombre (line-clamp-2)
+- Código badge
+- Descripción (si existe, line-clamp-2)
+- Datos técnicos: Tamaño, Precio, Stock (con indicador rojo)
+- Categorías (máximo 2 mostradas, +N para el resto)
+- Acciones (3 botones: Pedir, Editar, Eliminar)
+- Grid responsive: 1 col (móvil), 2 (tablet), 3 (desktop), 4 (pantallas grandes)
+
+### 5. NAVEGACIÓN POR TECLADO
+Desde input de búsqueda:
+- ↓: Enfocar primer producto
+- Esc: Limpiar búsqueda
+
+Desde fila de producto (tabla):
+- ↑/↓: Navegar entre productos
+- ←/→: Cambiar página
+- Espacio: Seleccionar/deseleccionar producto
+- Esc: Volver al input de búsqueda
+- Scroll automático suave al navegar
+
+### 6. ACCIONES
+- Agregar a pedido: botón BotonAgregarPedido
+- Editar: Link a /cargarProductos?edit={id}
+- Eliminar: Confirmar con alertaBorrarProducto, luego eliminar y recargar
+
+### 7. HEADER (si no es modoCompacto)
+- Título "Catálogo de Productos" con icono de caja
+- Contador de productos filtrados vs totales
+- Botones: "Nuevo Producto" → /cargarProductos, "Volver al Dashboard" → /
+- Toggle de vista (Lista/Cuadrícula)
+
+### 8. FILTROS (en caja separada)
+Grid 2 columnas:
+- Input de búsqueda con label flotante, placeholder con instrucciones de teclado
+- FilterSelect de categorías (mostrar todas las únicas)
+
+### 9. PAGINACIÓN UI (en header de ambas vistas)
+- Iconos: ⏮ ← [números] → ⏭
+- Indicador: página actual / total
+- Selector de cantidad por página
+- Contador: items mostrados / filtrados
+- Toggle de vista
+
+### 10. ESTADOS ESPECIALES
+- Loading: Mostrar placeholders (ProductListPlaceholder o ProductGridPlaceholder)
+- Sin resultados: Mostrar mensaje con icono de búsqueda y botón para limpiar filtros
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Colores principales: gray (800 para oscuro, 50 para fondo), blue (para focus), green (para selección), red (para alertas de stock)
+- Bordes redondeados: lg, xl
+- Sombras: shadow-sm, shadow-lg
+- Transiciones: transition-colors, transition-shadow
+- Responsive: md, lg, xl breakpoints
+
+## COMPORTAMIENTOS CLAVE
+1. Los productos se cargan al montar el componente
+2. Las categorías se cargan por separado (para no duplicar lógica)
+3. El filtrado es en tiempo real
+4. El ordenamiento resetea la página a 1
+5. Al cambiar de página, scroll suave al top
+6. La selección múltiple es independiente de la paginación (se mantiene al cambiar página)
+7. Focus visual claro en navegación por teclado
+8. Errores capturados con console.error y mostrados con showError
+
+## NOTAS TÉCNICAS
+- Usar "use client" (es componente cliente)
+- Usar useCallback para funciones que se pasan a useEffect
+- Usar refs para referencias directas (filaProductoRef, inputBusquedaRef)
+- Optimizar renders con lógica eficiente
+- Manejo robusto de datos undefined/null
+- Accesibilidad: roles semánticos, labels, tabindex
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+(Completa esta sección con lo que vayas necesitando)
+
+- [ ] Exportar productos seleccionados a CSV
+- [ ] Filtro por rango de precios
+- [ ] Filtro por stock mínimo/máximo
+- [ ] Ordenamiento por proveedor
+- [ ] Búsqueda avanzada con operadores (AND, OR, NOT)
+- [ ] Visualizar historial de cambios de precios
+- [ ] Descarga de imagen de producto individual
+- [ ] Bulk edit (editar múltiples productos a la vez)
+- [ ] Favoritos/Destacados
+- [ ] Búsqueda por foto (escanear código de barras con cámara)
+- [ ] Filtro por rango de fechas de creación
+- [ ] Mostrar cantidad de veces que el producto fue pedido
+- [ ] Integración con búsqueda global de la app
+- [ ] Sincronización automática al eliminar (WebSocket)
+- [ ] Historial de acciones (quién creó, editó, eliminó y cuándo)
+- [ ] Comparador de productos lado a lado
+- [ ] Impresión de etiquetas de código de barras
+- [ ] Duplicar producto (crear copia con datos)
+- [ ] Filtro por estado (activo/inactivo/descontinuado)

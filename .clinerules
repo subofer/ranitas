@@ -1,0 +1,40 @@
+### Arquitectura del Proyecto
+El proyecto "Ranitas" sigue una arquitectura **Next.js Full-Stack** utilizando el App Router. Esto implica una división clara entre:
+*   **Server Components:** Para la obtención de datos, lógica de negocio y renderizado inicial en el servidor, mejorando el rendimiento y la seguridad. Se identifican por la ausencia de la directiva "use client" y las funciones asíncronas para acceder a la base de datos (e.g., en `page.jsx` o dentro de `prisma/serverActions/` y `prisma/consultas/`).
+*   **Client Components:** Para la interactividad del usuario, gestión de estado y efectos en el navegador. Se identifican por la directiva "use client" al inicio del archivo (e.g., `ListadoProductosModerno.jsx`).
+La interacción con la base de datos se realiza a través de **Prisma ORM** y **Server Actions** o funciones `"use server"`, que actúan como una API sin la necesidad de rutas API explícitas.
+
+### Stack Tecnológico
+*   **Framework:** Next.js (con React.js).
+*   **Base de Datos:** PostgreSQL.
+*   **ORM:** Prisma.
+*   **Estilos:** TailwindCSS.
+*   **Desarrollo/Testing:** Cypress (E2E testing), Jest (unit testing), Docker (para entorno de DB).
+*   **Utilidades Frontend:** `axios`, `date-fns`, `sweetalert2`, `html5-qrcode`, `puppeteer`, `chart.js`.
+*   **Autenticación/Seguridad:** `jose` (JSON Web Tokens).
+
+### Reglas de Negocio Críticas
+*   **Manejo de Stock (`Productos.size`):** La cantidad de stock de un producto se gestiona en el campo `size` de la tabla `Productos`. Las operaciones de venta (salida) deben decrementar `size`, y las de compra/recepción de pedidos (entrada) deben incrementarlo. Es crucial que estas actualizaciones sean transaccionales para mantener la integridad del inventario.
+*   **Manejo de Presentaciones y Bultos:**
+    *   La tabla `Presentaciones` define cómo se ofrece un producto (ej. "unidad", "caja de 6"). Cada presentación tiene una `cantidad` y `unidadMedida`.
+    *   El campo `contenidoPorUnidad` en `Presentaciones` (y `unidadContenido`) es vital para conversiones. Por ejemplo, si una "caja" (`Presentaciones.nombre`) contiene 6 "unidades" (`Presentaciones.contenidoPorUnidad` = 6, `Presentaciones.unidadContenido` = "unidad").
+    *   La tabla `AgrupacionPresentaciones` permite definir relaciones entre presentaciones, como una presentación contenida dentro de otra, especificando la `cantidad` de la presentación contenida por cada unidad de la contenedora.
+    *   Al vender o comprar, es importante considerar la presentación para ajustar correctamente el `Productos.size` en su unidad base.
+*   **Historial de Precios (`Precios`):** La tabla `Precios` registra un historial de los precios de venta de un producto. Cada nuevo precio crea un nuevo registro con `createdAt` para mantener la trazabilidad. Se accede al precio actual ordenando por `createdAt` de forma descendente y tomando el primero.
+*   **Asociación Producto-Proveedor (`ProductoProveedor`):** Esta tabla intermedia permite a cada proveedor tener un `codigo` interno diferente para el mismo `Producto`.
+
+### Convenciones de Código Encontradas
+*   **Estructura de Carpetas:** Sigue la convención del App Router de Next.js (`app/`). Los componentes reutilizables se agrupan en `app/components/`. Las lógicas de la base de datos están en `prisma/consultas/` y las acciones de escritura en `prisma/serverActions/`.
+*   **Componentes:**
+    *   Se usa la directiva `"use client"` explícitamente para componentes que requieren interactividad en el navegador.
+    *   Se utilizan funciones asíncronas para la carga de datos en Server Components o en Server Actions.
+    *   Nombres de componentes en PascalCase (ej. `ListadoProductosModerno`).
+*   **Prisma:**
+    *   Uso de `findMany`, `findUnique`, `create`, `update`, `delete` para interactuar con la DB.
+    *   Uso extensivo de `include` para obtener datos relacionados.
+    *   Filtros (`where`), paginación (`skip`, `take`) y ordenamiento (`orderBy`) son comunes en las consultas.
+*   **Manejo de Errores:** Se utiliza un hook `useErrorNotification` y un componente `NotificationRenderer` para manejar y mostrar notificaciones de errores de manera consistente en el frontend.
+*   **Estilo de Código:** Parece seguir un formato consistente (ej. uso de comillas simples en la mayoría de los strings en JS/JSX, aunque la configuración de Prettier/ESLint podría forzar comillas dobles en ciertos casos). Las clases de TailwindCSS se aplican directamente en JSX.
+*   **Internacionalización:** El atributo `lang="es"` en `html` sugiere que la aplicación está orientada al idioma español.
+*   **Íconos:** Se utiliza Font Awesome, importado globalmente en `app/layout.jsx` y renderizado a través de un componente `Icon`.
+*   **Debounce:** Uso de una utilidad `debounce` (visto en `ListadoProductosModerno.jsx`) para optimizar la entrada de texto en filtros, evitando múltiples llamadas a la API/DB por cada pulsación de tecla.

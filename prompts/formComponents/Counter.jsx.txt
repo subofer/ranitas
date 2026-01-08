@@ -1,0 +1,28 @@
+PROMPT IDEAL PARA REGENERAR Counter.jsx
+
+## PROPÓSITO GENERAL
+Componente contador con botones + y - para incrementar/decrementar valores numéricos.
+
+## PROPS PRINCIPALES
+- value: number - Valor actual
+- onChange: function - Callback al cambiar
+- min: number - Mínimo permitido
+- max: number - Máximo permitido
+- step: number (default: 1) - Incremento por click
+- disabled: boolean - Desabilitar
+
+## FUNCIONALIDADES
+- Botón - para decrementar
+- Display del valor
+- Botón + para incrementar
+- Validación min/max
+- Callbacks onChange
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Keyboard input
+- [ ] Draggable slider
+- [ ] Custom step
+- [ ] Decimals support

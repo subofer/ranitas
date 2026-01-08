@@ -1,0 +1,23 @@
+PROMPT IDEAL PARA REGENERAR CollapseDiv.jsx
+
+## PROPÓSITO GENERAL
+Componente que colapsa/expande contenido con animación suave.
+
+## PROPS PRINCIPALES
+- children: ReactNode - Contenido a colapsar
+- isOpen: boolean - Abierto/cerrado
+- title: string - Título expandible
+
+## FUNCIONALIDADES
+- Toggle open/close
+- Animación de height
+- Manejo de overflow
+- Click en título
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Accordion mode
+- [ ] Custom animations
+- [ ] Nested collapse

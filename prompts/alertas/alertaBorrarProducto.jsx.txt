@@ -1,0 +1,117 @@
+PROMPT IDEAL PARA REGENERAR alertaBorrarProducto.jsx
+
+Necesito que generes un componente/función React/Next.js llamado "alertaBorrarProducto" 
+que sea una alerta SweetAlert2 personalizada para confirmar eliminación de productos.
+
+## PROPÓSITO GENERAL
+Función que muestra una alerta visual SweetAlert2 preguntando si el usuario está seguro 
+de eliminar un producto, con foto grande del producto y acciones (Sí/No).
+
+## PROPS PRINCIPALES (función)
+- {imagen, nombre}: object
+  - imagen: string (URL de la imagen del producto)
+  - nombre: string (nombre del producto)
+- action: function - Server action que ejecuta la eliminación
+
+## COMPORTAMIENTO PRINCIPAL
+
+### 1. ALERTA INICIAL (pregunta)
+Título: `Borrar ${nombre}?`
+Texto: "Se rompen las listas de precios, los provedores, se arma terrible cagada."
+HTML personalizado: Muestra imagen grande del producto
+- Imagen: width 320px
+- Animación: float 2s ease-in-out infinite
+- Centrada horizontalmente
+
+Botones:
+- Cancelar: "No, Para un poco...!" (color rojo #d33)
+- Confirmar: "Sí, bórralo, soy loco!" (color azul #3085d6)
+- Mostrar botón de cancelación: true
+
+### 2. MENSAJES DE RESULTADO
+
+Si usuario confirma (true):
+{
+  title: '¡Borrado!',
+  text: 'Producto eliminado',
+  icon: 'success',
+}
+
+Si usuario cancela (false):
+{
+  title: '¡No se borro!',
+  text: 'Menos mal, no se como termina el tema.',
+  icon: 'info',
+}
+
+### 3. EJECUCIÓN DE LA ACTION
+- Llama a alertaSiNoAcction(action, pregunta, solucion)
+- Este componente genérico maneja:
+  - Mostrar pregunta
+  - Esperar respuesta del usuario
+  - Si true: ejecutar action (server function)
+  - Mostrar resultado (éxito o error)
+
+### 4. ESTILOS
+- SweetAlert2 estilo moderno
+- Imagen con animación flotante
+- Colores: azul (confirmar), rojo (cancelar), verde (éxito)
+- Iconos: success, info, error
+- Transiciones suaves
+
+## ESTRUCTURA DE CÓDIGO
+
+```javascript
+export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
+  // 1. Definir objeto pregunta (SweetAlert config)
+  // 2. Definir objeto solucion (resultados posibles)
+  // 3. Llamar a alertaSiNoAcction(action, pregunta, solucion)
+}
+```
+
+## COMPONENTE GENÉRICO ESPERADO
+alertaSiNoAction(action, pregunta, solucion) debe:
+1. Mostrar alerta SweetAlert2 con config de pregunta
+2. Esperar respuesta del usuario
+3. Si "sí": ejecutar la action (server function)
+4. Mostrar resultado según solucion[resultado]
+
+## DEPENDENCIAS
+- sweetalert2: librería de alertas
+- alertaSiNoAction: función genérica (@/components/alertas/genericas/alertaSiNoAction)
+
+## CASOS DE USO
+- Eliminar producto desde ListadoProductosModerno
+- Eliminar producto desde TablaListaProductos
+- Confirmar acción irreversible
+
+## COMPORTAMIENTOS CLAVE
+1. Muestra la foto del producto para confirmación visual
+2. Tiene tono humorístico (advertencia seria pero amable)
+3. Ejecuta server action solo si usuario confirma
+4. Maneja errores de la server action
+5. Muestra resultado visual al usuario
+
+## NOTAS TÉCNICAS
+- Es una función exportable (no componente)
+- async/await para manejo de alertas
+- Usa librería externa SweetAlert2
+- Parámetros: {imagen, nombre} y action
+- Devuelve Promise que resuelve al cerrar alerta
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Opción de "desactivar" en lugar de borrar
+- [ ] Mostrar productos relacionados que se perderían
+- [ ] Backup automático antes de eliminar
+- [ ] Undo (deshacer) después de eliminar
+- [ ] Confirmación en dos pasos (double check)
+- [ ] Envío de notificación al admin
+- [ ] Log de auditoría
+- [ ] Mostrar historial del producto
+- [ ] Preview de cambios en sistema
+- [ ] Soporte multiidioma
+- [ ] Animación de eliminación
+- [ ] Notificación de éxito personalizada

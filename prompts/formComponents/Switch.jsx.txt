@@ -1,0 +1,68 @@
+PROMPT IDEAL PARA REGENERAR Switch.jsx
+
+## PROPÓSITO GENERAL
+Componente toggle switch/switch toggle para booleanos con animación y accesibilidad.
+
+## PROPS PRINCIPALES
+- name: string - Identificador del campo
+- value: boolean - Valor actual (activado/desactivado)
+- label: string - Texto principal del label
+- seconLabel: string - Texto secundario/help text
+- onChange: function - Callback: {name, value, type}
+
+## ESTADO (STATE MANAGEMENT)
+- id: useId() - ID único para asociaciones
+- refPadre: ref - Referencia al contenedor
+- isFocused: boolean - Focus visual
+- inputRef: ref - Referencia al input oculto
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. TOGGLE VISUAL
+- Visualización como switch deslizable
+- Color ON: bg-blue-600
+- Color OFF: bg-gray-300
+- Animación smooth: duration-200
+
+### 2. INTERACCIÓN
+- Click en area de toggle
+- Arrow keys (← →) para cambiar
+- Enter para cambiar
+- Keyboard shortcuts integradas
+
+### 3. ACCESIBILIDAD
+- tabIndex={0} para foco
+- Hidden input checkbox
+- Focus ring visible
+- Labels asociados (htmlFor)
+
+### 4. ESTADOS VISUALES
+- Focused: ring-2 ring-blue-500
+- Pending (loading): opacity-50 cursor-not-allowed
+- Checked: translate-x-6
+- Unchecked: translate-x-1
+
+## COMPORTAMIENTOS CLAVE
+1. El input es oculto (hidden)
+2. El visual es un div clickeable
+3. Hotkeysh: Enter, ArrowRight, ArrowLeft
+4. useParentForm para reset de formulario
+5. Se usa con useFormStatus para pending state
+
+## ESTILOS
+- Base: toggle switch redondo
+- Animación: transform duration-200
+- Focus: ring-blue-500 ring-offset-2
+- Labels: flex justificados
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Tamaños variables
+- [ ] Colores personalizables
+- [ ] Disable state
+- [ ] Animation speed configurable
+- [ ] Tooltip on hover
+- [ ] State icons (check/cross)
+- [ ] Label alignment options

@@ -1,0 +1,159 @@
+PROMPT IDEAL PARA REGENERAR ListaPedidos.jsx
+
+Necesito que generes un componente React/Next.js llamado "ListaPedidos" que sea una lista 
+visual de pedidos con cambio de estado, exportación, edición y eliminación.
+
+## PROPÓSITO GENERAL
+Componente que muestra pedidos de reposición en una interfaz visual (no tabla), con 
+capacidad de cambiar estado del pedido, exportar, editar y eliminar. Incluye estados 
+visuales con colores y íconos.
+
+## PROPS PRINCIPALES
+- pedidos: array - Array de objetos pedido
+- onUpdate: function - Callback cuando se actualiza un pedido
+- editable: boolean (default: true) - Permitir edición
+- deletable: boolean (default: true) - Permitir eliminación
+
+## ESTRUCTURA DE DATOS ESPERADA
+
+### Pedido
+{
+  id: string,
+  estado: 'PENDIENTE' | 'ENVIADO' | 'RECIBIDO' | 'CANCELADO',
+  proveedor: {
+    id: string,
+    nombre: string
+  },
+  fecha: Date | string,
+  productos: [{
+    id: string,
+    cantidad: number,
+    precioUnitario: number,
+    observaciones?: string
+  }],
+  total: number,
+  creador?: {
+    nombre: string
+  }
+}
+
+## ESTADO (STATE MANAGEMENT)
+- cargandoAccion: string | null - ID del pedido en proceso
+- pedidoAExportar: object | null - Pedido seleccionado para exportar
+- pedidoAEditar: object | null - Pedido seleccionado para editar
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CAMBIO DE ESTADO
+- Estados permitidos: PENDIENTE, ENVIADO, RECIBIDO, CANCELADO
+- Server action: cambiarEstadoPedido(idPedido, nuevoEstado)
+- Al cambiar: setCargandoAccion(idPedido)
+- Llamar a onUpdate() al éxito
+- Mostrar error con showError() si falla
+- Indicador visual de carga (spinner en el botón)
+
+### 2. COLORES POR ESTADO
+- PENDIENTE: bg-yellow-100, text-yellow-800 (reloj)
+- ENVIADO: bg-blue-100, text-blue-800 (paper-plane)
+- RECIBIDO: bg-green-100, text-green-800 (check-circle)
+- CANCELADO: bg-red-100, text-red-800 (times-circle)
+- Usar getEstadoColor(estado) para clase
+- Usar getEstadoIcono(estado) para ícono
+
+### 3. ÍCONOS POR ESTADO
+- PENDIENTE: "clock"
+- ENVIADO: "paper-plane"
+- RECIBIDO: "check-circle"
+- CANCELADO: "times-circle"
+- Default: "question-circle"
+- Componente Icon con icono={nombre}
+
+### 4. EXPORTACIÓN
+- Botón "Exportar" que abre modal ExportarPedido
+- setPedidoAExportar(pedido)
+- Componente ExportarPedido maneja los detalles
+- Exporta el pedido a formato PDF/Excel/CSV
+
+### 5. EDICIÓN
+- Botón "Editar" que abre modal EditarPedido
+- setPedidoAEditar(pedido)
+- Componente EditarPedido maneja los detalles
+- Llamar a onUpdate() al guardar
+
+### 6. ELIMINACIÓN
+- Server action: eliminarPedidoCompleto(idPedido)
+- Mostrar confirmación simple (confirm())
+- En caso de eliminación, llamar a onUpdate()
+- Mostrar error si falla
+- Indicador visual de carga
+
+### 7. INFORMACIÓN DEL PEDIDO
+- ID del pedido
+- Proveedor (nombre clickeable)
+- Fecha (formateada con fechas library)
+- Estado (con color e ícono)
+- Total (formateado)
+- Cantidad de productos
+- Creador (si existe)
+
+### 8. ESTADO VACÍO
+- Si pedidos.length === 0:
+  - Mostrar card centrada
+  - Ícono grande (clipboard-list)
+  - Título: "No hay pedidos"
+  - Descripción: "Aún no se han creado pedidos de reposición."
+  - Botón: "Crear Primer Pedido"
+
+### 9. HEADER
+- Título con ícono
+- Badge con total de pedidos
+- Descripción: "Pedidos de Reposición"
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Container: bg-white, rounded-xl, shadow-lg, overflow-hidden
+- Cards: Flexibles, gap-4
+- Estados: Badges con colores específicos
+- Botones: Icon + texto, hover suave
+- Transiciones: 200ms ease-in-out
+
+## COMPORTAMIENTOS CLAVE
+1. Los errores se muestran con showError()
+2. El cargandoAccion previene múltiples clicks
+3. La fecha se formatea con library "fechas"
+4. Los íconos vienen de Icon component
+5. Cada pedido es independiente en su estado
+6. onUpdate() recarga los pedidos del padre
+
+## CASOS DE USO
+- Listado de reposición de proveedores
+- Seguimiento de estados de compra
+- Exportación de pedidos
+- Edición de pedidos pendientes
+- Cancelación de pedidos
+
+## NOTAS TÉCNICAS
+- "use client"
+- useState para modales
+- useErrorNotification() para notificaciones
+- Server actions: cambiarEstadoPedido, eliminarPedidoCompleto
+- Componentes: ExportarPedido, EditarPedido, Icon
+- Library: fechas para formatear fechas
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Búsqueda y filtrado por proveedor/estado
+- [ ] Paginación o scroll infinito
+- [ ] Acciones bulk (cambiar estado de múltiples)
+- [ ] Historial de cambios de estado
+- [ ] Notificación de retrasos en envío
+- [ ] Integración con confirmación elegante (SweetAlert)
+- [ ] Timeline visual del pedido
+- [ ] Detalles en expandable row
+- [ ] Filtros guardados
+- [ ] Reordenar por arrastrar
+- [ ] Duración estimada de entrega
+- [ ] Cálculo automático de total
+- [ ] Notas/comentarios por pedido

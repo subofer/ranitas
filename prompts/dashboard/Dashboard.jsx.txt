@@ -1,0 +1,188 @@
+PROMPT IDEAL PARA REGENERAR Dashboard.jsx
+
+Necesito que generes un componente React/Next.js llamado "Dashboard" que sea un panel 
+de control ejecutivo con métricas clave, gráficos y resumen del negocio.
+
+## PROPÓSITO GENERAL
+Componente principal del dashboard que carga métricas del negocio (ventas, compras, caja, 
+margen de ganancia, etc.), las formatea y las muestra en cards visuales con cambios 
+porcentuales e indicadores de salud.
+
+## PROPS PRINCIPALES
+- Ninguno (componente standalone)
+
+## ESTADO (STATE MANAGEMENT)
+- metrics: array - Array de objetos MetricCard
+- executiveSummary: object - Resumen ejecutivo
+- loading: boolean - Cargando datos
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CARGA DE DATOS
+- Server action: getDashboardMetrics()
+  Devuelve:
+  {
+    salesThisMonth: number,
+    purchasesThisMonth: number,
+    cashFlow: number,
+    productsCount: number,
+    profitMargin: number (%),
+    pendingInvoices: number,
+    suppliersCount: number
+  }
+
+- Server action: getExecutiveSummary()
+  Devuelve:
+  {
+    salesGrowth: number (%),
+    comparisonPeriod: string
+  }
+
+### 2. FORMATEO DE MÉTRICAS
+Cada métrica es formateada como:
+{
+  title: string,
+  value: string (formateado),
+  change: string,
+  changeType: 'positive' | 'negative' | 'neutral',
+  icon: emoji | string,
+  color: 'green' | 'blue' | 'orange' | 'purple' | 'red' | 'indigo'
+}
+
+### 3. MÉTRICAS PRINCIPALES
+
+#### 1. Ventas del Mes
+- Title: "Ventas del Mes"
+- Value: `$${salesThisMonth.toLocaleString()}`
+- Change: `+${salesGrowth}%` o "Sin cambios"
+- ChangeType: salesGrowth > 0 ? 'positive' : 'neutral'
+- Icon: 💰
+- Color: green
+
+#### 2. Compras Realizadas
+- Title: "Compras Realizadas"
+- Value: `$${purchasesThisMonth.toLocaleString()}`
+- Change: "Este mes"
+- ChangeType: 'neutral'
+- Icon: 🛒
+- Color: blue
+
+#### 3. Caja Actual
+- Title: "Caja Actual"
+- Value: `$${cashFlow.toLocaleString()}`
+- Change: cashFlow >= 0 ? "Positivo" : "Negativo"
+- ChangeType: cashFlow >= 0 ? 'positive' : 'negative'
+- Icon: 💵
+- Color: cashFlow >= 0 ? 'orange' : 'red'
+
+#### 4. Flujo de Caja
+- Title: "Flujo de Caja"
+- Value: `${cashFlow >= 0 ? '+' : ''}$${Math.abs(cashFlow).toLocaleString()}`
+- Change: "Ventas - Compras"
+- ChangeType: cashFlow >= 0 ? 'positive' : 'negative'
+- Icon: 📈
+- Color: cashFlow >= 0 ? 'purple' : 'red'
+
+#### 5. Productos en Stock
+- Title: "Productos en Stock"
+- Value: `${productsCount}`
+- Change: "Registrados"
+- ChangeType: 'neutral'
+- Icon: 📦
+- Color: indigo
+
+#### 6. Margen de Ganancia
+- Title: "Margen de Ganancia"
+- Value: `${profitMargin}%`
+- Change: profitMargin > 30 ? "Excelente" : profitMargin > 20 ? "Bueno" : "Regular"
+- ChangeType: profitMargin > 20 ? 'positive' : 'neutral'
+- Icon: 📊
+- Color: profitMargin > 30 ? 'green' : 'orange'
+
+#### 7. Facturas Pendientes
+- Title: "Facturas Pendientes"
+- Value: `$${pendingInvoices.toLocaleString()}`
+- Change: "Por cobrar"
+- ChangeType: 'neutral'
+- Icon: 📄
+- Color: red
+
+#### 8. Proveedores Activos
+- Title: "Proveedores Activos"
+- Value: `${suppliersCount}`
+- Change: "Registrados"
+- ChangeType: 'neutral'
+- Icon: 🏭
+- Color: blue
+
+### 4. COMPONENTE METRICCARD
+- Componente separado que renderiza cada métrica
+- Recibe: title, value, change, changeType, icon, color
+- Muestra indicador de cambio (↗ ↘ ●)
+- Codificado por color
+
+### 5. LAYOUT
+- Grid responsivo (1-4 columnas según pantalla)
+- Espaciado: gap-6
+- Cards: bg-white, rounded-xl, shadow-lg
+- Padding: p-6
+
+### 6. ESTADO DE ERROR
+- Si falla getDashboardMetrics():
+  - console.error()
+  - Mostrar datos fallback (todos en $0)
+  - Continuar renderizando para no romper UI
+
+### 7. ESTADO DE CARGA
+- Mostrar placeholders/skeletons mientras loading=true
+- Al montar: loading=true
+- Después de Promise.all: loading=false
+
+## COMPORTAMIENTOS CLAVE
+1. Las métricas se cargan en paralelo (Promise.all)
+2. El error de una métrica no rompe las otras
+3. Los valores se formatean con toLocaleString() para dinero
+4. El cambio porcentual es relativo al período anterior
+5. Los colores comunican salud del negocio
+6. Los íconos ayudan a identificar rápidamente cada métrica
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Responsive: sm:1col, md:2col, lg:4col
+- Colores: green (bueno), red (malo), blue (neutro)
+- Sombras: shadow-lg, hover:shadow-xl
+- Transiciones: duration-300
+
+## CASOS DE USO
+- Dashboard principal de la aplicación
+- Vista ejecutiva del negocio
+- Seguimiento de KPIs
+- Alertas visuales de problemas
+
+## NOTAS TÉCNICAS
+- "use client"
+- useState para metrics, executiveSummary, loading
+- useEffect para cargar datos (solo montar)
+- Promise.all para cargas en paralelo
+- try/catch para manejo de errores
+- Componente MetricCard separado
+- Server actions: getDashboardMetrics, getExecutiveSummary
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Gráficos de tendencia (línea, barras)
+- [ ] Período seleccionable (mes, trimestre, año)
+- [ ] Comparación con período anterior
+- [ ] Exportar datos a PDF/Excel
+- [ ] Alertas configurables (si venta < X)
+- [ ] Timeline de eventos importantes
+- [ ] Notificaciones en tiempo real
+- [ ] Integración con Google Analytics
+- [ ] Forecasting de ventas (IA)
+- [ ] Reporte automatizado por email
+- [ ] Drill-down en métricas (ver detalles)
+- [ ] Widgets reordenables
+- [ ] Temas personalizables
+- [ ] Comparación multi-tienda

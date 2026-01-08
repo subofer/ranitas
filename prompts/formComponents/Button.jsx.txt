@@ -1,0 +1,183 @@
+PROMPT IDEAL PARA REGENERAR Button.jsx
+
+Necesito que generes un componente React/Next.js llamado "Button" que sea un botón 
+universal y altamente configurable para toda la aplicación. Aquí está la especificación:
+
+## PROPÓSITO GENERAL
+Componente Button reutilizable con múltiples variantes visuales, tamaños, estados de carga 
+y soporte para íconos integrados. Es el botón principal de la aplicación.
+
+## VARIANTES DISPONIBLES
+Los botones tienen dos niveles de customización:
+1. Tipo base (tiposBotones): basic, default, neutro, enviar, borrar, azul, inline, etc.
+2. Estilos de color: bg-COLOR, border-COLOR, text-COLOR, hover:bg-COLOR-lighter
+
+## TIPOS DE BOTONES PRINCIPALES
+
+### 1. default
+- Background: gray-100
+- Border: gray-300
+- Text: gray-700
+- Hover: gray-200 (oscuro)
+- Focus: gray-400
+- Sombra: shadow-sm → shadow-md
+
+### 2. neutro
+- Background: white
+- Border: gray-300
+- Text: gray-700
+- Hover: gray-50
+- Focus: gray-400
+- Sombra: shadow-sm → shadow-md
+
+### 3. enviar (verde)
+- Background: green-600
+- Border: green-600
+- Text: white
+- Hover: green-700
+- Focus: green-500
+- Sombra: shadow-sm → shadow-md
+
+### 4. borrar (rojo)
+- Background: red-600
+- Border: red-600
+- Text: white
+- Hover: red-700
+- Focus: red-500
+- Sombra: shadow-sm → shadow-md
+
+### 5. azul (blue)
+- Background: blue-600
+- Border: blue-600
+- Text: white
+- Hover: blue-700
+- Focus: blue-500
+- Sombra: shadow-sm → shadow-md
+
+### 6. inline (gris oscuro)
+- Background: gray-600
+- Border: gray-600
+- Text: white
+- Hover: gray-700
+- Focus: gray-500
+- Sombra: shadow-sm → shadow-md
+
+### 7. basic (base sin color)
+- Incluye: padding, tamaño, rounded, border, transitions
+- Sin color específico (se aplican en nivel superior)
+- Focus: outline-none, ring-2
+- Active: scale-[0.98]
+- Disabled: opacity-50, cursor-not-allowed, pointer-events-none
+
+## PROPS PRINCIPALES
+- className: string - Clases CSS adicionales
+- tipo: string - Uno de los tipos arriba (default: "default")
+- children: ReactNode - Contenido del botón (texto, ícono, etc)
+- onClick: function - Callback al hacer click
+- disabled: boolean - Desabilitar botón
+- loading: boolean - Estado de carga (muestra spinner)
+- icon: string - Nombre del ícono (FontAwesome) que aparece antes del texto
+- iconRight: boolean - Mostrar ícono a la derecha (default: false)
+- size: 'sm' | 'md' | 'lg' - Tamaño del botón (tamaño de texto y padding)
+- variant: string - Sinónimo de 'tipo' para flexibilidad
+- fullWidth: boolean - Ancho 100%
+- ...props: Otros props estándar de HTML button
+
+## ESTILOS BASE (basic)
+```
+- Padding: px-4, py-2.5
+- Tamaño de texto: text-sm
+- Font weight: font-medium
+- Border: border
+- Rounded: rounded-lg
+- Transiciones: transition-all duration-200 ease-in-out
+- Focus: outline-none, ring-2
+- Disabled: opacity-50, cursor-not-allowed, pointer-events-none
+- Active: scale-[0.98] (efecto click)
+- Flex: inline-flex, items-center, justify-center
+```
+
+## COMPORTAMIENTOS PRINCIPALES
+
+### 1. ESTADOS
+- Normal: estilo según tipo
+- Hover: color más oscuro, sombra más grande
+- Focus: ring-2 en color del botón
+- Active: scale-[0.98] (presión)
+- Disabled: opacity-50, cursor-not-allowed
+- Loading: spinner + disabled
+
+### 2. ÍCONOS
+- Usar componente Icon (si existe)
+- Si prop 'icon' es string: buscar en FontAwesome
+- Icon aparece antes del texto (a menos que iconRight=true)
+- Spacing: mr-2 si icon a la izquierda, ml-2 si a la derecha
+- Tamaño del ícono: coherente con tamaño del botón
+
+### 3. TAMAÑOS
+- sm: text-sm, px-3, py-1.5 (botones pequeños, inline)
+- md: text-sm, px-4, py-2.5 (default)
+- lg: text-base, px-6, py-3 (botones prominentes)
+
+### 4. ESTADOS DE CARGA
+- Si loading=true:
+  - Mostrar spinner (Icon con "spinner" o animación)
+  - Deshabilitar botón
+  - Cambiar texto o mostrar solo spinner
+  - Mantener ancho para evitar saltos
+
+### 5. FULL WIDTH
+- Si fullWidth=true: w-full
+
+## CASOS DE USO
+- Enviar formularios (tipo: "enviar")
+- Acciones de eliminar (tipo: "borrar")
+- Acciones neutrales (tipo: "default")
+- Acciones primarias (tipo: "azul")
+- Botones inline sin fondo (tipo: "neutro")
+- Botones de datos (con icono)
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Colores: gray, green, red, blue, orange
+- Transiciones suaves: 200ms
+- Sombras dinámicas: hover:shadow-md
+- Focus ring: ring-2 en color relevante
+- Escalado en click: active:scale-[0.98]
+
+## COMPORTAMIENTOS CLAVE
+1. El componente es button por defecto (type="button" para no enviar forms)
+2. Los tipos tienen estilos predefinidos (no hay que pasar clases base)
+3. El loading state debe ser visible claramente
+4. Los íconos se alinean con el texto
+5. El disabled tiene prioridad visual
+6. Las transiciones son suaves y predecibles
+7. El focus ring es obligatorio para accesibilidad
+
+## NOTAS TÉCNICAS
+- Componente funcional (sin forwardRef necesario)
+- Usar template strings para clases condicionadas
+- Import Icon si existe (@/components/formComponents/Icon)
+- Usar FontAwesome si Icon no existe
+- Crear variable para grabar tipo + aplicar clases
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Tooltip en hover
+- [ ] Split button (dropdown asociado)
+- [ ] Button group (botones unidos)
+- [ ] Animación de ondas al click (ripple)
+- [ ] Toggle button (activo/inactivo)
+- [ ] Badge con contador
+- [ ] Soporte para elementos ancla (como link)
+- [ ] Keyboard shortcuts indicator
+- [ ] Confirmación antes de ejecutar
+- [ ] Dark mode automático
+- [ ] Gradientes de color
+- [ ] Outline variant (solo borde)
+- [ ] Ghost variant (sin fondo)
+- [ ] Temas personalizables
+- [ ] Analytics tracking
+- [ ] Soporte para React Router Link

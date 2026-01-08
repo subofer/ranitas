@@ -1,0 +1,19 @@
+PROMPT IDEAL PARA REGENERAR ProductListPlaceholder.jsx
+
+## PROPÓSITO GENERAL
+Componente skeleton/placeholder para tabla de productos mientras carga.
+
+## PROPS PRINCIPALES
+- count: number (default: 10) - Cantidad de filas placeholder
+
+## FUNCIONALIDADES
+- Renderiza N filas skeleton
+- Animación de carga (animate-pulse)
+- Mantiene altura consistente
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Custom row count
+- [ ] Custom animation

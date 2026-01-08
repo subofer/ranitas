@@ -1,0 +1,50 @@
+PROMPT IDEAL PARA REGENERAR CheckBox.jsx
+
+## PROPÓSITO GENERAL
+Componente checkbox personalizado con label, manejador de cambios y styling moderno.
+
+## PROPS PRINCIPALES
+- label: string - Texto del label
+- seter: function - Callback para cambios ({checked: boolean})
+- ...props: Props estándar de HTML input
+
+## COMPONENTES INTERNOS
+
+### Ipu (Internal Input Unit)
+- Input nativo de checkbox
+- Clases Tailwind predefinidas
+- Color: indigo-600
+- Focus: ring-indigo-500
+
+### CheckBox
+- Wrapper con flex layout
+- Layout: label | checkbox
+- Label es clickeable
+
+## FUNCIONALIDADES PRINCIPALES
+1. Input checkbox nativo mejorado
+2. Label asociado y clickeable
+3. Callback al cambiar
+4. Dark mode support
+
+## COMPORTAMIENTOS CLAVE
+1. El seter recibe boolean
+2. El label es opcional
+3. Sin estado interno (controlado)
+
+## ESTILOS
+- Base: form-checkbox
+- Color: indigo (focusable)
+- Dark mode: bg-gray-700
+- Layout: flex entre-spaced
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Indeterminate state (tri-state)
+- [ ] Disabled state visual
+- [ ] Loading spinner
+- [ ] Validación inmediata
+- [ ] Colores personalizables
+- [ ] Tamaños variables

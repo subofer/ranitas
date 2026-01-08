@@ -1,0 +1,146 @@
+PROMPT IDEAL PARA REGENERAR TablaListaProductos.jsx
+
+Necesito que generes un componente React/Next.js llamado "TablaListaProductos" que sea 
+una tabla compleja con filtrado, ordenamiento, selección múltiple y gestión de estado.
+
+## PROPÓSITO GENERAL
+Componente tabla avanzada para listar productos con: búsqueda/filtrado por valor, 
+ordenamiento clickeable por columna, selección múltiple, contadores, y gestión de 
+estado de selección. Es el corazón del listado de productos.
+
+## PROPS PRINCIPALES
+- productos: array - Array de objetos producto (datos)
+- columnas: array - Array de nombres de columnas a mostrar
+- titulo: string (default: "Productos") - Título de la tabla
+- tipo: string - Tipo de tabla ("listado", "filtro", etc)
+- ComponenteTituloProp: ReactComponent - Componente custom para el título
+- handleSort: function - Callback de ordenamiento
+- ...props: Otros props para pasar a Tabla
+
+## ESTADO (STATE MANAGEMENT)
+- cols: array - Columnas procesadas/filtradas
+- productosFiltrados: array - Productos después de aplicar filtro
+- setFiltro: function - Setter para actualizar filtro
+- cantidadTotal: number - Total de productos sin filtro
+- cantidadFiltrada: number - Total de productos con filtro
+- seleccionados: array - IDs de productos seleccionados
+- setseleccionados: function - Setter de seleccionados
+- orden: {columna, direccion} - Estado de ordenamiento
+- setOrden: function - Setter de ordenamiento
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. FILTRADO
+- Usa hook useFiltrarProductosPorValor (personalizado)
+- Filtra por búsqueda de texto en múltiples campos
+- Mantiene el array original intacto
+- Devuelve: [cols, productosFiltrados, setFiltro, cantidadTotal, cantidadFiltrada]
+
+### 2. ORDENAMIENTO
+- handleSort(columna, nuevaDireccion) gestiona el estado
+- Estados: 0=no ordenar, 1=ascendente, 2=descendente
+- Usa useMemo para no recalcular innecesariamente
+- Ordena por comparación: a[columna] vs b[columna]
+- Soporta orden ascendente (asc) y descendente (desc)
+
+### 3. SELECCIÓN MÚLTIPLE
+- toggleSeleccion(id): agrega/quita de seleccionados
+- toggleSeleccionButton(): selecciona todos o ninguno
+- Compara si todos los filtrados están seleccionados
+- Usa array includes() y filter()
+
+### 4. CONTADORES
+- cantidadTotal: total sin filtros
+- cantidadFiltrada: total de seleccionados (visible)
+- Mostrar en formato: "15 seleccionados de 50"
+
+### 5. COMPONENTE TÍTULO
+- ComponenteTituloFiltrero: renderiza filtro + contadores + botones
+- Propiedades: {total, seleccionados}
+- Botón "Seleccionar todos" / "Borrar selección"
+- Botón "Copiar" (si hay componente CopyToClipBoard)
+- Integración con TituloFiltrero
+
+### 6. COMPONENTE TBODY
+- TbodyTablaProducto: renderiza las filas
+- Recibe: items (productos ordenados), columnas
+- Maneja selección individual por fila
+- Pasa estado de selección a cada fila
+
+### 7. INTEGRACIÓN CON TABLA
+- Componente Tabla (base) que proporciona:
+  - Estructura HTML table
+  - Thead con headers
+  - Manejo de estilos generales
+  - Soporte para columnas dinámicas
+
+## ESTRUCTURA DE DATOS ESPERADA
+
+### Producto
+{
+  id: string,
+  nombre: string,
+  descripcion?: string,
+  codigoBarra: string,
+  size: number,
+  unidad: string,
+  categorias: [{id, nombre}],
+  precios: [{precio}],
+  [otrosAsPerColumnas]
+}
+
+### Columnas válidas
+- 'eliminar': Checkbox + botón eliminar
+- 'cat': Mostrar categorías
+- 'nombre': Nombre del producto
+- 'desc': Descripción
+- 'size': Tamaño/stock
+- 'precioActual': Precio actual
+- 'stock': Cantidad en stock
+- 'imagen': Imagen thumbnail
+- 'agregarPedido': Botón agregar a pedido
+- 'edit': Botón editar
+- ... (otras según necesidad)
+
+## COMPORTAMIENTOS CLAVE
+1. El filtrado es en tiempo real (al escribir)
+2. El ordenamiento se aplica DESPUÉS del filtrado
+3. La selección es independiente del ordenamiento
+4. Los contadores se actualizan automáticamente
+5. El estado de selección persiste al ordenar/filtrar
+6. useMemo previene recálculos innecesarios
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Tabla: ancho completo, bordes suaves
+- Filas: hover:bg-gray-50
+- Cabeceras: bg-gray-100, font-medium
+- Seleccionadas: bg-blue-50
+- Ordenamiento: indicador ▲▼
+
+## NOTAS TÉCNICAS
+- "use client"
+- useCallback para toggleSeleccionButton
+- useMemo para productosOrdenados
+- useState para seleccionados y orden
+- Import de hook useFiltrarProductosPorValor
+- Import de TituloFiltrero, TbodyTablaProducto, SelectAllToggle
+- Import de componente Tabla
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Exportar seleccionados a CSV
+- [ ] Búsqueda avanzada (AND, OR, NOT)
+- [ ] Paginación integrada
+- [ ] Acciones bulk (editar/eliminar múltiples)
+- [ ] Ordenamiento por múltiples columnas
+- [ ] Campos customizables (elegir qué columnas ver)
+- [ ] Columnas fijas (sticky)
+- [ ] Filtros por rango (precio, stock)
+- [ ] Historial de ordenamiento
+- [ ] Guardas preferencias de usuario
+- [ ] Virtualización (para muchos datos)
+- [ ] Temas personalizables
+- [ ] Integración con React Hook Form

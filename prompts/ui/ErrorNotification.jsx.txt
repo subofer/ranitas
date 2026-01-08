@@ -1,0 +1,66 @@
+PROMPT IDEAL PARA REGENERAR ErrorNotification.jsx
+
+## PROPÓSITO GENERAL
+Componente de notificación de error que aparece en esquina superior derecha y desaparece automáticamente.
+
+## PROPS PRINCIPALES
+- message: string - Texto del error a mostrar
+- onClose: function - Callback cuando se cierra
+- duration: number (default: 5000) - Tiempo en ms antes de auto-cerrar
+
+## ESTADO (STATE MANAGEMENT)
+- isVisible: boolean - Visibilidad del componente
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. AUTO-CIERRE
+- Temporizador automático de 5 segundos
+- Se puede customizar con duration prop
+- Si duration <= 0: no auto-cierra
+
+### 2. ANIMACIÓN
+- Fade in/out: opacity 0 → 100
+- Slide down: translate-y-2 → 0
+- Duration: 300ms
+- Suave y elegante
+
+### 3. ACCIONES
+- Botón "Copiar": copia error al portapapeles
+- Botón "Cerrar": cierra manualmente
+- Navigator.clipboard API
+
+### 4. STYLING
+- Fondo rojo claro: bg-red-50
+- Border rojo: border-red-200
+- Shadow: shadow-lg
+- Position: fixed top-4 right-4
+
+## ESTRUCTURA VISUAL
+- Icon (exclamation-triangle rojo)
+- Título: "Error"
+- Mensaje: texto largo (word-wrap)
+- Botones: Copiar + Cerrar
+
+## COMPORTAMIENTOS CLAVE
+1. Aparece automáticamente
+2. Desaparece después de duration
+3. Puede cerrarse manualmente
+4. Copia error al clipboard
+5. Sin estado persistente
+
+## COMPONENTE HERMANO
+- ErrorNotificationContainer: renderiza múltiples notificaciones
+- Usa hook useErrorNotification
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Múltiples tipos (success, warning, info)
+- [ ] Posiciones personalizables
+- [ ] Sonido de alerta opcional
+- [ ] Stack de errores (múltiples)
+- [ ] Retry button
+- [ ] Refresh page button
+- [ ] Report error to backend
+- [ ] Dark mode

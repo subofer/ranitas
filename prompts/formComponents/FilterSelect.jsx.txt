@@ -1,0 +1,159 @@
+PROMPT IDEAL PARA REGENERAR FilterSelect.jsx
+
+Necesito que generes un componente React/Next.js llamado "FilterSelect" que sea un select 
+con búsqueda integrada, navegación por teclado y filtrado en tiempo real.
+
+## PROPÓSITO GENERAL
+Componente Select avanzado con búsqueda interactiva, navegación por teclado (↑↓ Enter Esc),
+highlight automático de opciones filtradas, y soporte para autocompletado. Es como un 
+combobox o select filtrable moderno.
+
+## PROPS PRINCIPALES
+- value: string/number/object - Valor actual seleccionado
+- label: string - Label flotante
+- options: array - Array de objetos con opciones
+- valueField: string - Campo que contiene el value
+- textField: string - Campo que contiene el texto a mostrar
+- save: boolean - ¿Guardar valor al seleccionar?
+- busy: boolean - Estado de carga
+- onChange: function - Callback: {name, value, valueField, textField, option, selected}
+- onClear: function - Callback al limpiar
+- name: string - Identificador del campo
+- ref: React.Ref - Referencia forward ref
+- ...props: Otros props
+
+## ESTADOS PRINCIPALES
+- isOpen: boolean - Dropdown abierto/cerrado
+- opcion: object | null - Opción seleccionada
+- filtro: string - Texto de búsqueda
+- hgIndex: number - Índice de opción highlighted (-1 = ninguno)
+- optionRefs: array - Referencias a elementos de opción (para scroll)
+- inputRef: ref - Referencia al input de búsqueda
+- valueRef: ref - Referencia al campo de valor oculto
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. BÚSQUEDA/FILTRADO
+- Input de búsqueda que filtra opciones en tiempo real
+- Filtrado en textField con .toLowerCase()
+- useMemo para optimizar filtrado
+- Preserva orden original del array
+- Busca incluso con caracteres parciales
+
+### 2. NAVEGACIÓN POR TECLADO
+- ↓ ArrowDown: Siguiente opción, abre dropdown si está cerrado
+- ↑ ArrowUp: Opción anterior
+- Enter: Seleccionar opción actual si hgIndex != -1
+- Escape: 
+  - Si dropdown abierto: cerrar dropdown
+  - Si dropdown cerrado: limpiar selección y valor
+- Tab: Autocompletado con primera opción filtrada
+- Caracteres normales: escribir en filtro
+
+### 3. AUTOCOMPLETADO
+- Si Tab es presionado y hay filtro + primera opción filtrada pero no hay opción seleccionada
+- Selecciona automáticamente la primera opción
+- Útil para "tipo hacia adelante"
+
+### 4. SCROLL AUTOMÁTICO
+- Al navegar con ↑↓, el elemento se scrollea en vista
+- Smooth scroll excepto en primero y último (auto)
+- scrollIntoView con block: "nearest"
+- Se dispara solo si dropdown está abierto
+
+### 5. INTERFAZ
+- Input de búsqueda (filtro)
+- Dropdown con opciones filtradas
+- Cada opción es clickeable
+- Cada opción es navegable con teclado
+- Opción actual tiene highlight (hgIndex)
+- Seleccionada tiene fondo diferente
+
+### 6. CICLO DE VIDA
+
+#### Al montar:
+- Busca el formulario padre (form closest)
+- Escucha evento "reset" del formulario
+- Resetea el input y la selección
+
+#### Al abrir dropdown:
+- isOpen = true
+- Se muestran opciones filtradas
+- inputRef obtiene focus
+- hgIndex se reinicia a -1
+
+#### Al cerrar dropdown:
+- isOpen = false
+- filtro se limpia (vacío)
+- inputRef obtiene focus
+- hgIndex se reinicia a -1
+
+#### Al seleccionar opción:
+- opcion = objeto seleccionado
+- filtro = opcion[textField]
+- isOpen = false
+- hgIndex = -1
+- Se dispara onChange()
+
+#### Al limpiar:
+- opcion = null
+- filtro = ''
+- isOpen = false
+- hgIndex = -1
+- Se dispara onClear()
+
+### 7. VALIDACIÓN INICIAL
+- Busca opción que coincida con value (por valueField)
+- Si encontrada: establece como opcion y carga filtro
+- Permite value como string/number o como object
+
+### 8. CLICK OUTSIDE
+- Al clickear fuera del dropdown: close
+- Solo si el click NO está dentro del componente
+- Usa referencias (refPadre)
+
+## ESTILOS
+- Framework: Tailwind CSS
+- Input similar a Input.jsx (label flotante, border-bottom)
+- Dropdown: bg-white, shadow-lg, rounded, border
+- Opciones: hover:bg-gray-100, focus:bg-gray-200
+- Selected: bg-blue-100, text-blue-900
+- Highlight (hgIndex): bg-blue-50, ring
+
+## BEHAVIOR CLAVE
+1. Es un "combobox" (input + dropdown)
+2. La búsqueda es abierta (sin cerrar con cada carácter)
+3. El dropdown puede abrirse sin búsqueda (ver todas las opciones)
+4. La navegación por teclado es fluida
+5. Scroll automático previene que opciones se salgan de vista
+6. El reset del formulario limpian el componente
+7. El onChange se dispara con información completa
+
+## NOTAS TÉCNICAS
+- "use client"
+- forwardRef para acceso a refs
+- useCallback para optimizar re-renders
+- useMemo para filtrar opciones
+- useRef para referencias directas
+- useFormStatus para capturar pending
+- useEffect para setup de listeners
+- Template strings para clases Tailwind
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Búsqueda fuzzy (match en medio de palabras)
+- [ ] Highlighting del match en el texto (bold)
+- [ ] Separación de categorías (optgroup)
+- [ ] Íconos en las opciones
+- [ ] Avatar/imagen en las opciones
+- [ ] Multi-select (marcar múltiples)
+- [ ] Crear opción nueva dinámicamente
+- [ ] Validación async (servidor)
+- [ ] Descripción en tooltip para opción actual
+- [ ] Keyboard shortcut para abrir (Ctrl+K)
+- [ ] Virtual scrolling (para 10k+ opciones)
+- [ ] Dark mode
+- [ ] Animaciones suave enter/exit
+- [ ] Integración con React Hook Form

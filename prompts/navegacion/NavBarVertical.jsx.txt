@@ -1,0 +1,125 @@
+PROMPT IDEAL PARA REGENERAR NavBarVertical.jsx
+
+Necesito que generes un componente React/Next.js llamado "NavBarVertical" que sea una 
+barra de navegación vertical con menú de opciones principales.
+
+## PROPÓSITO GENERAL
+Componente barra de navegación lateral (sidebar) que muestra opciones de menú como 
+lista de enlaces. Es el componente principal para navegación de la aplicación.
+
+## PROPS PRINCIPALES
+- ref: React.Ref - Referencia forward ref
+- ...props: Otros props
+
+## ESTRUCTURA DE DATOS
+
+### menuList
+Objeto importado desde @/components/Navegacion/menuList
+Estructura esperada:
+{
+  "Inicio": "/",
+  "Productos": "/listadoProductos",
+  "Categorías": "/categorias",
+  "Proveedores": "/proveedores",
+  "Pedidos": "/pedidos",
+  "Facturas": "/facturas",
+  "Contactos": "/contactos",
+  ...
+}
+
+## COMPONENTES INTERNOS
+
+### MenuItem
+Componente interno que renderiza un enlace como item de menú
+- Props: href, children, ...props
+- Usa Next.js Link para navegación
+- Estilo: botón azul con hover oscuro
+- Padding: p-2 px-4
+- Transición: duration-200
+- Text align: center
+
+### NavBarVertical
+Componente principal
+- Container: bg-gray-50
+- Padding: px-3 py-4
+- Border: border-r-4 border-r-blue-200
+- MinHeight: min-h-screen
+- Lista ul: flex flex-col gap-3
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. RENDERIZADO DE MENÚ
+- Itera sobre keys de menuList
+- Para cada key: crea un MenuItem con href=menuList[key]
+- Muestra el key como texto del enlace
+- Ordena alfabéticamente o por orden definido
+
+### 2. NAVEGACIÓN
+- Usa Next.js Link para navegación sin refresh
+- Cada MenuItem es un link a la ruta
+- Al hacer click: navega a la página correspondiente
+
+### 3. ESTADOS VISUALES
+- Normal: bg-blue-500, text-white
+- Hover: bg-blue-600, texto blanco
+- Active: (Next.js maneja automáticamente con useRouter si se desea)
+- Transición suave: transition-colors duration-200
+
+### 4. ESTILOS
+- Container: sidebar con fondo gris claro
+- Border derecho: azul claro (2-4px)
+- Items: botones azules alineados
+- Espaciado vertical: gap-3
+- Rounded: lg en cada item
+- Sombra: shadow-sm
+
+## LAYOUT
+- Flex column: items apilados verticalmente
+- Ancho fijo o responsive
+- Alto: min-h-screen (al menos pantalla completa)
+- Scroll si hay muchos items
+
+## COMPORTAMIENTOS CLAVE
+1. Es un componente stateless (sin state)
+2. Renderiza items dinámicamente desde menuList
+3. Cada item es un enlace directo
+4. No tiene estado activo (se maneja en nivel superior)
+5. Es responsive en el layout principal
+
+## ACCESIBILIDAD
+- Links semánticos (Next.js Link)
+- Orden lógico de tabs
+- Contraste de color (azul sobre gris)
+- Hover states claros
+
+## CASOS DE USO
+- Navegación principal de la aplicación
+- Sidebar en layout principal
+- Acceso rápido a todas las secciones
+
+## NOTAS TÉCNICAS
+- Componente funcional con forwardRef
+- displayName = "NavBar vertical"
+- Import menuList desde ./menuList
+- Import MenuItem como componente interno o separado
+- Usa Next.js Link
+- Sin estado interno (stateless)
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Indicador de página activa
+- [ ] Submenu desplegables
+- [ ] Iconos en items
+- [ ] Collapse/expand del sidebar
+- [ ] Búsqueda de opciones
+- [ ] Historial de navegación reciente
+- [ ] Favoritos/Bookmarks
+- [ ] Notificaciones en items (badges)
+- [ ] Separadores entre secciones
+- [ ] Keyboard shortcuts
+- [ ] Dark mode
+- [ ] Animaciones suaves
+- [ ] Responsivo (hide en móvil)
+- [ ] Roles/permisos (mostrar solo accesibles)

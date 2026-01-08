@@ -1,0 +1,159 @@
+PROMPT IDEAL PARA REGENERAR AgregarProductoPedido.jsx
+
+Necesito que generes un componente React/Next.js llamado "AgregarProductoPedido" que sea 
+un modal para agregar un producto a un pedido existente o crear uno nuevo.
+
+## PROPÓSITO GENERAL
+Modal que permite al usuario agregar un producto a un pedido pendiente existente, o 
+crear un nuevo pedido si no hay ninguno. Incluye cantidad, observaciones y selección 
+de proveedor.
+
+## PROPS PRINCIPALES
+- producto: object - Producto a agregar
+- onClose: function - Callback para cerrar modal
+- onSuccess: function - Callback al agregar exitosamente
+
+## ESTRUCTURA DE DATOS ESPERADA
+
+### Producto
+{
+  id: string,
+  nombre: string,
+  precios: [{precio: number}],
+  proveedores?: [{proveedor: {id, nombre}}]
+}
+
+### Pedido (pendientes)
+{
+  id: string,
+  estado: 'PENDIENTE',
+  proveedor: {id, nombre}
+}
+
+## ESTADO (STATE MANAGEMENT)
+- pedidos: array - Pedidos pendientes cargados
+- pedidoSeleccionado: string - ID del pedido seleccionado
+- cantidad: number - Cantidad a agregar
+- observaciones: string - Notas/observaciones
+- cargando: boolean - En proceso
+- showCrearNuevo: boolean - Mostrar form crear nuevo pedido
+- modoCrearNuevo: 'conProveedor' | 'sinProveedor' - Modo de creación
+- proveedorSeleccionado: string - ID del proveedor para nuevo pedido
+- currentUser: object | null - Usuario actual
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. HEADER DEL MODAL
+- Ícono + título (con información del modo)
+- "Agregar a Pedido" o "Crear Nuevo Pedido"
+- Subtítulo: nombre del producto
+- Botón cerrar (X)
+- Estilo: bg-white, rounded-xl, shadow-xl
+
+### 2. INFORMACIÓN DEL PRODUCTO
+- Mostrar datos del producto:
+  - Nombre
+  - Precio unitario (si existe)
+  - Stock (si existe)
+- Container gris: bg-gray-50, p-3, rounded-lg
+
+### 3. FORMAS DE AGREGAR
+
+#### OPCIÓN A: Agregar a pedido existente
+- Selector FilterSelect de pedidos pendientes
+- Cada opción muestra: "Proveedor - Fecha"
+- Input de cantidad (number, default: 1)
+- TextArea de observaciones (opcional)
+- Botón "Agregar al Pedido"
+
+#### OPCIÓN B: Crear nuevo pedido
+- Toggle/botón para cambiar a modo crear
+- Sub-opciones:
+  a) Con Proveedor: SelectFilterSelect de proveedores del producto
+  b) Sin Proveedor: solo input de cantidad (manual después)
+- Input de cantidad
+- TextArea de observaciones
+- Botón "Crear Nuevo Pedido"
+
+### 4. CARGA DE DATOS
+- useEffect al montar:
+  - Cargar pedidos pendientes (getPedidos, filtrar estado='PENDIENTE')
+  - Cargar sesión actual (getSession)
+
+### 5. MANEJO DE AGREGAR
+
+#### handleAgregarAExistente()
+- Validar: pedidoSeleccionado y cantidad > 0
+- Server action: agregarProductoPedido(idPedido, {
+    id: producto.id,
+    cantidad: parseFloat(cantidad),
+    precioUnitario: producto.precios[0].precio,
+    observaciones
+  })
+- Si éxito: onSuccess() + onClose() + notificación
+- Si error: showError()
+
+#### handleCrearNuevoPedido()
+- Validar: cantidad > 0
+- Determinar proveedor según modoCrearNuevo
+- Server action: crearPedido({
+    idProveedor,
+    productos: [{...}],
+    idUsuario: usuario.id,
+    notas: descripción
+  })
+- Si éxito: onSuccess() + onClose() + notificación
+- Si error: showError()
+
+### 6. VALIDACIONES
+- Cantidad > 0 y número válido
+- Pedido seleccionado (si es modo existente)
+- Proveedor seleccionado (si es modo con proveedor)
+
+### 7. ESTILOS
+- Framework: Tailwind CSS
+- Modal: fixed, inset-0, bg-black bg-opacity-50, z-50
+- Dialog: bg-white, rounded-xl, shadow-xl, max-w-md
+- Inputs: usar componentes Input, FilterSelect, Select
+- Botones: usar componente Button
+- Espaciado: p-6, space-y-4
+
+## COMPORTAMIENTOS CLAVE
+1. Carga pedidos pendientes al montar
+2. Filtra solo PENDIENTE (no enviados, recibidos)
+3. Permite crear nuevo si no hay pendientes
+4. Precio unitario es automático desde producto
+5. Usuario se captura de sesión
+6. Modal se cierra al agregar exitosamente
+
+## CASOS DE USO
+- Click en "Pedir" → abre este modal
+- Usuario elige agregar a existente o crear nuevo
+- Agrega cantidad y observaciones
+- Confirma y pedido se crea/actualiza
+
+## NOTAS TÉCNICAS
+- "use client"
+- useState para estado del modal
+- useEffect para cargar datos
+- useErrorNotification() para errores
+- Server actions: agregarProductoPedido, crearPedido, getPedidos
+- Componentes: Input, FilterSelect, Select, Button, Icon
+- Library: getSession para usuario
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Agregar múltiples productos a la vez
+- [ ] Seleccionar precio personalizado
+- [ ] Historial de pedidos anteriores (sugerencias)
+- [ ] Cálculo de total + descuentos
+- [ ] Fecha de entrega esperada
+- [ ] Contacto de proveedor visible
+- [ ] Duración estimada de entrega
+- [ ] Chat con proveedor
+- [ ] Plantillas de pedido frecuente
+- [ ] Notificación al proveedor
+- [ ] QR del pedido
+- [ ] PDF del pedido

@@ -1,0 +1,22 @@
+PROMPT IDEAL PARA REGENERAR Chevron.jsx
+
+## PROPÓSITO GENERAL
+Componente de chevron/flecha para expandir/colapsar secciones.
+
+## PROPS PRINCIPALES
+- isOpen: boolean - Estado abierto/cerrado
+- className: string - Clases CSS
+- size: string - Tamaño del chevron
+
+## FUNCIONALIDADES
+- Rotación según estado
+- Transición suave
+- Clickeable
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Diferentes direcciones
+- [ ] Animación configurable
+- [ ] Múltiples estilos

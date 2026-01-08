@@ -1,0 +1,71 @@
+PROMPT IDEAL PARA REGENERAR Icon.jsx
+
+## PROPÓSITO GENERAL
+Componente Icon universal que renderiza iconos FontAwesome con soporte para botones y customización.
+
+## PROPS PRINCIPALES
+- icono: string - Nombre del ícono (FontAwesome)
+- className: string - Clases CSS adicionales
+- rotate: boolean - Rotar ícono 180 grados
+- type: string - Tipo de elemento ('button', etc)
+- regular: boolean - Usar fa-regular en lugar de fa-solid
+- children: ReactNode - Contenido adicional
+- onClick: function - Si se proporciona, renderiza como botón
+- suspense: boolean - (sin usar actualmente)
+- ...props: Otros props
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. MAPEO DE ICONOS
+Algunos iconos tienen aliases:
+- "eliminar" → "trash-can" (hover: red)
+- "editar" → "pen-to-square" (hover: blue)
+- "salvar" → "floppy-disk" (hover: green)
+
+### 2. MODOS DE RENDERIZADO
+
+#### Modo Ícono (simple)
+- Solo renderiza <i> con clases
+- No interactivo
+- Ligero
+
+#### Modo Botón
+- Se renderiza si onClick O type="button"
+- Flex layout con ícono + children
+- Active state: scale-[90%]
+- Transition suave
+
+### 3. CLASES DINÁMICAS
+- fa-solid o fa-regular
+- Rotación 180 grados si rotate={true}
+- Hover states según ícono
+
+## COMPORTAMIENTOS CLAVE
+1. Detección automática: Icon o Button
+2. Soporte para FontAwesome v6
+3. Flexible con children (ícono + texto)
+4. Scale animation en click
+
+## ESTILOS
+- Base: flex alignment
+- Active: scale-[90%] transition
+- Disabled: cursor-not-allowed
+- FontAwesome: fa-solid / fa-regular
+
+## CASOS DE USO
+- Ícono puro (eliminar, editar)
+- Botón con ícono (ícono + texto)
+- Ícono clickeable con acción
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Sizes: xs, sm, md, lg, xl
+- [ ] Colors: red, blue, green, etc
+- [ ] Loading spinner
+- [ ] Tooltip on hover
+- [ ] SVG support
+- [ ] Custom icon mapping
+- [ ] Badge support (contador)
+- [ ] Animation presets

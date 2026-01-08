@@ -1,0 +1,19 @@
+PROMPT IDEAL PARA REGENERAR ProductGridPlaceholder.jsx
+
+## PROPÓSITO GENERAL
+Componente skeleton/placeholder para grid de productos mientras carga.
+
+## PROPS PRINCIPALES
+- count: number (default: 12) - Cantidad de cards placeholder
+
+## FUNCIONALIDADES
+- Renderiza N cards skeleton
+- Animación de carga (animate-pulse)
+- Grid responsivo
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Custom column count
+- [ ] Custom animation

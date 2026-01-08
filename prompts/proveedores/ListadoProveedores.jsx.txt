@@ -1,0 +1,48 @@
+PROMPT IDEAL PARA REGENERAR ListadoProveedores.jsx
+
+## PROPÓSITO GENERAL
+Componente Server que renderiza tabla de proveedores completos con todas sus propiedades.
+
+## PROPS PRINCIPALES
+- ...props: Props para pasar a componente Tabla
+
+## SERVIDOR (Server Component)
+- Async component
+- Carga datos en servidor
+- No es "use client"
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CARGA DE DATOS
+- Server action: getProveedoresCompletos()
+- Devuelve: array de proveedores con datos relacionados
+
+### 2. COLUMNAS
+```
+['id', 'Cuit', 'Nombre', 'E-mail', 'Condicion Iva', 'telefono', '']
+```
+
+### 3. RENDERIZADO
+- Componente Tabla como wrapper
+- RenglonProveedor por cada fila
+- Props propagados a Tabla
+
+## COMPONENTES DEPENDIENTES
+- Tabla: componente wrapper
+- RenglonProveedor: renderiza fila individual
+
+## COMPORTAMIENTOS CLAVE
+1. Server component (sin estado)
+2. Datos cargados en servidor
+3. Renderizado estático/dinámico
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Búsqueda/filtrado
+- [ ] Paginación
+- [ ] Ordenamiento
+- [ ] Edición inline
+- [ ] Exportar CSV
+- [ ] Acciones bulk

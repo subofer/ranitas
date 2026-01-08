@@ -1,0 +1,64 @@
+PROMPT IDEAL PARA REGENERAR ListadoCategorias.jsx
+
+## PROPÓSITO GENERAL
+Componente que muestra lista de categorías con funciones de edición, eliminación y conteo de productos.
+
+## PROPS PRINCIPALES
+- ref: React.Ref - Referencia forward ref
+- ...props: Otros props
+
+## ESTADO (STATE MANAGEMENT)
+- categorias: array - Lista de categorías
+- loading: boolean - Estado de carga
+- categoriaEditando: object | null - Categoría en edición
+- modalOpen: boolean - Modal visible
+
+## FUNCIONALIDADES PRINCIPALES
+
+### 1. CARGA DE DATOS
+- useEffect al montar
+- Server action: getCategoriasConteo()
+- Incluye conteo de productos por categoría
+
+### 2. EDICIÓN
+- Modal EditarCategoriaModal
+- setState: categoriaEditando
+- Recargar después de guardar
+
+### 3. ELIMINACIÓN
+- Alerta: alertaBorrarCategoria
+- Server action: borrarCategoria(id)
+- Recargar lista después
+
+### 4. RENDER DE ITEMS
+- Cards visuales por categoría
+- Icon + nombre + conteo
+- Botones: editar, eliminar
+
+### 5. ESTADOS
+- Loading: spinner
+- Vacío: mensaje descriptivo
+- Con datos: lista visual
+
+## COMPONENTES DEPENDIENTES
+- EditarCategoriaModal
+- alertaBorrarCategoria
+- Icon
+
+## COMPORTAMIENTOS CLAVE
+1. ForwardRef con useImperativeHandle
+2. Recarga manual con ref
+3. Confirmaciones antes de eliminar
+4. Modal para edición
+
+---
+
+## NUEVAS CARACTERÍSTICAS
+
+- [ ] Crear nueva categoría
+- [ ] Búsqueda
+- [ ] Reordenar (drag-drop)
+- [ ] Bulk delete
+- [ ] Exportar
+- [ ] Colores personalizados
+- [ ] Subcategorías

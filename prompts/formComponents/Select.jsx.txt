@@ -1,0 +1,125 @@
+PROMPT IDEAL PARA REGENERAR Select.jsx
+
+Necesito que generes un componente React/Next.js llamado "Select" que sea un select 
+dropdown universal para toda la aplicación. Aquí está la especificación:
+
+## PROPÓSITO GENERAL
+Componente Select reutilizable con label flotante, múltiples opciones, placeholder 
+personalizable y styling moderno con Tailwind.
+
+## PROPS PRINCIPALES
+- options: array - Array de objetos con las opciones
+- valueField: string - Nombre del campo que contiene el value
+- textField: string - Nombre del campo que contiene el texto a mostrar
+- label: string - Label flotante dentro del select
+- placeholder: string (default: "Elija el tipo") - Texto por defecto
+- loading: boolean - Estado de carga (disabled)
+- showIcon: boolean (default: false) - Mostrar ícono de chevron
+- value: string/number - Valor actual seleccionado
+- onChange: function - Callback al cambiar ({value, textField, etc})
+- disabled: boolean - Deshabilitar select
+- className: string - Clases CSS adicionales
+- ...props: Otros props estándar de HTML select
+
+## ESTRUCTURA ESPERADA DE OPTIONS
+Array de objetos donde cada uno tiene:
+{
+  [valueField]: string | number,
+  [textField]: string,
+  ...otrosCampos
+}
+
+Ejemplo:
+options = [
+  { id: 1, nombre: "Categoría A" },
+  { id: 2, nombre: "Categoría B" }
+]
+Uso: valueField="id", textField="nombre"
+
+## COMPORTAMIENTOS PRINCIPALES
+
+### 1. LABEL FLOTANTE
+- Se posiciona dentro del select como en Input.jsx
+- Se anima cuando hay valor o placeholder
+- Clases: top-3/top-1, text-base/text-sm
+- Color: text-black, font-medium
+- No oculta la entrada
+
+### 2. PLACEHOLDER
+- Primera opción (disabled, value="")
+- Solo se muestra si no hay valor seleccionado
+- Si hasValue = true, el placeholder no se muestra
+- Texto en gray-500
+
+### 3. OPCIONES
+- Se mapean desde el array de options
+- Cada una tiene value=[valueField] y texto=[textField]
+- Mantienen el orden del array original
+- Primera opción es siempre el placeholder
+
+### 4. STYLING
+- Framework: Tailwind CSS
+- Appearance: none (custom styling)
+- Border: border-0 border-b-2 border-gray-300
+- Focus: focus:border-slate-400
+- Text: text-right, text-gray-900
+- Padding: px-2.5, pt-6, pb-3
+- Height: h-[52px]
+- Transiciones: transition-all duration-500
+- Disabled: opacity-50, cursor-not-allowed
+- Loading: bg-gray-50
+- Hover: cursor-pointer (hover:border-gray-400 suave)
+
+### 5. ICONO DE CHEVRON
+- Si showIcon=true: mostrar chevron al lado derecho
+- Posicionado con pr-8 (espacio para el ícono)
+- Usar Icon component (chevron-down)
+- Solo visual, no interfiere con functionality
+
+### 6. ESTADOS
+- Normal: gray-300 border
+- Focus: slate-400 border
+- Disabled: opacity-50, gray-50 background
+- Loading: gray-50 background, disabled
+- HasValue: label en posición top
+- NoValue: placeholder en gray-500
+
+## COMPORTAMIENTOS CLAVE
+1. El select es nativo HTML (no custom dropdown)
+2. El onChange se propaga a través de props
+3. El placeholder es una opción disabled
+4. El label no interfiere con el select
+5. El valor seleccionado determina la posición del label
+6. La carga desabilita el select
+
+## CASOS DE USO
+- Seleccionar categoría de producto
+- Seleccionar proveedor
+- Seleccionar unidad de medida
+- Filtros de búsqueda
+- Selecciones en formularios
+
+## NOTAS TÉCNICAS
+- Componente funcional (sin state)
+- No es un custom dropdown (usar FilterSelect para eso)
+- Mantener props HTML nativos con ...props
+- Usar template strings para clases
+- Lógica simple de hasValue para animar label
+
+---
+
+## NUEVAS CARACTERÍSTICAS QUE PODRÍA NECESITAR
+
+- [ ] Búsqueda/filtrado dentro del select (→ usar FilterSelect)
+- [ ] Multi-select (múltiples valores)
+- [ ] Opción personalizada "Crear nuevo"
+- [ ] Grouping de opciones (optgroup)
+- [ ] Iconos en las opciones
+- [ ] Descripción/help text bajo cada opción
+- [ ] Keyboard navigation mejorada
+- [ ] Virtual scrolling (para muchas opciones)
+- [ ] Async loading de opciones
+- [ ] Integración con React Hook Form
+- [ ] Validación con error messages
+- [ ] Dark mode
+- [ ] Tamaños variables (sm, md, lg)
