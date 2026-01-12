@@ -34,5 +34,5 @@ export const menuListHorizontal = [
     { menu: "Contactos", href: "/contactos" },
   ] },
   { menu: "Ia", href: "/ia", subMenu: [] },
-  { menu: "Auditoria", href: "/", subMenu: [] },
+  { menu: "Auditoria", href: "/audit", subMenu: [] },
 ];

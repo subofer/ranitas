@@ -7,7 +7,8 @@ const P = ({ children }) => createPortal(
 );
 
 
-export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
+export const alertaBorrarProducto = async (item, action) => {
+  const { imagen, nombre } = item;
   const pregunta = {
     title: `Borrar ${nombre}?`,
     text: "Se rompen las listas de precios, los provedores, se arma terrible cagada.",
@@ -34,5 +35,5 @@ export const alertaBorrarProducto = async ({imagen, nombre}, action) => {
     },
   }
 
-  alertaSiNoAcction(action, pregunta, solucion);
+  await alertaSiNoAcction(action, pregunta, solucion);
 }

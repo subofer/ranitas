@@ -51,7 +51,7 @@ model Presentaciones {
   unidadMedida        String
   contenidoPorUnidad  Float?
   unidadContenido     String?
-  producto            Productos               @relation(fields: [productoId], references: [id])
+  producto            Productos               @relation(fields: [productoId], references: [id], onDelete: Cascade)
   tipoPresentacion    TiposPresentacion      @relation(fields: [tipoPresentacionId], references: [id])
   contenidas          AgrupacionPresentaciones[] @relation("PresentacionContenida")
   contenedoras        AgrupacionPresentaciones[] @relation("PresentacionContenedora")
@@ -74,7 +74,7 @@ model ProductoProveedor {
   productoId  String
   proveedorId String
   codigo      String
-  producto    Productos @relation(fields: [productoId], references: [id])
+  producto    Productos @relation(fields: [productoId], references: [id], onDelete: Cascade)
   proveedor   Contactos @relation(fields: [proveedorId], references: [id])
   @@id([proveedorId, productoId])
   @@unique([proveedorId, productoId])
@@ -85,7 +85,7 @@ model Precios {
   createdAt  DateTime  @default(now())
   precio     Float
   idProducto String
-  producto   Productos @relation(fields: [idProducto], references: [id])
+  producto   Productos @relation(fields: [idProducto], references: [id], onDelete: Cascade)
 }
 
 model Documentos {
@@ -113,8 +113,8 @@ model DetalleDocumento {
   idProducto     String
   cantidad       Int
   precioUnitario Float
-  documento      Documentos @relation(fields: [docRelacionado], references: [id])
-  producto       Productos  @relation(fields: [idProducto], references: [id])
+  documento      Documentos @relation(fields: [docRelacionado], references: [id], onDelete: Cascade)
+  producto       Productos  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
 }
 
 model Contactos {
@@ -248,6 +248,22 @@ enum EstadoPedido {
   CANCELADO
 }
 
+enum AuditLevel {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum AuditCategory {
+  UI
+  DB
+  SYSTEM
+  AUTH
+  FILE
+}
+
 model Pedidos {
   id                String            @id @default(uuid())
   createdAt         DateTime          @default(now())
@@ -275,4 +291,21 @@ model DetallePedidos {
   observaciones String?
 
   @@unique([idPedido, idProducto])
+}
+
+model AuditLog {
+  id        String        @id @default(cuid())
+  createdAt DateTime      @default(now())
+  userId    String?
+  level     AuditLevel
+  category  AuditCategory
+  action    String
+  message   String
+  metadata  Json?
+  path      String
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([level])
+  @@index([category])
 }

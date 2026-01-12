@@ -111,7 +111,9 @@ export const tablaListaProductosColumnasNames = {
     className: "px-2 text-center w-px",
     Component: BotonEliminarProducto,
     componentClassname: "p-0 m-0",
-    onClick: (item) => alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id)),
+    onClick: async (item) => {
+      await alertaBorrarProducto(item, () => eliminarProductoConPreciosPorId(item.id));
+    },
     noselect: true,
     colw:"w-px",
   },

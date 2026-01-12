@@ -1,8 +1,13 @@
 "use client"
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import debounce from '@/lib/debounce';
+import { useKeyboard } from '@/hooks/useKeyboard';
 import { getProductos } from '@/prisma/consultas/productos';
 import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
+import { restaurarProducto } from '@/prisma/serverActions/undo';
 import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
+import { useNotification } from '@/context/NotificationContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import Link from 'next/link';
 import Icon from '../formComponents/Icon';
 import FilterSelect from '../formComponents/FilterSelect';
@@ -11,104 +16,196 @@ import ImageWithFallback from '../ui/ImageWithFallback';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 import ProductListPlaceholder from './ProductListPlaceholder';
 import ProductGridPlaceholder from './ProductGridPlaceholder';
+import HighlightMatch from '../HiglightMatch';
+
+const normalizarTexto = (value) => (value ?? '').toString().trim().toLowerCase();
 
 const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false }) => {
   const { showError } = useErrorNotification();
+  const { userName } = useCurrentUser();
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busquedaInput, setBusquedaInput] = useState('');
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [vistaTipo, setVistaTipo] = useState('lista');
   const [pagina, setPagina] = useState(1);
-  const [perPage, setPerPage] = useState(5);
+  const [perPage, setPerPage] = useState(10);
   const [total, setTotal] = useState(0);
   const [categoriasUnicas, setCategoriasUnicas] = useState([]);
   const [ordenamiento, setOrdenamiento] = useState({ columna: null, direccion: 'asc' });
-  
-  // Estados para navegación por teclado
-  const [productoFocused, setProductoFocused] = useState(null);
-  const [productosSeleccionados, setProductosSeleccionados] = useState([]);
+
+  const [searchMenuOpen, setSearchMenuOpen] = useState(false);
+  const [searchFields, setSearchFields] = useState({
+    nombre: true,
+    codigoBarra: true,
+    descripcion: true,
+    categoria: true,
+    tamano: true,
+    unidad: true,
+    precio: true,
+    stock: true,
+  });
+
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [copyFields, setCopyFields] = useState({
+    nombre: true,
+    codigoBarra: true,
+    precio: false,
+    categoria: false,
+    tamano: false,
+    unidad: false,
+    descripcion: false,
+  });
   const inputBusquedaRef = useRef(null);
   const filaProductoRef = useRef({});
+  const tablaRef = useRef(null);
+  const categoryFilterRef = useRef(null);
+  const copyMenuRef = useRef(null);
+  const searchMenuRef = useRef(null);
+  const scopeRef = useRef(null);
 
   const cargarProductos = useCallback(async () => {
     try {
       setLoading(true);
       const { productos: productosData = [] } = await getProductos({ take: 10000 }) || {};
-      setProductos(Array.isArray(productosData) ? productosData : []);
-      setTotal(Array.isArray(productosData) ? productosData.length : 0);
+      const lista = Array.isArray(productosData) ? productosData : [];
+      setProductos(lista);
+      setTotal(lista.length);
+
+      // Derivar categorías desde el mismo fetch (evita duplicar requests)
+      const cats = [...new Set(
+        lista.flatMap((p) => p.categorias?.map((c) => c.nombre) || [])
+      )]
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'es'));
+      setCategoriasUnicas(cats);
     } catch (error) {
       console.error('Error cargando productos:', error);
       setProductos([]);
       setTotal(0);
+      setCategoriasUnicas([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (productoFocused) {
-      setTimeout(() => {
-        filaProductoRef.current[productoFocused]?.focus();
-        filaProductoRef.current[productoFocused]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 0);
-    }
-  }, [productoFocused]);
+    if (!copyMenuOpen) return;
+
+    const onMouseDown = (e) => {
+      if (!copyMenuRef.current) return;
+      if (!copyMenuRef.current.contains(e.target)) setCopyMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [copyMenuOpen]);
+
+  useEffect(() => {
+    if (!searchMenuOpen) return;
+
+    const onMouseDown = (e) => {
+      if (!searchMenuRef.current) return;
+      if (!searchMenuRef.current.contains(e.target)) setSearchMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [searchMenuOpen]);
+
+  const toggleCampoBusqueda = useCallback((key) => {
+    setSearchFields((prev) => ({ ...prev, [key]: !prev[key] }));
+    setPagina(1);
+  }, []);
 
   useEffect(() => {
     cargarProductos();
   }, [cargarProductos]);
 
-  // Cargar todas las categorías únicas para el dropdown
+  // Debounce de búsqueda (evita recalcular filtros/orden en cada tecla)
   useEffect(() => {
-    const cargarCategorias = async () => {
-      try {
-        const { productos: todos = [] } = await getProductos({ take: 10000 }) || {};
-        const cats = [...new Set(
-          todos.flatMap(p => p.categorias?.map(c => c.nombre) || [])
-        )].filter(Boolean).sort();
-        setCategoriasUnicas(cats);
-      } catch (error) {
-        console.error('Error obteniendo categorías:', error);
-      }
+    const debounced = debounce((value) => {
+      setBusquedaProducto(value);
+    }, 250);
+
+    debounced(busquedaInput);
+
+    return () => {
+      debounced.cancel?.();
     };
-    cargarCategorias();
+  }, [busquedaInput]);
+
+  const handleOrdenar = useCallback((columna) => {
+    setOrdenamiento((prev) => {
+      const direccion = prev.columna === columna && prev.direccion === 'asc' ? 'desc' : 'asc';
+      return { columna, direccion };
+    });
+    setPagina(1);
   }, []);
 
-  // Filtrar productos según búsqueda de texto y categoría
-  const productosFiltrados = productos.filter(producto => {
-    // Búsqueda de texto en nombre, descripción y código
-    const coincideBusqueda = !busquedaProducto || 
-      producto.nombre.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
-      producto.descripcion?.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
-      producto.codigoBarra?.toLowerCase().includes(busquedaProducto.toLowerCase());
-    
-    const coincideCategoria = !categoriaFiltro ||
-      producto.categorias?.some(c => c.nombre === categoriaFiltro);
-    
-    return coincideBusqueda && coincideCategoria;
-  });
+  const productosFiltrados = useMemo(() => {
+    const q = normalizarTexto(busquedaProducto);
+    const tokens = q.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0 && !categoriaFiltro) return productos;
 
-  // Función para ordenar productos
-  const ordenarProductos = (productos, columna) => {
-    let nuevaDireccion = 'asc';
-    if (ordenamiento.columna === columna && ordenamiento.direccion === 'asc') {
-      nuevaDireccion = 'desc';
-    }
-    setOrdenamiento({ columna, direccion: nuevaDireccion });
-    setPagina(1);
+    return productos.filter((producto) => {
+      const coincideCategoria = !categoriaFiltro || producto.categorias?.some((c) => c.nombre === categoriaFiltro);
+      if (!coincideCategoria) return false;
+      if (tokens.length === 0) return true;
 
-    return [...productos].sort((a, b) => {
-      let valorA, valorB;
+      const nombre = normalizarTexto(producto.nombre);
+      const descripcion = normalizarTexto(producto.descripcion);
+      const codigo = normalizarTexto(producto.codigoBarra);
 
-      switch (columna) {
+      const categorias = Array.isArray(producto.categorias)
+        ? producto.categorias.map((c) => normalizarTexto(c?.nombre)).filter(Boolean).join(' ')
+        : '';
+      const tamano = normalizarTexto(producto.size);
+      const unidad = normalizarTexto(producto.unidad);
+
+      const precioRaw = producto.precios?.[0]?.precio;
+      const precioNumero = precioRaw == null ? '' : String(precioRaw);
+      const precioLocale =
+        typeof precioRaw === 'number'
+          ? String(precioRaw.toLocaleString()).toLowerCase()
+          : '';
+
+      // "Stock" hoy se representa con size.
+      const stock = tamano;
+
+      const partes = [];
+      if (searchFields.nombre) partes.push(nombre);
+      if (searchFields.descripcion) partes.push(descripcion);
+      if (searchFields.codigoBarra) partes.push(codigo);
+      if (searchFields.categoria) partes.push(categorias);
+      if (searchFields.tamano) partes.push(tamano);
+      if (searchFields.unidad) partes.push(unidad);
+      if (searchFields.precio) partes.push(precioNumero, precioLocale);
+      if (searchFields.stock) partes.push(stock);
+
+      const searchable = partes.filter(Boolean).join(' ');
+      return tokens.every((t) => searchable.includes(t));
+    });
+  }, [productos, busquedaProducto, categoriaFiltro, searchFields]);
+
+  const productosOrdenados = useMemo(() => {
+    if (!ordenamiento.columna) return productosFiltrados;
+
+    const dir = ordenamiento.direccion === 'asc' ? 1 : -1;
+    const col = ordenamiento.columna;
+    return [...productosFiltrados].sort((a, b) => {
+      let valorA;
+      let valorB;
+
+      switch (col) {
         case 'nombre':
-          valorA = a.nombre.toLowerCase();
-          valorB = b.nombre.toLowerCase();
+          valorA = normalizarTexto(a.nombre);
+          valorB = normalizarTexto(b.nombre);
           break;
         case 'categoria':
-          valorA = (a.categorias?.[0]?.nombre || '').toLowerCase();
-          valorB = (b.categorias?.[0]?.nombre || '').toLowerCase();
+          valorA = normalizarTexto(a.categorias?.[0]?.nombre);
+          valorB = normalizarTexto(b.categorias?.[0]?.nombre);
           break;
         case 'tamaño':
           valorA = a.size || 0;
@@ -119,6 +216,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
           valorB = b.precios?.[0]?.precio || 0;
           break;
         case 'stock':
+          // En este proyecto hoy se muestra “stock” con size (no hay campo stock en el modelo)
           valorA = a.size || 0;
           valorB = b.size || 0;
           break;
@@ -126,30 +224,71 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
           return 0;
       }
 
-      if (valorA < valorB) return nuevaDireccion === 'asc' ? -1 : 1;
-      if (valorA > valorB) return nuevaDireccion === 'asc' ? 1 : -1;
+      if (valorA < valorB) return -1 * dir;
+      if (valorA > valorB) return 1 * dir;
       return 0;
     });
-  };
+  }, [productosFiltrados, ordenamiento]);
 
-  // Aplicar ordenamiento a los productos filtrados
-  const productosOrdenados = ordenamiento.columna 
-    ? ordenarProductos(productosFiltrados, ordenamiento.columna) 
-    : productosFiltrados;
-
-  // Cálculo de paginación (basado en productos filtrados)
   const totalFiltrados = productosOrdenados.length;
-  const totalPaginas = perPage === 'all' ? 1 : Math.ceil(totalFiltrados / perPage);
+  const perPageEsAll = perPage === 'all';
+  const perPageNum = perPageEsAll ? Math.max(totalFiltrados, 1) : Number(perPage) || 5;
+  const totalPaginas = perPageEsAll ? 1 : Math.max(1, Math.ceil(totalFiltrados / perPageNum));
 
-  // Calcular productos para la página actual
-  const productosEnPagina = perPage === 'all' 
-    ? productosOrdenados 
-    : productosOrdenados.slice((pagina - 1) * perPage, pagina * perPage);
+  const {
+    productoFocused,
+    setProductoFocused,
+    productosSeleccionados,
+    setProductosSeleccionados,
+    toggleProductoSeleccionado,
+    handleInputKeyDown,
+    handleCategoryFilterNavigateNext,
+    handleCategoryFilterNavigatePrev,
+    handleProductoKeyDown,
+    handleTableWheel,
+  } = useKeyboard({
+    itemsOrdenados: productosOrdenados,
+    pagina,
+    perPageEsAll,
+    perPageNum,
+    totalPaginas,
+    setPagina,
+    inputBusquedaRef,
+    categoryFilterRef,
+    filaProductoRef,
+    tablaRef,
+    onCopySelected: () => {
+      copiarSeleccionados();
+    },
+    scopeRef,
+  });
+
+  const productosEnPagina = useMemo(() => {
+    if (perPageEsAll) return productosOrdenados;
+    const inicio = (pagina - 1) * perPageNum;
+    return productosOrdenados.slice(inicio, inicio + perPageNum);
+  }, [productosOrdenados, pagina, perPageEsAll, perPageNum]);
+
+  const todosSeleccionados = useMemo(() => {
+    if (productosOrdenados.length === 0) return false;
+    return productosOrdenados.every((p) => productosSeleccionados.includes(p.id));
+  }, [productosOrdenados, productosSeleccionados]);
+
+  const idsDeTodosLosProductos = useMemo(
+    () => productosOrdenados.map((p) => p.id).filter(Boolean),
+    [productosOrdenados]
+  );
 
   const handlePerPageChange = (nuevoPerPage) => {
     setPerPage(nuevoPerPage === 'all' ? 'all' : Number(nuevoPerPage));
     setPagina(1);
   };
+
+  // Si cambian filtros/orden/cantidad y la página queda fuera de rango, corregirla
+  useEffect(() => {
+    if (pagina > totalPaginas) setPagina(totalPaginas);
+    if (pagina < 1) setPagina(1);
+  }, [pagina, totalPaginas]);
 
   const goToNextPage = () => {
     if (pagina < totalPaginas) {
@@ -175,161 +314,220 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Generar números de página a mostrar (máximo 5)
-  const generarNumerosPagina = () => {
-    if (totalPaginas <= 5) {
-      return Array.from({ length: totalPaginas }, (_, i) => i + 1);
-    }
-    
-    const numeros = [];
+  const numerosPagina = useMemo(() => {
+    if (totalPaginas <= 5) return Array.from({ length: totalPaginas }, (_, i) => i + 1);
     const inicio = Math.max(1, pagina - 2);
     const fin = Math.min(totalPaginas, pagina + 2);
-    
-    for (let i = inicio; i <= fin; i++) {
-      numeros.push(i);
-    }
-    
-    return numeros;
-  };
+    return Array.from({ length: fin - inicio + 1 }, (_, i) => inicio + i);
+  }, [pagina, totalPaginas]);
+  const { addNotification } = useNotification();
 
-  const numerosPagina = generarNumerosPagina();
+  const HeaderConPaginacion = ({ icono, titulo }) => (
+    <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        {/* Izquierda: Título */}
+        <div className="flex items-center whitespace-nowrap gap-2">
+          <Icon icono={icono} className="text-gray-600 text-base" />
+          <h2 className="text-base font-medium text-gray-900">{titulo}</h2>
+        </div>
+
+        {/* Derecha: Paginación */}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Botones de navegación */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={goToFirstPage}
+              disabled={pagina === 1}
+              className="px-2 py-1 text-sm font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Primera página"
+            >
+              ⏮
+            </button>
+            <button
+              onClick={goToPrevPage}
+              disabled={pagina === 1}
+              className="px-2 py-1 text-sm font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Página anterior"
+            >
+              ←
+            </button>
+          </div>
+
+          {/* Números de página */}
+          <div className="flex items-center gap-1">
+            {numerosPagina.map(num => (
+              <button
+                key={num}
+                onClick={() => setPagina(num)}
+                className={`px-2.5 py-1 text-sm font-medium rounded border ${
+                  pagina === num
+                    ? 'bg-gray-800 text-white border-gray-800'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
+
+          {/* Botones de navegación (siguiente/última) */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={goToNextPage}
+              disabled={pagina === totalPaginas}
+              className="px-2 py-1 text-sm font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Página siguiente"
+            >
+              →
+            </button>
+            <button
+              onClick={goToLastPage}
+              disabled={pagina === totalPaginas}
+              className="px-2 py-1 text-sm font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Última página"
+            >
+              ⏭
+            </button>
+          </div>
+
+          {/* Indicador de página */}
+          <span className="text-sm text-gray-600 whitespace-nowrap">
+            {pagina}/{totalPaginas}
+          </span>
+
+          {/* Selector de cantidad */}
+          <select
+            value={perPage}
+            onChange={(e) => handlePerPageChange(e.target.value)}
+            className="px-2 py-1 text-sm border border-gray-300 rounded text-gray-900 bg-white hover:bg-gray-50"
+          >
+            {['5', '10', '25', '50', '100', 'all'].map((v) => (
+              <option key={v} value={v}>{v === 'all' ? 'Todos' : v}</option>
+            ))}
+          </select>
+
+          {/* Contador */}
+          <span className="text-sm text-gray-600 whitespace-nowrap">
+            {productosEnPagina.length} de {totalFiltrados}
+          </span>
+
+          {/* Toggle de vista */}
+          <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1">
+            <button
+              onClick={() => setVistaTipo('lista')}
+              className={`px-2.5 py-1 rounded text-sm font-medium transition-colors ${
+                vistaTipo === 'lista'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+              title="Vista de lista"
+            >
+              <Icon icono="list" className="text-base" />
+            </button>
+            <button
+              onClick={() => setVistaTipo('cuadricula')}
+              className={`px-2.5 py-1 rounded text-sm font-medium transition-colors ${
+                vistaTipo === 'cuadricula'
+                  ? 'bg-gray-800 text-white'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+              title="Vista de cuadrícula"
+            >
+              <Icon icono="th" className="text-base" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const handleEliminarProducto = async (producto) => {
-    const confirmado = await alertaBorrarProducto(producto.nombre);
-    if (confirmado) {
-      try {
-        await eliminarProductoConPreciosPorId(producto.id);
-        cargarProductos(); // Recargar la lista después de eliminar
-      } catch (error) {
-        console.error('Error eliminando producto:', error);
-        showError('Error al eliminar el producto: ' + error.message);
-      }
-    }
-  };
-
-  // Handlers para navegación por teclado
-  const handleInputKeyDown = (e) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (productosEnPagina.length > 0) {
-        const primerProducto = productosEnPagina[0];
-        setProductoFocused(primerProducto.id);
-        // Dar foco a la primera fila
-        setTimeout(() => {
-          filaProductoRef.current[primerProducto.id]?.focus();
-        }, 0);
-      }
-    }
-  };
-
-  const toggleProductoSeleccionado = (productoId) => {
-    setProductosSeleccionados(prev => 
-      prev.includes(productoId) 
-        ? prev.filter(id => id !== productoId)
-        : [...prev, productoId]
-    );
-  };
-
-  const handleProductoKeyDown = (e, producto, indexEnPagina) => {
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        if (indexEnPagina < productosEnPagina.length - 1) {
-          const siguienteProducto = productosEnPagina[indexEnPagina + 1];
-          setProductoFocused(siguienteProducto.id);
-          setTimeout(() => {
-            filaProductoRef.current[siguienteProducto.id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }, 0);
-        } else if (pagina < totalPaginas) {
-          // Ir a la siguiente página y enfocar el primer producto
-          setPagina(pagina + 1);
-          setTimeout(() => {
-            const proximoPrimerProducto = productosOrdenados[(pagina) * perPage];
-            if (proximoPrimerProducto) {
-              setProductoFocused(proximoPrimerProducto.id);
-              filaProductoRef.current[proximoPrimerProducto.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    console.log('[CLIENTE] userName:', userName);
+    await alertaBorrarProducto(producto, async () => {
+      console.log('[CLIENTE] Antes de eliminar, userName:', userName);
+      const resultado = await eliminarProductoConPreciosPorId(producto.id, userName);
+      console.log('[CLIENTE] Resultado:', resultado);
+      
+      if (!resultado.error && resultado.undoData) {
+        // Mostrar notificación con opción de deshacer
+        addNotification({
+          type: 'success',
+          message: `✓ ${producto.nombre} eliminado`,
+          action: {
+            label: '↶ Deshacer',
+            onClick: async () => {
+              const undoResult = await restaurarProducto(resultado.undoData);
+              if (undoResult.success) {
+                addNotification({
+                  type: 'success',
+                  message: `✓ ${resultado.undoData.nombre} restaurado`,
+                });
+                cargarProductos();
+              } else {
+                addNotification({
+                  type: 'error',
+                  message: `✗ Error al restaurar: ${undoResult.error}`,
+                });
+              }
             }
-          }, 0);
-        }
-        break;
-
-      case 'ArrowUp':
-        e.preventDefault();
-        if (indexEnPagina > 0) {
-          const productoAnterior = productosEnPagina[indexEnPagina - 1];
-          setProductoFocused(productoAnterior.id);
-          setTimeout(() => {
-            filaProductoRef.current[productoAnterior.id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-          }, 0);
-        } else if (pagina > 1) {
-          // Ir a la página anterior y enfocar el último producto
-          setPagina(pagina - 1);
-          setTimeout(() => {
-            const proximoUltimoProducto = productosOrdenados[(pagina - 2) * perPage + (perPage - 1)];
-            if (proximoUltimoProducto) {
-              setProductoFocused(proximoUltimoProducto.id);
-              filaProductoRef.current[proximoUltimoProducto.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-          }, 0);
-        }
-        break;
-
-      case 'ArrowLeft':
-        e.preventDefault();
-        if (pagina > 1) {
-          setPagina(pagina - 1);
-          const ultimoProductoAnterior = productosOrdenados[(pagina - 2) * perPage];
-          if (ultimoProductoAnterior) {
-            setProductoFocused(ultimoProductoAnterior.id);
-            setTimeout(() => {
-              filaProductoRef.current[ultimoProductoAnterior.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 0);
           }
-        }
-        break;
+        });
+      }
+    });
+    cargarProductos(); // Recargar la lista después de eliminar
+  };
 
-      case 'ArrowRight':
-        e.preventDefault();
-        if (pagina < totalPaginas) {
-          setPagina(pagina + 1);
-          const primerProductoSiguiente = productosOrdenados[pagina * perPage];
-          if (primerProductoSiguiente) {
-            setProductoFocused(primerProductoSiguiente.id);
-            setTimeout(() => {
-              filaProductoRef.current[primerProductoSiguiente.id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 0);
-          }
-        }
-        break;
-
-      case ' ':
-        e.preventDefault();
-        toggleProductoSeleccionado(producto.id);
-        break;
-
-      case 'Escape':
-        e.preventDefault();
-        setProductoFocused(null);
-        inputBusquedaRef.current?.focus();
-        break;
-
-      default:
-        break;
-    }
+  const handleSearchFilterNavigateNext = () => {
+    // Tab en el FilterSelect de búsqueda - ir a categorías
+    categoryFilterRef.current?.focus();
   };
 
   const limpiarSeleccion = () => {
     setProductosSeleccionados([]);
   };
 
-  const copiarSeleccionados = () => {
-    const datos = productosSeleccionados.map(id => {
-      const prod = productos.find(p => p.id === id);
-      return prod ? `${prod.nombre} (${prod.codigoBarra})` : '';
-    }).join('\n');
-    navigator.clipboard.writeText(datos).then(() => {
-      showError('Productos copiados al portapapeles');
+  const toggleCampoCopiado = (campo) => {
+    setCopyFields((prev) => {
+      const next = { ...prev, [campo]: !prev[campo] };
+      const algunoSeleccionado = Object.values(next).some(Boolean);
+      if (!algunoSeleccionado) return { ...next, nombre: true };
+      return next;
     });
+  };
+
+  const formatearLineaCopiado = (prod) => {
+    if (!prod) return '';
+
+    const partes = [];
+    if (copyFields.nombre) partes.push(prod.nombre);
+    if (copyFields.codigoBarra) partes.push(prod.codigoBarra ? `(${prod.codigoBarra})` : '');
+    if (copyFields.precio) {
+      const precio = prod.precios?.[0]?.precio;
+      partes.push(typeof precio === 'number' ? `$${precio.toLocaleString()}` : '');
+    }
+    if (copyFields.categoria) partes.push(prod.categorias?.[0]?.nombre);
+    if (copyFields.tamano) partes.push((prod.size ?? 0).toString());
+    if (copyFields.unidad) partes.push(prod.unidad);
+    if (copyFields.descripcion) partes.push(prod.descripcion);
+
+    return partes
+      .map((p) => (p ?? '').toString().trim())
+      .filter(Boolean)
+      .join(' ');
+  };
+
+  const copiarSeleccionados = () => {
+    const datos = productosSeleccionados
+      .map((id) => formatearLineaCopiado(productos.find((p) => p.id === id)))
+      .filter(Boolean)
+      .join('\n');
+    navigator.clipboard.writeText(datos)
+      .then(() => {
+        showError('Productos copiados al portapapeles');
+      })
+      .catch(() => {
+        showError('No se pudo copiar al portapapeles');
+      });
   };
 
   // Componente para vista de lista moderna
@@ -339,8 +537,8 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
       const esActivo = ordenamiento.columna === columna;
       return (
         <th 
-          onClick={() => ordenarProductos(productosOrdenados, columna)}
-          className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+          onClick={() => handleOrdenar(columna)}
+          className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
         >
           <div className="flex items-center gap-1 whitespace-nowrap">
             {children}
@@ -365,165 +563,104 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={copiarSeleccionados}
-              className="px-3 py-1 text-xs font-medium rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1"
-              title="Copiar al portapapeles"
-            >
-              <Icon icono="copy" className="text-xs" />
-              Copiar
-            </button>
+            <div ref={copyMenuRef} className="relative">
+              <div className="flex">
+                <button
+                  onClick={copiarSeleccionados}
+                  className="px-3 py-1 text-sm font-medium rounded-l bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1"
+                  title="Copiar al portapapeles"
+                >
+                  <Icon icono="copy" className="text-sm" />
+                  Copiar
+                </button>
+                <button
+                  onClick={() => setCopyMenuOpen((v) => !v)}
+                  className="px-2 py-1 text-sm font-medium rounded-r bg-blue-600 text-white hover:bg-blue-700 transition-colors border-l border-blue-700"
+                  title="Opciones de copia"
+                  aria-expanded={copyMenuOpen}
+                >
+                  ▾
+                </button>
+              </div>
+
+              {copyMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-2 z-20">
+                  <div className="text-sm font-medium text-gray-700 px-1 pb-2">
+                    Campos a copiar
+                  </div>
+
+                  <div className="space-y-2">
+                    {[
+                      { key: 'nombre', label: 'Nombre' },
+                      { key: 'codigoBarra', label: 'Código de barras' },
+                      { key: 'precio', label: 'Precio' },
+                      { key: 'categoria', label: 'Categoría' },
+                      { key: 'tamano', label: 'Tamaño' },
+                      { key: 'unidad', label: 'Unidad' },
+                      { key: 'descripcion', label: 'Descripción' },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2 text-sm text-gray-700 px-1 select-none">
+                        <input
+                          type="checkbox"
+                          checked={!!copyFields[key]}
+                          onChange={() => toggleCampoCopiado(key)}
+                          className="w-4 h-4"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      onClick={() => {
+                        copiarSeleccionados();
+                        setCopyMenuOpen(false);
+                      }}
+                      className="px-3 py-1 text-sm font-medium rounded bg-gray-800 text-white hover:bg-gray-900 transition-colors"
+                      title="Copiar con estos campos"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={limpiarSeleccion}
-              className="px-3 py-1 text-xs font-medium rounded bg-gray-300 text-gray-900 hover:bg-gray-400 transition-colors flex items-center gap-1"
+              className="px-3 py-1 text-sm font-medium rounded bg-gray-300 text-gray-900 hover:bg-gray-400 transition-colors flex items-center gap-1"
               title="Limpiar selección"
             >
-              <Icon icono="times" className="text-xs" />
+              <Icon icono="times" className="text-sm" />
               Limpiar
             </button>
           </div>
         </div>
       )}
       {/* Header con paginación */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Izquierda: Título */}
-          <div className="flex items-center whitespace-nowrap gap-2">
-            <Icon icono="list" className="text-gray-600 text-base" />
-            <h2 className="text-sm font-medium text-gray-900">Vista de Lista</h2>
-          </div>
-
-          {/* Derecha: Paginación */}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Botones de navegación */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goToFirstPage}
-                disabled={pagina === 1}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Primera página"
-              >
-                ⏮
-              </button>
-              <button
-                onClick={goToPrevPage}
-                disabled={pagina === 1}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Página anterior"
-              >
-                ←
-              </button>
-            </div>
-
-            {/* Números de página */}
-            <div className="flex items-center gap-1">
-              {numerosPagina.map(num => (
-                <button
-                  key={num}
-                  onClick={() => setPagina(num)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded border ${
-                    pagina === num
-                      ? 'bg-gray-800 text-white border-gray-800'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-
-            {/* Botones de navegación (siguiente/última) */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goToNextPage}
-                disabled={pagina === totalPaginas}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Página siguiente"
-              >
-                →
-              </button>
-              <button
-                onClick={goToLastPage}
-                disabled={pagina === totalPaginas}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Última página"
-              >
-                ⏭
-              </button>
-            </div>
-
-            {/* Indicador de página */}
-            <span className="text-xs text-gray-600 whitespace-nowrap">
-              {pagina}/{totalPaginas}
-            </span>
-
-            {/* Selector de cantidad */}
-            <select
-              value={perPage}
-              onChange={(e) => handlePerPageChange(e.target.value)}
-              className="px-2 py-1 text-xs border border-gray-300 rounded text-gray-900 bg-white hover:bg-gray-50"
-            >
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="all">Todos</option>
-            </select>
-
-            {/* Contador */}
-            <span className="text-xs text-gray-600 whitespace-nowrap">
-              {productosEnPagina.length} de {totalFiltrados}
-            </span>
-
-            {/* Toggle de vista */}
-            <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1">
-              <button
-                onClick={() => setVistaTipo('lista')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  vistaTipo === 'lista'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title="Vista de lista"
-              >
-                <Icon icono="list" className="text-sm" />
-              </button>
-              <button
-                onClick={() => setVistaTipo('cuadricula')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  vistaTipo === 'cuadricula'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title="Vista de cuadrícula"
-              >
-                <Icon icono="th" className="text-sm" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <HeaderConPaginacion icono="list" titulo="Vista de Lista" />
 
       {/* Tabla */}
       <div className="overflow-hidden">
-        <table className="w-full divide-y divide-gray-200">
+        <table ref={tablaRef} onWheel={handleTableWheel} className="w-full divide-y divide-gray-200">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+              <th className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider w-12">
                 <div className="flex items-center justify-center">
                   <input
                     type="checkbox"
-                    checked={productosSeleccionados.length === productosEnPagina.length && productosEnPagina.length > 0}
+                    checked={todosSeleccionados}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        setProductosSeleccionados([...productosSeleccionados, ...productosEnPagina.map(p => p.id).filter(id => !productosSeleccionados.includes(id))]);
+                        // TODO absoluto: seleccionar todos los productos del listado (no solo la página)
+                        setProductosSeleccionados(idsDeTodosLosProductos);
                       } else {
-                        setProductosSeleccionados(productosSeleccionados.filter(id => !productosEnPagina.map(p => p.id).includes(id)));
+                        // TODO absoluto: limpiar toda la selección
+                        setProductosSeleccionados([]);
                       }
                     }}
                     className="w-4 h-4 cursor-pointer"
-                    title="Seleccionar todos en esta página"
+                    title="Seleccionar todos"
                   />
                 </div>
               </th>
@@ -531,7 +668,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 <span className="min-w-0 flex-1">Producto</span>
               </HeaderColumna>
               {mostrarCodigo && (
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
+                <th className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider w-24">
                   Código
                 </th>
               )}
@@ -547,7 +684,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
               <HeaderColumna columna="stock">
                 <span className="w-24 text-center">Stock</span>
               </HeaderColumna>
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
+              <th className="px-3 py-3 text-center text-sm font-medium text-gray-500 uppercase tracking-wider w-36">
                 Acciones
               </th>
             </tr>
@@ -558,14 +695,22 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 key={producto.id}
                 ref={(el) => { if (el) filaProductoRef.current[producto.id] = el; }}
                 tabIndex={0}
-                onKeyDown={(e) => handleProductoKeyDown(e, producto, indexEnPagina)}
-                onFocus={() => setProductoFocused(producto.id)}
+                onKeyDown={handleProductoKeyDown}
+                onFocus={(e) => {
+                  // En React, onFocus burbujea: si el foco es un hijo (checkbox/botón), no queremos "robar" el click.
+                  if (e.target !== e.currentTarget) return;
+                  setProductoFocused(producto.id);
+                }}
                 className={`transition-colors cursor-pointer outline-none focus:outline-blue-400 focus:outline-2 ${
                   productoFocused === producto.id
                     ? 'bg-blue-100 border-l-4 border-l-blue-500'
                     : 'hover:bg-gray-50 focus:bg-blue-50'
                 } ${productosSeleccionados.includes(producto.id) ? 'bg-green-50' : ''}`}
-                onClick={() => {
+                onClick={(e) => {
+                  // Ignorar clicks en botones, links y otros elementos interactivos
+                  const isInteractive = e.target.closest('button, a, input[type="checkbox"]');
+                  if (isInteractive) return;
+                  
                   setProductoFocused(producto.id);
                   filaProductoRef.current[producto.id]?.focus();
                 }}
@@ -594,12 +739,20 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                       />
                     </div>
                     <div className="ml-3">
-                      <div className="text-sm font-medium text-gray-900 line-clamp-1">
-                        {producto.nombre}
+                      <div className="text-base font-medium text-gray-900 line-clamp-1">
+                        {searchFields.nombre ? (
+                          <HighlightMatch text={producto.nombre} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                        ) : (
+                          producto.nombre
+                        )}
                       </div>
                       {producto.descripcion && (
-                        <div className="text-sm text-gray-500 line-clamp-1">
-                          {producto.descripcion}
+                        <div className="text-base text-gray-500 line-clamp-1">
+                          {searchFields.descripcion ? (
+                            <HighlightMatch text={producto.descripcion} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                          ) : (
+                            producto.descripcion
+                          )}
                         </div>
                       )}
                     </div>
@@ -607,39 +760,43 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 </td>
                 {mostrarCodigo && (
                   <td className="px-3 py-3">
-                    <div className="text-xs text-gray-600 font-mono truncate">
-                      {producto.codigoBarra}
+                    <div className="text-sm text-gray-600 font-mono truncate">
+                      {searchFields.codigoBarra ? (
+                        <HighlightMatch text={producto.codigoBarra} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                      ) : (
+                        producto.codigoBarra
+                      )}
                     </div>
                   </td>
                 )}
                 <td className="px-3 py-3">
-                  <div className="text-xs text-gray-600 truncate">
+                  <div className="text-sm text-gray-600 truncate">
                     {producto.categorias?.[0]?.nombre || '-'}
                   </div>
                 </td>
                 <td className="px-3 py-3">
-                  <div className="text-xs text-gray-600">
+                  <div className="text-sm text-gray-600">
                     {producto.size || 0} {producto.unidad}
                   </div>
                 </td>
                 <td className="px-3 py-3">
                   {producto.precios && producto.precios[0] ? (
-                    <div className="text-sm font-medium text-green-600">
+                    <div className="text-base font-medium text-green-600">
                       ${producto.precios[0].precio.toLocaleString()}
                     </div>
                   ) : (
-                    <div className="text-xs text-gray-400">-</div>
+                    <div className="text-sm text-gray-400">-</div>
                   )}
                 </td>
                 <td className="px-3 py-3 text-center">
                   <div className="flex items-center justify-center">
-                    <span className={`text-sm font-medium ${
+                    <span className={`text-base font-medium ${
                       producto.size < 10 ? 'text-red-600' : 'text-gray-900'
                     }`}>
                       {producto.size || 0}
                     </span>
                     {producto.size < 10 && (
-                      <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-xs" />
+                      <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-sm" />
                     )}
                   </div>
                 </td>
@@ -658,14 +815,17 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                       className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition-colors"
                       title="Editar producto"
                     >
-                      <Icon icono="editar" className="text-xs" />
+                      <Icon icono="editar" className="text-sm" />
                     </Link>
                     <button
-                      onClick={() => handleEliminarProducto(producto)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEliminarProducto(producto);
+                      }}
                       className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                       title="Eliminar producto"
                     >
-                      <Icon icono="trash-can" className="text-xs" />
+                      <Icon icono="trash-can" className="text-sm" />
                     </button>
                   </div>
                 </td>
@@ -682,125 +842,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
   const VistaCuadricula = () => (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
       {/* Header con paginación */}
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* Izquierda: Título */}
-          <div className="flex items-center whitespace-nowrap gap-2">
-            <Icon icono="th" className="text-gray-600 text-base" />
-            <h2 className="text-sm font-medium text-gray-900">Vista de Cuadrícula</h2>
-          </div>
-
-          {/* Derecha: Paginación */}
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-            {/* Botones de navegación */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goToFirstPage}
-                disabled={pagina === 1}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Primera página"
-              >
-                ⏮
-              </button>
-              <button
-                onClick={goToPrevPage}
-                disabled={pagina === 1}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Página anterior"
-              >
-                ←
-              </button>
-            </div>
-
-            {/* Números de página */}
-            <div className="flex items-center gap-1">
-              {numerosPagina.map(num => (
-                <button
-                  key={num}
-                  onClick={() => setPagina(num)}
-                  className={`px-2.5 py-1 text-xs font-medium rounded border ${
-                    pagina === num
-                      ? 'bg-gray-800 text-white border-gray-800'
-                      : 'border-gray-300 text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {num}
-                </button>
-              ))}
-            </div>
-
-            {/* Botones de navegación (siguiente/última) */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={goToNextPage}
-                disabled={pagina === totalPaginas}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Página siguiente"
-              >
-                →
-              </button>
-              <button
-                onClick={goToLastPage}
-                disabled={pagina === totalPaginas}
-                className="px-2 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Última página"
-              >
-                ⏭
-              </button>
-            </div>
-
-            {/* Indicador de página */}
-            <span className="text-xs text-gray-600 whitespace-nowrap">
-              {pagina}/{totalPaginas}
-            </span>
-
-            {/* Selector de cantidad */}
-            <select
-              value={perPage}
-              onChange={(e) => handlePerPageChange(e.target.value)}
-              className="px-2 py-1 text-xs border border-gray-300 rounded text-gray-900 bg-white hover:bg-gray-50"
-            >
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="all">Todos</option>
-            </select>
-
-            {/* Contador */}
-            <span className="text-xs text-gray-600 whitespace-nowrap">
-              {productosEnPagina.length} de {totalFiltrados}
-            </span>
-
-            {/* Toggle de vista */}
-            <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-lg p-1">
-              <button
-                onClick={() => setVistaTipo('lista')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  vistaTipo === 'lista'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title="Vista de lista"
-              >
-                <Icon icono="list" className="text-sm" />
-              </button>
-              <button
-                onClick={() => setVistaTipo('cuadricula')}
-                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                  vistaTipo === 'cuadricula'
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                title="Vista de cuadrícula"
-              >
-                <Icon icono="th" className="text-sm" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <HeaderConPaginacion icono="th" titulo="Vista de Cuadrícula" />
 
       {/* Grid de productos */}
       <div className="p-4">
@@ -821,22 +863,34 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
               <div className="p-4">
                 <div className="mb-4">
                   <div className="flex items-start justify-between mb-2 gap-2">
-                    <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">
-                      {producto.nombre}
+                    <h3 className="text-base font-semibold text-gray-900 line-clamp-2">
+                      {searchFields.nombre ? (
+                        <HighlightMatch text={producto.nombre} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                      ) : (
+                        producto.nombre
+                      )}
                     </h3>
-                    <span className="bg-gray-100 text-gray-800 text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0">
-                      {producto.codigoBarra}
+                    <span className="bg-gray-100 text-gray-800 text-sm font-medium px-1.5 py-0.5 rounded flex-shrink-0">
+                      {searchFields.codigoBarra ? (
+                        <HighlightMatch text={producto.codigoBarra} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                      ) : (
+                        producto.codigoBarra
+                      )}
                     </span>
                   </div>
 
                   {producto.descripcion && (
-                    <p className="text-xs text-gray-600 line-clamp-2 mb-3">
-                      {producto.descripcion}
+                    <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+                      {searchFields.descripcion ? (
+                        <HighlightMatch text={producto.descripcion} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                      ) : (
+                        producto.descripcion
+                      )}
                     </p>
                   )}
 
                   {/* Información técnica */}
-                  <div className="space-y-1 mb-3 text-xs">
+                  <div className="space-y-1 mb-3 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Tamaño:</span>
                       <span className="font-medium">{producto.size || 0} {producto.unidad}</span>
@@ -858,7 +912,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                           {producto.size || 0}
                         </span>
                         {producto.size < 10 && (
-                          <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-xs" />
+                          <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-sm" />
                         )}
                       </span>
                     </div>
@@ -870,13 +924,13 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                       {producto.categorias.slice(0, 2).map((categoria) => (
                         <span
                           key={categoria.id}
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800"
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-sm font-medium bg-gray-200 text-gray-800"
                         >
                           {categoria.nombre}
                         </span>
                       ))}
                       {producto.categorias.length > 2 && (
-                        <span className="text-xs text-gray-500">+{producto.categorias.length - 2}</span>
+                        <span className="text-sm text-gray-500">+{producto.categorias.length - 2}</span>
                       )}
                     </div>
                   )}
@@ -893,18 +947,21 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
 
                   <Link
                     href={`/cargarProductos?edit=${producto.id}`}
-                    className="flex-1 p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded text-center text-xs transition-colors"
+                    className="flex-1 p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded text-center text-sm transition-colors"
                     title="Editar producto"
                   >
-                    <Icon icono="editar" className="text-sm" />
+                    <Icon icono="editar" className="text-base" />
                   </Link>
 
                   <button
-                    onClick={() => handleEliminarProducto(producto)}
-                    className="flex-1 p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded text-center text-xs transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleEliminarProducto(producto);
+                    }}
+                    className="flex-1 p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded text-center text-sm transition-colors"
                     title="Eliminar producto"
                   >
-                    <Icon icono="trash-can" className="text-sm" />
+                    <Icon icono="trash-can" className="text-base" />
                   </button>
                 </div>
               </div>
@@ -917,7 +974,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
 
   if (loading) {
     return (
-      <div className={`${modoCompacto ? 'bg-gray-50 py-2' : 'min-h-screen bg-gray-50 py-4'}`}>
+      <div className={`${modoCompacto ? 'bg-gray-50 pt-2 pb-6' : 'min-h-screen bg-gray-50 pt-4 pb-12'}`}>
         <div className="container mx-auto max-w-7xl px-2">
           {!modoCompacto && (
             <div className="mb-4">
@@ -935,7 +992,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
   }
 
   return (
-    <div className={`${modoCompacto ? 'bg-gray-50 py-2' : 'min-h-screen bg-gray-50 py-4'}`}>
+    <div ref={scopeRef} className={`${modoCompacto ? 'bg-gray-50 pt-2 pb-6' : 'min-h-screen bg-gray-50 pt-4 pb-12'}`}>
       <div className="container mx-auto max-w-7xl px-2">
         {/* Header */}
         <div className={`${modoCompacto ? 'mb-3' : 'mb-4'}`}>
@@ -1012,15 +1069,16 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 ref={inputBusquedaRef}
                 type="text"
                 autoFocus
-                placeholder="Buscar por nombre, código o descripción... (↓ para navegar)"
-                value={busquedaProducto}
+                placeholder="Buscar en campos seleccionados... (↓ para navegar)"
+                value={busquedaInput}
                 onChange={(e) => {
-                  setBusquedaProducto(e.target.value);
+                  setBusquedaInput(e.target.value);
                   setPagina(1);
                 }}
                 onKeyDown={(e) => {
                   handleInputKeyDown(e);
                   if (e.key === 'Escape') {
+                    setBusquedaInput('');
                     setBusquedaProducto('');
                     e.currentTarget.blur();
                     setPagina(1);
@@ -1029,10 +1087,11 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 className="
                   appearance-none
                   text-left
+                  text-lg
                   text-gray-900
                   block w-full
                   px-2.5 pt-5 pb-2 pr-10
-                  h-[46px]
+                  h-[56px]
                   border-0 border-b-2 border-gray-300
                   bg-transparent
                   focus:outline-none focus:ring-0
@@ -1042,15 +1101,62 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 "
                 title="Teclas: ↓ para navegar, Esc para limpiar"
               />
+
+              <button
+                type="button"
+                onClick={() => setSearchMenuOpen((v) => !v)}
+                className="absolute right-2 top-4 px-2 py-1 text-sm font-medium rounded bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors"
+                title="Opciones de búsqueda"
+                aria-expanded={searchMenuOpen}
+              >
+                ▾
+              </button>
+
+              {searchMenuOpen && (
+                <div
+                  ref={searchMenuRef}
+                  className="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-sm p-2 z-20"
+                >
+                  <div className="text-sm font-medium text-gray-700 px-1 pb-2">
+                    Campos incluidos en la búsqueda
+                  </div>
+
+                  <div className="space-y-2">
+                    {[
+                      { key: 'nombre', label: 'Nombre' },
+                      { key: 'codigoBarra', label: 'Código' },
+                      { key: 'descripcion', label: 'Descripción' },
+                      { key: 'categoria', label: 'Categoría' },
+                      { key: 'tamano', label: 'Tamaño' },
+                      { key: 'unidad', label: 'Unidad' },
+                      { key: 'precio', label: 'Precio' },
+                      { key: 'stock', label: 'Stock' },
+                    ].map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2 text-sm text-gray-700 px-1 select-none">
+                        <input
+                          type="checkbox"
+                          checked={!!searchFields[key]}
+                          onChange={() => toggleCampoBusqueda(key)}
+                          className="w-4 h-4"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <label className="
                 absolute left-0 transition-all duration-500 ease-in-out px-2.5
-                text-sm font-medium top-0.5 text-black
+                text-base font-medium top-0.5 text-black
               ">
                 Buscar producto
               </label>
             </div>
             <div>
               <FilterSelect
+                ref={categoryFilterRef}
+                size="kiosk"
                 options={categoriasUnicas.map((cat) => ({ id: cat, nombre: cat }))}
                 value={categoriaFiltro}
                 valueField="id"
@@ -1065,6 +1171,8 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   setCategoriaFiltro('');
                   setPagina(1);
                 }}
+                onNavigateNext={handleCategoryFilterNavigateNext}
+                onNavigatePrev={handleCategoryFilterNavigatePrev}
               />
             </div>
           </div>
@@ -1086,6 +1194,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
             </p>
             <button
               onClick={() => {
+                setBusquedaInput('');
                 setBusquedaProducto('');
                 setCategoriaFiltro('');
                 setPagina(1);

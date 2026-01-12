@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getSession } from './lib/sesion/sesion'
+import { getSessionFromRequest } from './lib/sesion/sesionMiddleware'
 
 export async function middleware(request) {
-  const session = await getSession()
+  const session = await getSessionFromRequest(request)
   if(session){
     return NextResponse.next()
   }else{

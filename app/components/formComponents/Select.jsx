@@ -25,8 +25,8 @@ const Select = ({
           text-right
           text-gray-900
           block w-full
-          px-2.5 pt-6 pb-3
-          h-[52px]
+          px-2.5 pt-6 pb-2
+          h-[56px]
           border-0 border-b-2 border-gray-300
           bg-transparent
           focus:outline-none focus:ring-0

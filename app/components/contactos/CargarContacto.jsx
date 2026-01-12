@@ -2,7 +2,7 @@
 
 import Button from "../formComponents/Button";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { buscar } from "@/app/(paginas)/contactos/actions/handleAction";
+import { buscar } from "@/app/acciones/contactos/buscarCuitOnline";
 import Input from "../formComponents/Input";
 import useMyParams from "@/hooks/useMyParams";
 import SelectProvinciaClient from "../geoRef/SelectProvinciaClient";

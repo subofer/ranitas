@@ -1,37 +1,15 @@
 "use client"
 import Button from '@/components/formComponents/Button'
 import Input from '@/components/formComponents/Input'
-import { useRouter } from 'next/navigation';
-import { login } from '@/lib/sesion/sesion'
-import useMyParams from '@/hooks/useMyParams';
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 import Icon from '@/components/formComponents/Icon';
 import useViewportHeight from '@/hooks/useViewportHeight';
 
-export default function Pagelogin() {
-  const [result, setResult] = useState(null)
+export default function Pagelogin({ goNext = '/', error = false, loginAction }) {
+  const [result, setResult] = useState(error ? { error: true, msg: 'Credenciales incorrectas' } : null)
   const [loading, setLoading] = useState(false)
-  const { param } = useMyParams("goNext")
-  const router = useRouter()
   useViewportHeight()
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    const formData = new FormData(e.target)
-    const response = await login(formData)
-    setResult(response)
-    if(!response.error){
-      // Pequeño delay para asegurar que la cookie se establezca
-      setTimeout(() => {
-        window.location.href = param || "/"
-      }, 100);
-    } else {
-    setTimeout(() => {
-      setLoading(false)
-    }, 500);
-    }
-  }
   const handleOnChange = () => {
     setResult(null)
   }
@@ -47,7 +25,12 @@ export default function Pagelogin() {
   
   >
 
-        <form onSubmit={handleLogin}
+        <form
+    action={loginAction}
+    onSubmit={() => {
+      setLoading(true)
+      setResult(null)
+    }}
     className="
     flex flex-col gap-4
     w-fit max-w-sm mx-auto
@@ -57,6 +40,7 @@ export default function Pagelogin() {
     max-h-[90dvh] overflow-y-auto   /* sigue limitado */
   "
         >
+          <input type="hidden" name="goNext" value={goNext} />
           <div className='flex flex-row justify-center w-full'>
             <Icon icono={"frog"} className={`${loading?"":"hidden"} absolute top-6 left-3 text-3xl`}/>
             <span className='text-2xl font-medium text-slate-700 mt-2 mb-3'>Las Ranitas</span>

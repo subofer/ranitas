@@ -10,6 +10,14 @@ const icons = (icono) => {
 const Icon = ({className, rotate, children, icono, type, regular, suspense,  ...props}) => {
   // Si se pasan props de click o se especifica type="button", renderizar como botón
   if (props.onClick || type === "button") {
+    const originalOnClick = props.onClick;
+    const wrappedOnClick = (e) => {
+      e.stopPropagation();
+      if (originalOnClick) {
+        originalOnClick(e);
+      }
+    };
+
     return (
       <button
         type={type || "button"}
@@ -21,6 +29,7 @@ const Icon = ({className, rotate, children, icono, type, regular, suspense,  ...
           ${className}
           `}
         { ...props }
+        onClick={wrappedOnClick}
       >
         <div className="flex flex-row align-middle">
           <div className="flex h-full w-fit my-auto mx-auto align-middle">

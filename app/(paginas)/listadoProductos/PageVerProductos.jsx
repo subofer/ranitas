@@ -1,6 +1,8 @@
+"use client"
+
 import ListadoProductosModerno from "@/components/productos/ListadoProductosModerno"
 
-const PageVerProductos = async () => {
+const PageVerProductos = () => {
   return <ListadoProductosModerno />;
 };
 export default PageVerProductos;

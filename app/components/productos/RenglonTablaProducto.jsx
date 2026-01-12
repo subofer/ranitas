@@ -16,9 +16,9 @@ export const RenglonTablaProducto = ({
 }) => {
   const myParams = useMyParams();
 
-  const handleOnClick = useCallback((onClick, item, items) => {
+  const handleOnClick = useCallback(async (onClick, item, items) => {
     if (onClick) {
-      const result = onClick(item, items)
+      const result = await onClick(item, items)
       const {
         action = "",
         key = '',

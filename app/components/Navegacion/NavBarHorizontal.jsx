@@ -22,12 +22,12 @@ const NavBarHorizontal = forwardRef((props, ref) => {
 
   const [isNavActive, setIsNavActive] = useState(false); // Nuevo estado para controlar la activación del menú
   const lastFocusedElement = useRef(null);
+  const navContainerRef = useRef(null);
 
   const goNext = (length, set) => set((prevIndex) => (prevIndex + 1) % length);
   const goPrev = (length, set) => set((prevIndex) => (prevIndex - 1 + length) % length);
 
   const navigate = useCallback((direction) => {
-    window.addEventListener('keydown', (e) => e.preventDefault(), { once: true });
     const menuLength = menuListHorizontal.length;
     const subMenuLength = menuListHorizontal[activeMenuIndex]?.subMenu?.length || 0;
     if (direction === 'reset') {
@@ -79,22 +79,24 @@ const NavBarHorizontal = forwardRef((props, ref) => {
   useEffect(() => {
     const handleKeyDown = (event) => {
       if (event.key === 'Alt') {
+        event.preventDefault();
         if (activeMenuIndex === -1) {
           lastFocusedElement.current = document.activeElement;
           setIsNavActive(true)
-          /*
-          //setear para que los menues se cierren solos
-          setTimeout(() => {
-            salir(event)
-          }, tiempo.segundos(15));
-          */
-
           setActiveMenuIndex(0);
+          // Dar foco al navbar
+          setTimeout(() => {
+            navContainerRef.current?.focus();
+          }, 0);
         } else {
-          salir(event)
+          salir(event, true)
         }} else if (activeMenuIndex !== -1 && isNavActive) {
+          if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Escape', 'Enter'].includes(event.key)) {
+            event.preventDefault();
+          }
+
           if (['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp'].includes(event.key)) { navigate(event.key) }
-          else if (event.key === "Escape" ) { salir(event) }
+          else if (event.key === "Escape" ) { salir(event, true) }
           else if (event.key === 'Enter') { go(event) }
       }
     };
@@ -104,11 +106,13 @@ const NavBarHorizontal = forwardRef((props, ref) => {
 
   return (
     <div
+      ref={navContainerRef}
       data-navbar
+      tabIndex={-1}
       style={{ zIndex: zIndexNavBar }}
       className={`${theme.background}
-        sticky top-0 shadow-lg
-        flex flex-row-reverse justify-between px-2 py-1 min-w-full w-full text-2xl lg:text-xl mb-2
+        fixed top-0 left-0 right-0 shadow-lg outline-none
+        flex flex-row-reverse justify-between px-2 py-1 text-2xl lg:text-xl
     `}>
       <UserMenu/>
       <ul className="flex flex-row flex-wrap gap-0.5" >

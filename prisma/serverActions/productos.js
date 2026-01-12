@@ -2,6 +2,8 @@
 import prisma from "../prisma";
 import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
+import { auditAction } from "@/lib/actions/audit";
+import { getSession } from "@/lib/sesion/sesion";
 
 const revalidarProductos = () => revalidatePath("/cargarProductos");
 
@@ -137,6 +139,14 @@ export async function guardarProducto(formData) {
       },
     });
 
+    // Auditar éxito
+    await auditAction({
+      level: 'SUCCESS',
+      action: 'GUARDAR_PRODUCTO',
+      message: 'Producto guardado correctamente',
+      category: 'DB',
+    });
+
     return { error: false, msg: "Producto procesado con éxito", data: producto };
   } catch (error) {
     console.error("Error al guardar el producto:", error);
@@ -144,6 +154,15 @@ export async function guardarProducto(formData) {
     if (error.code === "P2002") {
       msg = `Ya existe un producto con el código de barras ${formData.codigoBarra}.`;
     }
+
+    // Auditar error
+    await auditAction({
+      level: 'ERROR',
+      action: 'GUARDAR_PRODUCTO',
+      message: msg,
+      category: 'DB',
+    });
+
     return { error: true, msg, data: null };
   } finally {
     revalidarProductos();
@@ -164,43 +183,127 @@ export async function guardarProductoBuscado(productObject) {
   return response
 }
 
-export async function eliminarProductoConPreciosPorId(idProducto) {
+export async function eliminarProductoConPreciosPorId(idProducto, userIdParam = null) {
   try{
-    const resultado = await prisma.$transaction(async (prisma) => {
-      // Eliminar precios asociados al producto
-      const resultadoBorrarPrecios = await prisma.precios.deleteMany({
-        where: {
-          idProducto: idProducto,
+    console.log(`[ELIMINAR] Iniciando eliminación de producto ${idProducto} con userId: ${userIdParam}`);
+    
+    // Obtener usuario activo
+    let userId = userIdParam; // Usar el userId pasado como parámetro si existe
+    if (!userId) {
+      const session = await getSession();
+      userId = session?.user || 'Sistema';
+    }
+    
+    console.log(`[ELIMINAR] userId final: ${userId}`);
+
+    // Obtener datos del producto antes de eliminarlo
+    const producto = await prisma.productos.findUnique({
+      where: { id: idProducto },
+      include: { precios: true }
+    });
+
+    if (!producto) {
+      return { error: true, msg: 'Producto no encontrado' };
+    }
+
+    // Verificar si hay múltiples precios (historial de compra)
+    if (producto.precios.length > 1) {
+      await auditAction({
+        level: 'WARNING',
+        action: 'ELIMINAR_PRODUCTO',
+        message: `Intento de eliminación rechazado: ${producto.nombre} tiene historial de precios`,
+        category: 'DB',
+        metadata: {
+          productId: producto.id,
+          productName: producto.nombre,
+          codigoBarra: producto.codigoBarra,
+          preciosCount: producto.precios.length,
+          reason: 'MULTIPLE_PRICES'
         },
+        userId
       });
 
-      // Eliminar el producto
-      const resultadoBorrarProducto = await prisma.productos.delete({
-        where: {
-          id: idProducto,
-        },
-      });
-      return {resultadoBorrarPrecios, resultadoBorrarProducto}
+      return {
+        error: true,
+        msg: 'Este producto tiene historial de precios. Para eliminarlo, contacte al administrador.',
+        code: 'MULTIPLE_PRICES'
+      };
+    }
+
+    // Guardar datos completos para posible undo
+    const productoCompleto = await prisma.productos.findUnique({
+      where: { id: idProducto },
+      include: { precios: true }
     });
-    return resultado;
+
+    // Eliminar precios (los detalles se eliminarán por cascada)
+    await prisma.precios.deleteMany({
+      where: { idProducto: idProducto }
+    });
+
+    // Eliminar el producto (cascará los detalles)
+    const resultado = await prisma.productos.delete({
+      where: { id: idProducto }
+    });
+
+    // Auditar éxito con metadata del producto
+    console.log(`[ELIMINAR] Creando audit log con metadata:`, {
+      productId: producto.id,
+      productName: producto.nombre,
+      codigoBarra: producto.codigoBarra,
+      preciosCount: producto.precios.length,
+      userId
+    });
+    
+    await auditAction({
+      level: 'SUCCESS',
+      action: 'ELIMINAR_PRODUCTO',
+      message: `Producto eliminado: ${producto.nombre}`,
+      category: 'DB',
+      metadata: {
+        productId: producto.id,
+        productName: producto.nombre,
+        codigoBarra: producto.codigoBarra,
+        preciosCount: producto.precios.length,
+        productoCompleto: productoCompleto // Guardar para undo
+      },
+      userId
+    });
+    
+    console.log(`[ELIMINAR] Producto eliminado exitosamente`);
+
+    return { 
+      error: false, 
+      msg: "Producto eliminado con éxito", 
+      data: resultado,
+      undoData: productoCompleto // Retornar datos para undo en el cliente
+    };
   }catch(e){
+    const session = await getSession();
+    const userId = session?.user || 'Sistema';
+
     let msg;
+    let level = 'ERROR';
+    
     switch (e.code) {
       case "P2003":
-        msg = {
-          title: '¡No se borro!',
-          text: 'No se puede borrar este producto, esta cargado en facturas',
-          icon: 'info',
-        }
+        msg = 'No se puede borrar este producto, está vinculado a detalles de compra/venta'
+        level = 'WARNING';
       break;
       default:
-        msg = {
-          title: '¡No se borro!',
-          text: e.code,
-          icon: 'info',
-        }
+        msg = e.message
       break;
-      }
+    }
+
+    // Auditar como intento del usuario
+    await auditAction({
+      level: level,
+      action: 'ELIMINAR_PRODUCTO',
+      message: msg,
+      category: 'DB',
+      metadata: { productId: idProducto },
+      userId
+    });
 
     return {error: true, code: e.code, msg}
   } finally {

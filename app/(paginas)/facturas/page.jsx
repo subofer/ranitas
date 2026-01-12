@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { getInvoices } from '@/prisma/consultas/dashboard';
-import FormCard from '@/app/components/formComponents/FormCard';
-import FormContainer from '@/app/components/formComponents/FormContainer';
-import Button from '@/app/components/formComponents/Button';
+import FormCard from '@/components/formComponents/FormCard';
+import FormContainer from '@/components/formComponents/FormContainer';
+import Button from '@/components/formComponents/Button';
 
 export default function FacturasPage() {
   const [invoices, setInvoices] = useState([]);

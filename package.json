@@ -1,6 +1,7 @@
 {
   "name": "proyecto",
   "private": true,
+  "workspaces": ["."],
   "version": "0.1.0",
   "scripts": {
     "dev": "docker compose up -d postgres && next dev",

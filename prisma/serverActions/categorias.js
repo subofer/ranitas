@@ -3,6 +3,9 @@ import prisma from "../prisma";
 import formToObject from "@/lib/formToObject"
 import { textos } from "@/lib/manipularTextos";
 import { revalidatePath } from 'next/cache'
+import { auditAction } from "@/lib/actions/audit";
+import { getSession } from "@/lib/sesion/sesion";
+
 const revalidarCategorias = () => revalidatePath('/categorias');
 
 // Las categorias se guardaran con las primeras letras en mayusculas.
@@ -10,6 +13,8 @@ export async function guardarCategoria(formData) {
   let response = ""
   const categoryObject = formToObject(formData)
   categoryObject.nombre = textos.mayusculas.primeras(categoryObject.nombre)
+  const session = await getSession();
+  const userId = session?.user || 'Sistema';
 
   try{
     if(categoryObject.nombre == "0" || !categoryObject?.nombre ){
@@ -24,6 +29,16 @@ export async function guardarCategoria(formData) {
         ...categoryObject,
       }
     })
+
+    // Auditar éxito
+    await auditAction({
+      level: 'SUCCESS',
+      action: 'GUARDAR_CATEGORIA',
+      message: `Categoría guardada: ${categoriaCreada.nombre}`,
+      category: 'DB',
+      metadata: { categoriaId: categoriaCreada.id, categoriaName: categoriaCreada.nombre },
+      userId
+    });
 
     response = {
       error: false,
@@ -42,6 +57,16 @@ export async function guardarCategoria(formData) {
       default     : response.msg = "Ha ocurrido un error desconocido.";break;
     }
 
+    // Auditar error
+    await auditAction({
+      level: 'ERROR',
+      action: 'GUARDAR_CATEGORIA',
+      message: response.msg,
+      category: 'DB',
+      metadata: { categoriaData: categoryObject },
+      userId
+    });
+
   }finally{
     revalidarCategorias()
     return response
@@ -50,14 +75,38 @@ export async function guardarCategoria(formData) {
 
 export async function borrarCategoria(categoriaId) {
   let result;
+  const session = await getSession();
+  const userId = session?.user || 'Sistema';
+
   try{
     result = await prisma.categorias.delete({
       where: {id: categoriaId}
     })
+
+    // Auditar éxito
+    await auditAction({
+      level: 'SUCCESS',
+      action: 'ELIMINAR_CATEGORIA',
+      message: `Categoría eliminada: ${result.nombre}`,
+      category: 'DB',
+      metadata: { categoriaId, categoriaName: result.nombre },
+      userId
+    });
+
+    return { error: false, msg: "Categoría eliminada", data: result };
   } catch(e) {
-      result = {error: e,}
+    // Auditar error
+    await auditAction({
+      level: 'ERROR',
+      action: 'ELIMINAR_CATEGORIA',
+      message: e.message,
+      category: 'DB',
+      metadata: { categoriaId },
+      userId
+    });
+
+    return { error: true, msg: e.message };
   } finally {
     revalidarCategorias()
-    return result;
   }
 }

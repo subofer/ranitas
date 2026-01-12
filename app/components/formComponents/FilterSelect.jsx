@@ -13,6 +13,9 @@ const FilterSelect = forwardRef(({
   textField,
   save,
   busy = false,
+  onNavigateNext,
+  onNavigatePrev,
+  size,
   ...props
 },
 ref
@@ -35,6 +38,21 @@ ref
     options.filter(option =>
       option[textField].toLowerCase().includes(filtro?.toLowerCase?.())
   ), [options, filtro, textField]);
+
+  const sizeClasses = useMemo(() => {
+    if (size === 'kiosk') {
+      return {
+        input: 'text-lg h-[56px]',
+        overlay: 'h-[56px]',
+        labelBase: 'text-base',
+      };
+    }
+    return {
+      input: '',
+      overlay: 'h-[46px]',
+      labelBase: 'text-sm',
+    };
+  }, [size]);
 
   useEffect(() => {
     const formulario = refPadre.current.closest('form');
@@ -123,6 +141,16 @@ ref
   //Esta funcion maneja las acciones al tocar cada tecla de la lista.
   const handleKeyDown = (e) => {
     const { key: tecla } = e;
+
+    // Caso kiosko UX: si ya hay una opción seleccionada y el dropdown tiene una sola opción
+    // (la misma), ArrowDown debe ir directo al siguiente control (tabla).
+    if (tecla === 'ArrowDown' && opcion && filteredOptions.length <= 1) {
+      e.preventDefault();
+      setIsOpen(false);
+      onNavigateNext?.();
+      return;
+    }
+
     if(["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(tecla)) {
       e.preventDefault()
       if (["ArrowDown", "ArrowUp"].includes(tecla)) {
@@ -133,29 +161,61 @@ ref
     const checkit = (i, dir) => optionRefs.current[nextIndex(i, dir)]?.focus()
 
     if (tecla === 'ArrowDown') {
-      isOpen && checkit();
+      if (isOpen) {
+        e.preventDefault();
+        checkit();
+      }
+      // Si no está abierto y no hay filtro, ir al siguiente (tabla)
+      else if (!filtro) {
+        e.preventDefault();
+        onNavigateNext?.();
+      }
     } else if (tecla === 'ArrowUp') {
-      isOpen && checkit(null, -1);
-    } else if ((tecla === 'Enter') && hgIndex !== -1) {
-      onSelect(filteredOptions[hgIndex]);
-      open(false, null)
-    } else if ((tecla === 'Escape')) {
-      inputRef.current.focus()
-      isOpen ? setIsOpen(false) : resetInput();
-    } else if ((tecla === 'Tab')) {
+      isOpen && (e.preventDefault(), checkit(null, -1));
+    } else if ((tecla === 'Enter')) {
       e.preventDefault();
+      // Si hay opción seleccionada en el dropdown, seleccionarla
+      if (hgIndex !== -1) {
+        onSelect(filteredOptions[hgIndex]);
+        open(false, null)
+      }
+      // Si dropdown está cerrado, ir a la tabla
+      else if (!isOpen) {
+        onNavigateNext?.();
+      }
+    } else if ((tecla === 'Escape')) {
+      e.preventDefault();
+      if (isOpen) {
+        setIsOpen(false);
+        inputRef.current.focus();
+      } else {
+        resetInput();
+        onNavigatePrev?.();
+      }
+    } else if ((tecla === 'Tab')) {
       // Si hay autocompletado visible (filtro + primera opción filtrada), aceptar la sugerencia
       if (filteredOptions[0] && filtro && !opcion) {
+        e.preventDefault();
         onSelect(filteredOptions[0]);
       } 
       // Si hay opción seleccionada en la lista, aceptarla
       else if (hgIndex != -1) {
+        e.preventDefault();
         onSelect(filteredOptions[hgIndex])
+      }
+      // Si no hay filtro abierto y está vacío, permitir navegar al siguiente elemento
+      else if (!isOpen && !filtro) {
+        e.preventDefault();
+        onNavigateNext?.();
       }
     } else if ((tecla === 'ArrowRight') && filteredOptions[0] && filtro && !opcion) {
       // Presionar flecha derecha también acepta la sugerencia
       e.preventDefault();
       onSelect(filteredOptions[0]);
+    } else if ((tecla === 'ArrowLeft') && !isOpen) {
+      // Flecha izquierda navega al elemento anterior
+      e.preventDefault();
+      onNavigatePrev?.();
     }
   };
 
@@ -212,12 +272,13 @@ ref
             disabled:opacity-50 disabled:cursor-not-allowed
             placeholder:text-gray-500
             ${pending || busy ? "bg-gray-50" : ""}
+            ${sizeClasses.input}
           `}
           title={(hgIndex !== -1 ? filteredOptions[hgIndex] : filteredOptions[0]) && filtro && !opcion ? `Presiona Tab para completar: ${(hgIndex !== -1 ? filteredOptions[hgIndex] : filteredOptions[0])[textField]}` : ''}
         />
         {/* Autocompletado en texto gris */}
         {(hgIndex !== -1 ? filteredOptions[hgIndex] : filteredOptions[0]) && filtro && !opcion && (
-          <div className="absolute left-0 top-0 pointer-events-none px-2.5 pt-5 pb-2 pr-10 h-[46px] flex items-center">
+          <div className={`absolute left-0 top-0 pointer-events-none px-2.5 pt-5 pb-2 pr-10 ${sizeClasses.overlay} flex items-center`}>
             <span className="text-gray-900">{filtro}</span>
             <span className="text-gray-400 font-light">{(hgIndex !== -1 ? filteredOptions[hgIndex] : filteredOptions[0])[textField].substring(filtro.length)}</span>
           </div>
@@ -227,8 +288,8 @@ ref
         {label && (
           <span
             className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
-              text-sm font-medium top-0.5 text-black
-              ${hasValue || props.placeholder ? "top-0.5 text-sm" : "top-2.5 text-md"}`
+              ${sizeClasses.labelBase} font-medium top-0.5 text-black
+              ${hasValue || props.placeholder ? `top-0.5 ${sizeClasses.labelBase}` : "top-2.5 text-md"}`
             }
           >
             {label}

@@ -1,5 +1,5 @@
 "use client"
-import { consultarAHere } from "@/app/ia/consultaIa";
+import { consultarAHere } from "@/ia/consultaIa";
 import { useState } from "react";
 
 const IaPrompt = () => {

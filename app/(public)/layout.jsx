@@ -1,28 +1,22 @@
-import './globals.css'
-
 export const metadata = {
   title: 'Gestion Productos',
   description: 'Gestion de productos',
 }
 
-export default async function RootLayout({ children }) {
+export default function Layout({ children }) {
   return (
-    <html lang="es">
-      <head>
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
-      </head>
-      <body className={`flex flex-col w-screen h-screen overflow-auto pb-2`}>
-        <div className={`
+    <div className={`flex flex-col w-screen h-screen overflow-auto pb-2`}>
+      <div
+        className={`
         flex flex-col
         w-screen max-w-screen
           h-screen max-h-screen
           px-4 mx-auto
           hideScroll
-          `} >
-            {children}
-        </div>
-
-      </body>
-    </html>
-  );
+          `}
+      >
+        {children}
+      </div>
+    </div>
+  )
 }

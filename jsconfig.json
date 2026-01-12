@@ -4,10 +4,11 @@
     "paths": {
       "@/*": ["./*"],
       "@/components/*": ["./app/components/*"],
+      "@/context/*": ["./app/context/*"],
       "@/hooks/*": ["./app/hooks/*"],
       "@/lib/*": ["./lib/*"],
       "@/prisma/*": ["./prisma/*"],
-      "@/ia/*": ["./ia/*"]
+      "@/ia/*": ["./app/ia/*"]
     }
   }
 }
