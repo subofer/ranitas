@@ -15,6 +15,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node scripts/seed.js",
+    "presentaciones:auto": "docker compose up -d postgres && node scripts/asignarPresentacionesAutomaticas.mjs",
     "cypress:open": "cypress open",
     "cypress:run": "cypress run"
   },

@@ -64,9 +64,15 @@ export const getProductosPaginados = async ({ skip = 0, take = 50, filter = '', 
         presentaciones: {
           include: {
             tipoPresentacion: true,
+            stock: true,
             contenidas: {
               include: {
                 presentacionContenida: {
+                  include: {
+                    tipoPresentacion: true,
+                  },
+                },
+                presentacionContenedora: {
                   include: {
                     tipoPresentacion: true,
                   },
@@ -76,6 +82,11 @@ export const getProductosPaginados = async ({ skip = 0, take = 50, filter = '', 
             contenedoras: {
               include: {
                 presentacionContenedora: {
+                  include: {
+                    tipoPresentacion: true,
+                  },
+                },
+                presentacionContenida: {
                   include: {
                     tipoPresentacion: true,
                   },
@@ -115,6 +126,7 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
       codigoBarra: codigoBarra,
     },
     include: {
+      marca: true,
       categorias: true,
       proveedores: {
         include: {
@@ -129,9 +141,15 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
       presentaciones: {
         include: {
           tipoPresentacion: true,
+          stock: true,
           contenidas: {
             include: {
               presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenedora: {
                 include: {
                   tipoPresentacion: true,
                 },
@@ -141,6 +159,11 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
           contenedoras: {
             include: {
               presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenida: {
                 include: {
                   tipoPresentacion: true,
                 },
@@ -157,6 +180,147 @@ export const getProductoPorCodigoBarra = async (codigoBarra) => {
 
   return producto || respuestaPorDefecto;
 }
+
+export const getProductoPorId = async (id) => {
+  if (!id) return { error: true, msg: "producto no encontrado" };
+
+  const producto = await prisma.productos.findUnique({
+    where: { id },
+    include: {
+      marca: true,
+      categorias: true,
+      proveedores: {
+        include: {
+          proveedor: true,
+        },
+      },
+      precios: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+      },
+      presentaciones: {
+        include: {
+          tipoPresentacion: true,
+          stock: true,
+          contenidas: {
+            include: {
+              presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
+          contenedoras: {
+            include: {
+              presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const respuestaPorDefecto = { error: true, msg: "producto no encontrado" };
+  return producto || respuestaPorDefecto;
+}
+
+// Búsqueda liviana para UX tipo POS/autocomplete (evita includes pesados)
+export const buscarProductosParaVenta = async ({ filter = '', take = 15 } = {}) => {
+  const f = String(filter || '').trim();
+  if (!f) return { productos: [] };
+
+  const productos = await prisma.productos.findMany({
+    where: {
+      OR: [
+        { nombre: { contains: f, mode: 'insensitive' } },
+        { codigoBarra: { contains: f, mode: 'insensitive' } },
+        { descripcion: { contains: f, mode: 'insensitive' } },
+      ],
+    },
+    take,
+    orderBy: { nombre: 'asc' },
+    select: {
+      id: true,
+      codigoBarra: true,
+      nombre: true,
+      descripcion: true,
+      imagen: true,
+      tipoVenta: true,
+      unidad: true,
+      categorias: {
+        select: {
+          nombre: true,
+        },
+      },
+      precios: {
+        orderBy: {
+          createdAt: 'desc',
+        },
+        take: 1,
+        select: {
+          precio: true,
+        },
+      },
+      presentaciones: {
+        select: {
+          id: true,
+          nombre: true,
+        },
+      },
+    },
+  });
+
+  return { productos };
+};
+
+// Lista completa (liviana) para dropdown del POS.
+export const getProductosParaVenta = async ({ take = 5000 } = {}) => {
+  const productos = await prisma.productos.findMany({
+    take,
+    orderBy: { nombre: 'asc' },
+    select: {
+      id: true,
+      codigoBarra: true,
+      nombre: true,
+      descripcion: true,
+      imagen: true,
+      tipoVenta: true,
+      unidad: true,
+      categorias: {
+        select: { nombre: true },
+      },
+      precios: {
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { precio: true },
+      },
+      presentaciones: {
+        select: {
+          id: true,
+          nombre: true,
+        },
+      },
+    },
+  });
+
+  return { productos };
+};
 
 export const getProductos = async ({ take = 50, skip = 0, filter = '', categoryFilter = '' } = {}) => {
   const where = {
@@ -183,6 +347,7 @@ export const getProductos = async ({ take = 50, skip = 0, filter = '', categoryF
     take: take === undefined ? undefined : take,
     skip: take === undefined ? 0 : skip,
     include: {
+      marca: true,
       categorias: true,
       precios: {
         orderBy: {
@@ -201,9 +366,15 @@ export const getProductos = async ({ take = 50, skip = 0, filter = '', categoryF
       presentaciones: {
         include: {
           tipoPresentacion: true,
+          stock: true,
           contenidas: {
             include: {
               presentacionContenida: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenedora: {
                 include: {
                   tipoPresentacion: true,
                 },
@@ -213,6 +384,11 @@ export const getProductos = async ({ take = 50, skip = 0, filter = '', categoryF
           contenedoras: {
             include: {
               presentacionContenedora: {
+                include: {
+                  tipoPresentacion: true,
+                },
+              },
+              presentacionContenida: {
                 include: {
                   tipoPresentacion: true,
                 },

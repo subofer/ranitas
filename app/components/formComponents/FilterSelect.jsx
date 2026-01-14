@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback, useMemo, forwardRef } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react';
 import { useFormStatus } from "react-dom";
 import HighlightMatch from '../HiglightMatch';
 import Icon from './Icon';
@@ -16,6 +16,8 @@ const FilterSelect = forwardRef(({
   onNavigateNext,
   onNavigatePrev,
   size,
+  acceptFirstOnEnter = false,
+  disableMouseSelect = false,
   ...props
 },
 ref
@@ -27,6 +29,7 @@ ref
   const [opcion, setOpcion] = useState(null);
   const [filtro, setFiltro] = useState('');
   const [hgIndex, setHgIndex] = useState(-1);
+  const [openUp, setOpenUp] = useState(false);
 
   const refPadre = useRef(null);
   const inputRef = useRef(null)
@@ -77,6 +80,14 @@ ref
     props?.onClear?.();
   },[props]);
 
+  useImperativeHandle(ref, () => {
+    return {
+      focus: () => inputRef.current?.focus?.(),
+      clear: () => resetInput(),
+      getInput: () => inputRef.current,
+    };
+  }, [resetInput]);
+
   useEffect(() => {
     if(isOpen && hgIndex >= 0){
       const ref = optionRefs.current[hgIndex];
@@ -98,6 +109,20 @@ ref
     setIsOpen(seter);
     !seter && inputRef.current.focus()
   },[nextIndex, inputRef])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setOpenUp(false);
+      return;
+    }
+    const el = refPadre.current;
+    if (!el || typeof window === 'undefined') return;
+    const rect = el.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Si no hay espacio debajo, abrir hacia arriba.
+    setOpenUp(spaceBelow < 260 && spaceAbove > spaceBelow);
+  }, [isOpen, filteredOptions.length]);
 
   const onSelect = (option) => {
     phase(option, option[textField], false, -1);
@@ -179,6 +204,11 @@ ref
         onSelect(filteredOptions[hgIndex]);
         open(false, null)
       }
+      // Modo POS/Kiosk: Enter acepta la primera coincidencia si no hay highlight
+      else if (acceptFirstOnEnter && filteredOptions[0] && filtro && !opcion) {
+        onSelect(filteredOptions[0]);
+        open(false, null);
+      }
       // Si dropdown está cerrado, ir a la tabla
       else if (!isOpen) {
         onNavigateNext?.();
@@ -235,7 +265,7 @@ ref
   const hasValue = opcion || (filtro && filtro.trim() !== "");
 
   return (
-    <div ref={refPadre} className="relative">
+    <div ref={refPadre} className="relative z-50">
       <input
         ref={valueRef}
         readOnly
@@ -309,7 +339,7 @@ ref
       </div>
 
       <ul
-        className={`${!isOpen ? 'hidden' : 'absolute' } z-10 w-full max-h-60 overflow-auto
+        className={`${!isOpen ? 'hidden' : 'absolute' } ${openUp ? 'bottom-full mb-1' : 'top-full mt-1'} left-0 right-0 z-[60] w-full max-h-72 overflow-auto
           bg-white border border-gray-200 rounded-md shadow-lg
         `}>
         {filteredOptions.map((option, index) => {
@@ -320,7 +350,7 @@ ref
             <li key={index}
               className={`cursor-pointer p-3 text-gray-900 ${active} transition-colors duration-150`}
               ref={(el) => optionRefs.current[index] = el}
-              onClick={() => onSelect(option)}
+              onClick={() => { if (!disableMouseSelect) onSelect(option); }}
               onMouseDown={(e) => e.preventDefault()}
               onKeyDown={handleKeyDown}
             >

@@ -1,51 +1,84 @@
-"use client"
+"use client";
+
 import { useState } from 'react';
-import Input from '../formComponents/Input';
 import Button from '../formComponents/Button';
 import SelectTipoPresentacion from './SelectTipoPresentacion';
 import Icon from '../formComponents/Icon';
 
 export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [nuevaPresentacion, setNuevaPresentacion] = useState({
     nombre: '',
+    codigoBarra: '',
     tipoPresentacionId: '',
     cantidad: 1,
     unidadMedida: '',
+    precio: '',
+    descuento: 0,
     contenidoPorUnidad: '',
-    unidadContenido: ''
+    unidadContenido: '',
+    esUnidadBase: false,
   });
 
-  const agregarPresentacion = () => {
-    if (nuevaPresentacion.nombre && nuevaPresentacion.tipoPresentacionId) {
-      const presentacionesActualizadas = [...presentaciones, {
-        id: Date.now().toString(), // ID temporal
-        ...nuevaPresentacion
-      }];
-      onChange(presentacionesActualizadas);
-      setNuevaPresentacion({
-        nombre: '',
-        tipoPresentacionId: '',
-        cantidad: 1,
-        unidadMedida: '',
-        contenidoPorUnidad: '',
-        unidadContenido: ''
-      });
-      setMostrarFormulario(false);
-    }
-  };
-
   const eliminarPresentacion = (id) => {
-    const presentacionesActualizadas = presentaciones.filter(p => p.id !== id);
+    const presentacionesActualizadas = presentaciones.filter((p) => p.id !== id);
     onChange(presentacionesActualizadas);
   };
 
   const actualizarPresentacion = (id, campo, valor) => {
-    const presentacionesActualizadas = presentaciones.map(p =>
-      p.id === id ? { ...p, [campo]: valor } : p
-    );
+    const presentacionesActualizadas = presentaciones.map((p) => {
+      if (p.id !== id) return p;
+      return { ...p, [campo]: valor };
+    });
     onChange(presentacionesActualizadas);
   };
+
+  const setBase = (id) => {
+    const presentacionesActualizadas = presentaciones.map((p) => ({
+      ...p,
+      esUnidadBase: p.id === id,
+    }));
+    onChange(presentacionesActualizadas);
+  };
+
+  const agregarPresentacion = () => {
+    if (!nuevaPresentacion.nombre || !nuevaPresentacion.tipoPresentacionId) return;
+
+    const newId = Date.now().toString();
+    const esPrimera = presentaciones.length === 0;
+    const nueva = {
+      id: newId,
+      ...nuevaPresentacion,
+      esUnidadBase: esPrimera ? true : Boolean(nuevaPresentacion.esUnidadBase),
+    };
+
+    let presentacionesActualizadas = [...presentaciones, nueva];
+
+    if (nueva.esUnidadBase) {
+      presentacionesActualizadas = presentacionesActualizadas.map((p) => ({
+        ...p,
+        esUnidadBase: p.id === newId,
+      }));
+    }
+
+    onChange(presentacionesActualizadas);
+    setNuevaPresentacion({
+      nombre: '',
+      codigoBarra: '',
+      tipoPresentacionId: '',
+      cantidad: 1,
+      unidadMedida: '',
+      precio: '',
+      descuento: 0,
+      contenidoPorUnidad: '',
+      unidadContenido: '',
+      esUnidadBase: false,
+    });
+  };
+
+  const inputClass =
+    'w-full px-2 py-1 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-0 focus:border-slate-400';
+  const thClass = 'px-2 py-2 text-left text-xs font-semibold text-gray-700 whitespace-nowrap';
+  const tdClass = 'px-2 py-2 align-top';
 
   return (
     <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
@@ -61,188 +94,268 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
         </div>
       </div>
 
-      <div className="p-6 space-y-4">
-        {/* Lista de presentaciones existentes */}
-        {presentaciones.length > 0 ? (
-          <div className="space-y-3">
-            {presentaciones.map((presentacion, index) => (
-              <div
-                key={presentacion.id}
-                className="group relative bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all duration-200"
-              >
-                {/* Número de presentación */}
-                <div className="absolute -top-2 -left-2 w-6 h-6 bg-gray-600 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                  {index + 1}
-                </div>
+      <div className="p-6">
+        <div className="overflow-x-auto">
+          <table className="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className={thClass}>Base</th>
+                <th className={thClass}>Nombre</th>
+                <th className={thClass}>Tipo</th>
+                <th className={thClass}>Cant.</th>
+                <th className={thClass}>Unidad</th>
+                <th className={thClass}>Precio</th>
+                <th className={thClass}>Desc %</th>
+                <th className={thClass}>Cont. x un</th>
+                <th className={thClass}>Un. cont.</th>
+                <th className={thClass}>Código barra</th>
+                <th className={thClass}></th>
+              </tr>
+            </thead>
 
-                {/* Header con nombre y eliminar */}
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 text-lg">{presentacion.nombre}</h4>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        {presentacion.cantidad} {presentacion.unidadMedida}
-                      </span>
-                      {presentacion.contenidoPorUnidad && (
-                        <span className="text-sm text-gray-600">
-                          ({presentacion.contenidoPorUnidad} {presentacion.unidadContenido} c/u)
-                        </span>
-                      )}
+            <tbody className="bg-white">
+              {presentaciones.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-center text-gray-500" colSpan={11}>
+                    <div className="flex items-center justify-center gap-2">
+                      <Icon icono="box" className="text-gray-300" />
+                      <span>No hay presentaciones</span>
                     </div>
-                  </div>
+                  </td>
+                </tr>
+              )}
 
-                  <button
-                    onClick={() => eliminarPresentacion(presentacion.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all duration-200"
-                    title="Eliminar presentación"
-                  >
-                    <Icon icono="eliminar" className="text-sm" />
-                  </button>
-                </div>
+              {presentaciones.map((presentacion) => (
+                <tr key={presentacion.id} className="border-b border-gray-100">
+                  <td className={tdClass}>
+                    <input
+                      type="radio"
+                      name="presentacion_base"
+                      checked={Boolean(presentacion.esUnidadBase)}
+                      onChange={() => setBase(presentacion.id)}
+                      className="h-4 w-4 accent-gray-700"
+                      title="Unidad base (stock suelto)"
+                    />
+                  </td>
 
-                {/* Campos editables en grid responsive */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs font-medium text-gray-700 uppercase tracking-wide">Tipo</label>
+                  <td className={tdClass}>
+                    <input
+                      value={presentacion.nombre || ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'nombre', e.target.value)}
+                      placeholder="Ej: Caja x 12"
+                      className={inputClass}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
                     <SelectTipoPresentacion
                       value={presentacion.tipoPresentacionId}
                       onChange={({ value }) => actualizarPresentacion(presentacion.id, 'tipoPresentacionId', value)}
                       className="text-sm"
                     />
-                  </div>
+                  </td>
 
-                  <Input
-                    label="Cantidad"
+                  <td className={tdClass}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={presentacion.cantidad ?? ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'cantidad', parseFloat(e.target.value) || 1)}
+                      className={inputClass + ' text-right'}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      value={presentacion.unidadMedida || ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'unidadMedida', e.target.value)}
+                      placeholder="un, kg, lt"
+                      className={inputClass}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={presentacion.precio ?? ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'precio', e.target.value)}
+                      className={inputClass + ' text-right'}
+                      placeholder="(opcional)"
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={presentacion.descuento ?? 0}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'descuento', e.target.value)}
+                      className={inputClass + ' text-right'}
+                      placeholder="0"
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={presentacion.contenidoPorUnidad ?? ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'contenidoPorUnidad', e.target.value)}
+                      className={inputClass + ' text-right'}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      value={presentacion.unidadContenido || ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'unidadContenido', e.target.value)}
+                      placeholder="gr, ml"
+                      className={inputClass}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <input
+                      value={presentacion.codigoBarra || ''}
+                      onChange={(e) => actualizarPresentacion(presentacion.id, 'codigoBarra', e.target.value)}
+                      placeholder="(opcional)"
+                      className={inputClass}
+                    />
+                  </td>
+
+                  <td className={tdClass}>
+                    <button
+                      onClick={() => eliminarPresentacion(presentacion.id)}
+                      className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Eliminar presentación"
+                      type="button"
+                    >
+                      <Icon icono="eliminar" className="text-sm" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {/* Renglón para agregar */}
+              <tr className="bg-gray-50">
+                <td className={tdClass}>
+                  <input
+                    type="radio"
+                    name="presentacion_base"
+                    checked={Boolean(nuevaPresentacion.esUnidadBase)}
+                    onChange={() => setNuevaPresentacion((prev) => ({ ...prev, esUnidadBase: true }))}
+                    className="h-4 w-4 accent-gray-700"
+                    title="Unidad base (stock suelto)"
+                  />
+                </td>
+                <td className={tdClass}>
+                  <input
+                    value={nuevaPresentacion.nombre}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, nombre: e.target.value }))}
+                    placeholder="Nueva presentación"
+                    className={inputClass}
+                  />
+                </td>
+                <td className={tdClass}>
+                  <SelectTipoPresentacion
+                    value={nuevaPresentacion.tipoPresentacionId}
+                    onChange={({ value }) => setNuevaPresentacion((prev) => ({ ...prev, tipoPresentacionId: value }))}
+                    className="text-sm"
+                  />
+                </td>
+                <td className={tdClass}>
+                  <input
                     type="number"
-                    value={presentacion.cantidad}
-                    onChange={({ value }) => actualizarPresentacion(presentacion.id, 'cantidad', parseFloat(value) || 1)}
-                    className="text-sm"
+                    min="0"
+                    step="0.01"
+                    value={nuevaPresentacion.cantidad}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, cantidad: parseFloat(e.target.value) || 1 }))}
+                    className={inputClass + ' text-right'}
                   />
-
-                  <Input
-                    label="Unidad"
-                    value={presentacion.unidadMedida}
-                    onChange={({ value }) => actualizarPresentacion(presentacion.id, 'unidadMedida', value)}
-                    className="text-sm"
+                </td>
+                <td className={tdClass}>
+                  <input
+                    value={nuevaPresentacion.unidadMedida}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, unidadMedida: e.target.value }))}
+                    placeholder="un, kg, lt"
+                    className={inputClass}
                   />
+                </td>
 
-                  <Input
-                    label="Contenido x unidad"
+                <td className={tdClass}>
+                  <input
                     type="number"
-                    value={presentacion.contenidoPorUnidad}
-                    onChange={({ value }) => actualizarPresentacion(presentacion.id, 'contenidoPorUnidad', value)}
-                    className="text-sm"
+                    min="0"
+                    step="0.01"
+                    value={nuevaPresentacion.precio}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, precio: e.target.value }))}
+                    placeholder="(opcional)"
+                    className={inputClass + ' text-right'}
                   />
+                </td>
 
-                  <Input
-                    label="Unidad contenido"
-                    value={presentacion.unidadContenido}
-                    onChange={({ value }) => actualizarPresentacion(presentacion.id, 'unidadContenido', value)}
-                    className="text-sm"
+                <td className={tdClass}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    value={nuevaPresentacion.descuento}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, descuento: e.target.value }))}
+                    placeholder="0"
+                    className={inputClass + ' text-right'}
                   />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <Icon icono="box" className="text-4xl mx-auto mb-3 text-gray-300" />
-            <p className="text-lg font-medium">No hay presentaciones</p>
-            <p className="text-sm">Agrega la primera presentación para este producto</p>
-          </div>
-        )}
+                </td>
+                <td className={tdClass}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={nuevaPresentacion.contenidoPorUnidad}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, contenidoPorUnidad: e.target.value }))}
+                    className={inputClass + ' text-right'}
+                  />
+                </td>
+                <td className={tdClass}>
+                  <input
+                    value={nuevaPresentacion.unidadContenido}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, unidadContenido: e.target.value }))}
+                    placeholder="gr, ml"
+                    className={inputClass}
+                  />
+                </td>
+                <td className={tdClass}>
+                  <input
+                    value={nuevaPresentacion.codigoBarra}
+                    onChange={(e) => setNuevaPresentacion((prev) => ({ ...prev, codigoBarra: e.target.value }))}
+                    placeholder="(opcional)"
+                    className={inputClass}
+                  />
+                </td>
+                <td className={tdClass}>
+                  <Button
+                    tipo="enviar"
+                    onClick={agregarPresentacion}
+                    disabled={!nuevaPresentacion.nombre || !nuevaPresentacion.tipoPresentacionId}
+                  >
+                    <Icon icono="plus" className="mr-2" />
+                    Agregar
+                  </Button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-        {/* Botón para mostrar/ocultar formulario */}
-        {!mostrarFormulario ? (
-          <div className="text-center pt-4">
-            <button
-              onClick={() => setMostrarFormulario(true)}
-              className="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
-            >
-              <Icon icono="plus" className="mr-2 text-sm" />
-              Agregar presentación
-            </button>
-          </div>
-        ) : (
-          /* Formulario para nueva presentación */
-          <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-gray-900">Nueva presentación</h4>
-              <button
-                onClick={() => setMostrarFormulario(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Icon icono="times" className="text-lg" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              <Input
-                label="Nombre de la presentación"
-                value={nuevaPresentacion.nombre}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, nombre: value }))}
-                placeholder="Ej: Caja x 12 unidades"
-                required
-              />
-
-              <SelectTipoPresentacion
-                label="Tipo de presentación"
-                value={nuevaPresentacion.tipoPresentacionId}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, tipoPresentacionId: value }))}
-                required
-              />
-
-              <Input
-                label="Cantidad"
-                type="number"
-                value={nuevaPresentacion.cantidad}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, cantidad: parseFloat(value) || 1 }))}
-                placeholder="1"
-                min="1"
-              />
-
-              <Input
-                label="Unidad de medida"
-                value={nuevaPresentacion.unidadMedida}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, unidadMedida: value }))}
-                placeholder="unidades, kg, litros..."
-              />
-
-              <Input
-                label="Contenido por unidad"
-                type="number"
-                value={nuevaPresentacion.contenidoPorUnidad}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, contenidoPorUnidad: value }))}
-                placeholder="500"
-                step="0.01"
-              />
-
-              <Input
-                label="Unidad de contenido"
-                value={nuevaPresentacion.unidadContenido}
-                onChange={({ value }) => setNuevaPresentacion(prev => ({ ...prev, unidadContenido: value }))}
-                placeholder="gr, ml, kg..."
-              />
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <Button
-                tipo="neutro"
-                onClick={() => setMostrarFormulario(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                tipo="enviar"
-                onClick={agregarPresentacion}
-                disabled={!nuevaPresentacion.nombre || !nuevaPresentacion.tipoPresentacionId}
-              >
-                <Icon icono="plus" className="mr-2" />
-                Agregar presentación
-              </Button>
-            </div>
-          </div>
-        )}
+        <p className="mt-3 text-xs text-gray-600">
+          Marcá una sola presentación como <b>Base</b> (stock suelto).
+        </p>
       </div>
     </div>
   );

@@ -70,8 +70,8 @@ export const alertaTotalCompra = async (action, venta) => {
         <tbody>
           ${venta.detalle.map(d => `
             <tr>
-              <td class="cantidad">${d.cantidad}</td>
-              <td class="nombre">${d.nombre}</td>
+              <td class="cantidad">${Number(d.cantidad).toFixed(d?.tipoVenta === 'GRANEL' ? 3 : 0)}${d?.unidadVenta ? ` ${d.unidadVenta}` : ''}</td>
+              <td class="nombre">${d.nombre}${d?.variedad ? ` - ${d.variedad}` : ''}</td>
               <td class="subtotal">$${d.sumaVenta.toFixed(2)}</td>
             </tr>
           `).join('')}

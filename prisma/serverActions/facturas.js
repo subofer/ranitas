@@ -40,7 +40,7 @@ export async function guardarFacturaConStock(formData) {
         await prisma.productos.update({
           where: { id: detalle.idProducto },
           data: {
-            stock: {
+            stockSuelto: {
               increment: detalle.cantidad,
             },
           },

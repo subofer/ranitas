@@ -33,6 +33,18 @@ export const useKeyboard = ({
   const [productoFocused, setProductoFocused] = useState(null);
   const [productosSeleccionados, setProductosSeleccionados] = useState([]);
   const [anchorIndex, setAnchorIndex] = useState(null);
+  const [pendingFocus, setPendingFocus] = useState(null); // 'first' | 'last' | null
+
+  const selectIdByRowId = useMemo(() => {
+    const map = new Map();
+    for (const it of itemsOrdenados || []) {
+      if (!it) continue;
+      const id = it?.id;
+      if (!id) continue;
+      map.set(id, it?.selectId || id);
+    }
+    return map;
+  }, [itemsOrdenados]);
 
   const indexById = useMemo(() => {
     const map = new Map();
@@ -55,14 +67,9 @@ export const useKeyboard = ({
       const nextId = list[bounded]?.id;
       if (!nextId) return;
 
-      if (!perPageEsAll && perPageNum > 0) {
-        const nextPage = Math.floor(bounded / perPageNum) + 1;
-        if (nextPage !== pagina) setPagina(nextPage);
-      }
-
       setProductoFocused(nextId);
     },
-    [itemsOrdenados, pagina, perPageEsAll, perPageNum, setPagina]
+    [itemsOrdenados]
   );
 
   const toggleProductoSeleccionado = useCallback(
@@ -71,16 +78,10 @@ export const useKeyboard = ({
         prev.includes(productoId) ? prev.filter((id) => id !== productoId) : [...prev, productoId]
       );
 
-      // Mantener el foco estable al seleccionar/deseleccionar con teclado.
-      setProductoFocused(productoId);
-      requestAnimationFrame(() => {
-        filaProductoRef?.current?.[productoId]?.focus();
-      });
-
-      const idx = indexById.get(productoId);
-      if (typeof idx === 'number') setAnchorIndex(idx);
+      // No forzar foco acá: si el usuario estaba en una presentación,
+      // la selección se aplica al producto pero el foco queda en la fila actual.
     },
-    [filaProductoRef, indexById]
+    []
   );
 
   const selectRange = useCallback(
@@ -91,12 +92,14 @@ export const useKeyboard = ({
       const [start, end] = a <= b ? [a, b] : [b, a];
       const ids = [];
       for (let i = start; i <= end; i += 1) {
-        const id = list[i]?.id;
-        if (id) ids.push(id);
+        const rowId = list[i]?.id;
+        if (!rowId) continue;
+        const selectId = selectIdByRowId.get(rowId) || rowId;
+        ids.push(selectId);
       }
       setProductosSeleccionados((prev) => union(prev, ids));
     },
-    [itemsOrdenados]
+    [itemsOrdenados, selectIdByRowId]
   );
 
   const moveFocus = useCallback(
@@ -131,9 +134,8 @@ export const useKeyboard = ({
 
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        // Primer ítem visible de la página actual
-        const startIndex = perPageEsAll ? 0 : (pagina - 1) * perPageNum;
-        focusIndex(startIndex);
+        // Primer ítem visible
+        focusIndex(0);
       } else if (e.key === 'Tab') {
         categoryFilterRef?.current?.querySelector('input')?.focus();
       } else if (e.key === 'ArrowRight') {
@@ -141,13 +143,12 @@ export const useKeyboard = ({
         categoryFilterRef?.current?.querySelector('input')?.focus();
       }
     },
-    [categoryFilterRef, focusIndex, inputBusquedaRef, pagina, perPageEsAll, perPageNum]
+    [categoryFilterRef, focusIndex, inputBusquedaRef]
   );
 
   const handleCategoryFilterNavigateNext = useCallback(() => {
-    const startIndex = perPageEsAll ? 0 : (pagina - 1) * perPageNum;
-    focusIndex(startIndex);
-  }, [focusIndex, pagina, perPageEsAll, perPageNum]);
+    focusIndex(0);
+  }, [focusIndex]);
 
   const handleCategoryFilterNavigatePrev = useCallback(() => {
     inputBusquedaRef?.current?.focus();
@@ -165,13 +166,14 @@ export const useKeyboard = ({
       if (e.altKey) return;
 
       // Limitar el atajo al contexto de esta pantalla
-      if (scopeRef?.current && !scopeRef.current.contains(document.activeElement)) return;
+      const active = document.activeElement;
+      const activeIsBody = active === document.body || active === document.documentElement;
+      if (scopeRef?.current && active && !activeIsBody && !scopeRef.current.contains(active)) return;
 
       const key = typeof e.key === 'string' ? e.key : '';
       const keyLower = key.toLowerCase();
 
       // No disparar si el usuario está escribiendo en inputs/textareas/editables
-      const active = document.activeElement;
       const activeEsEditable =
         !!active &&
         typeof active.closest === 'function' &&
@@ -199,6 +201,13 @@ export const useKeyboard = ({
       // pero sí permitir Ctrl/Cmd+C para copiar selección.
       if (e.altKey) return;
 
+      // Si el usuario está escribiendo en un control dentro de la tabla,
+      // no interceptar flechas/espacio/etc.
+      const active = document.activeElement;
+      const activeEsEditable =
+        !!active && typeof active.closest === 'function' && !!active.closest('input, textarea, select');
+      if (activeEsEditable) return;
+
       const keyLower = typeof e.key === 'string' ? e.key.toLowerCase() : e.key;
       const esCopia = (e.ctrlKey || e.metaKey) && keyLower === 'c';
       if (esCopia) {
@@ -220,12 +229,23 @@ export const useKeyboard = ({
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
+          // Si estamos al final de la página, pasar a la siguiente página.
+          if (indexById.get(productoFocused) === (itemsOrdenados?.length || 1) - 1 && pagina < totalPaginas) {
+            setPagina(pagina + 1);
+            setPendingFocus('first');
+            return;
+          }
           moveFocus(1, e);
           break;
         case 'ArrowUp':
           e.preventDefault();
-          // Si estamos en el primer ítem, subir vuelve al filtro de búsqueda.
+          // Si estamos en el primer ítem, subir vuelve a la búsqueda o a la página anterior.
           if (indexById.get(productoFocused) === 0) {
+            if (pagina > 1) {
+              setPagina(pagina - 1);
+              setPendingFocus('last');
+              return;
+            }
             setProductoFocused(null);
             inputBusquedaRef?.current?.focus();
             break;
@@ -234,23 +254,22 @@ export const useKeyboard = ({
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          if (!perPageEsAll) {
-            // Ir a la página anterior manteniendo la misma “fila relativa” (salto por tamaño de página)
-            moveFocus(-perPageNum, e);
+          if (pagina > 1) {
+            setPagina(pagina - 1);
+            setPendingFocus('first');
           }
           break;
         case 'ArrowRight':
           e.preventDefault();
-          if (!perPageEsAll) {
-            // Ir a la página siguiente manteniendo la misma “fila relativa”
-            moveFocus(perPageNum, e);
+          if (pagina < totalPaginas) {
+            setPagina(pagina + 1);
+            setPendingFocus('first');
           }
           break;
         case ' ': {
           e.preventDefault();
           if (!productoFocused) {
-            const startIndex = perPageEsAll ? 0 : (pagina - 1) * perPageNum;
-            const id = itemsOrdenados?.[startIndex]?.id;
+            const id = itemsOrdenados?.[0]?.id;
             if (id) {
               setProductoFocused(id);
               requestAnimationFrame(() => {
@@ -259,7 +278,8 @@ export const useKeyboard = ({
             }
             break;
           }
-          toggleProductoSeleccionado(productoFocused);
+          const selectId = selectIdByRowId.get(productoFocused) || productoFocused;
+          toggleProductoSeleccionado(selectId);
           break;
         }
         case 'Escape':
@@ -279,14 +299,121 @@ export const useKeyboard = ({
       moveFocus,
       onCopySelected,
       pagina,
-      perPageEsAll,
-      perPageNum,
       productoFocused,
       productosSeleccionados,
       tablaRef,
       toggleProductoSeleccionado,
+      selectIdByRowId,
+      totalPaginas,
+      setPagina,
     ]
   );
+
+  // Navegación por teclado incluso si el foco salió de la tabla (por click, etc),
+  // pero manteniendo el alcance dentro del scope y sin interferir con inputs.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!productoFocused) return;
+      if (e.altKey) return;
+
+      const active = document.activeElement;
+      const activeIsBody = active === document.body || active === document.documentElement;
+
+      // Solo dentro del contexto de esta pantalla.
+      if (scopeRef?.current && active && !activeIsBody && !scopeRef.current.contains(active)) return;
+
+      // Si el foco ya está dentro de la tabla, lo maneja el onKeyDown de filas.
+      if (tablaRef?.current && active && tablaRef.current.contains(active)) return;
+
+      // Si el usuario está escribiendo en un control, no interceptar.
+      const activeEsEditable =
+        !!active && typeof active.closest === 'function' && !!active.closest('input, textarea, select, [contenteditable="true"]');
+      if (activeEsEditable) return;
+
+      const keyLower = typeof e.key === 'string' ? e.key.toLowerCase() : e.key;
+      const esCopia = (e.ctrlKey || e.metaKey) && keyLower === 'c';
+      if (esCopia) {
+        if (typeof onCopySelected === 'function' && productosSeleccionados.length > 0) {
+          e.preventDefault();
+          onCopySelected({ selectedIds: productosSeleccionados, focusedId: productoFocused });
+        }
+        return;
+      }
+
+      if ((e.ctrlKey && e.key !== ' ') || (e.metaKey && e.key !== ' ')) return;
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          if (indexById.get(productoFocused) === (itemsOrdenados?.length || 1) - 1 && pagina < totalPaginas) {
+            setPagina(pagina + 1);
+            setPendingFocus('first');
+            return;
+          }
+          moveFocus(1, e);
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          if (indexById.get(productoFocused) === 0) {
+            if (pagina > 1) {
+              setPagina(pagina - 1);
+              setPendingFocus('last');
+              return;
+            }
+            setProductoFocused(null);
+            inputBusquedaRef?.current?.focus();
+            break;
+          }
+          moveFocus(-1, e);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (pagina > 1) {
+            setPagina(pagina - 1);
+            setPendingFocus('first');
+          }
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (pagina < totalPaginas) {
+            setPagina(pagina + 1);
+            setPendingFocus('first');
+          }
+          break;
+        case ' ': {
+          e.preventDefault();
+          const selectId = selectIdByRowId.get(productoFocused) || productoFocused;
+          toggleProductoSeleccionado(selectId);
+          break;
+        }
+        case 'Escape':
+          e.preventDefault();
+          setProductoFocused(null);
+          inputBusquedaRef?.current?.focus();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [
+    indexById,
+    inputBusquedaRef,
+    itemsOrdenados,
+    moveFocus,
+    onCopySelected,
+    pagina,
+    productoFocused,
+    productosSeleccionados,
+    scopeRef,
+    selectIdByRowId,
+    setPagina,
+    tablaRef,
+    toggleProductoSeleccionado,
+    totalPaginas,
+  ]);
 
   const handleTableWheel = useCallback(
     (e) => {
@@ -301,13 +428,19 @@ export const useKeyboard = ({
 
       if (e.deltaY > 0 && enBordeInferior) {
         e.preventDefault();
-        moveFocus(perPageNum, { shiftKey: e.shiftKey });
+        if (pagina < totalPaginas) {
+          setPagina(pagina + 1);
+          setPendingFocus('first');
+        }
       } else if (e.deltaY < 0 && enBordeSuperior) {
         e.preventDefault();
-        moveFocus(-perPageNum, { shiftKey: e.shiftKey });
+        if (pagina > 1) {
+          setPagina(pagina - 1);
+          setPendingFocus('last');
+        }
       }
     },
-    [moveFocus, perPageEsAll, perPageNum, tablaRef]
+    [pagina, perPageEsAll, setPagina, tablaRef, totalPaginas]
   );
 
   // Auto-focus/scroll del ítem enfocado (evita robar clicks en elementos interactivos)
@@ -317,6 +450,16 @@ export const useKeyboard = ({
     const active = document.activeElement;
     const activeEsInteractivo =
       !!active && typeof active.closest === 'function' && !!active.closest('button, a, input, select, textarea');
+
+    // Si el usuario está interactuando dentro de la tabla (ej: editando inputs), no robar foco.
+    const activeDentroTabla = !!tablaRef?.current && !!active && tablaRef.current.contains(active);
+    if (activeEsInteractivo && activeDentroTabla) return;
+
+    // Si el foco está en un botón/anchor fuera de la tabla (ej: Guardar/Cancelar),
+    // no robar foco ni scrollear (evita saltos).
+    const activeEsBoton =
+      !!active && typeof active.closest === 'function' && !!active.closest('button, a');
+    if (activeEsBoton && !activeDentroTabla) return;
 
     // Solo evitamos “robar” foco cuando el usuario interactúa con un control dentro de la misma fila.
     // Si el foco está en un input de búsqueda (fuera de la fila), sí queremos mover el foco a la fila.
@@ -337,10 +480,24 @@ export const useKeyboard = ({
       const fueraArriba = rect.top < margen;
       const fueraAbajo = rect.bottom > window.innerHeight - margen;
       if (fueraArriba || fueraAbajo) {
-        filaEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        filaEl.scrollIntoView({ behavior: 'auto', block: 'nearest' });
       }
     }, 0);
-  }, [filaProductoRef, productoFocused]);
+  }, [filaProductoRef, productoFocused, tablaRef]);
+
+  // Aplicar foco pendiente luego de paginar
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const list = itemsOrdenados || [];
+    if (!list.length) return;
+
+    if (pendingFocus === 'first') {
+      focusIndex(0);
+    } else if (pendingFocus === 'last') {
+      focusIndex(list.length - 1);
+    }
+    setPendingFocus(null);
+  }, [focusIndex, itemsOrdenados, pendingFocus]);
 
   return {
     productoFocused,

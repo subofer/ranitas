@@ -5,7 +5,7 @@ import { guardarProducto } from "@/prisma/serverActions/productos";
 
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
-import { getProductoPorCodigoBarra } from "@/prisma/consultas/productos";
+import { getProductoPorCodigoBarra, getProductoPorId } from "@/prisma/consultas/productos";
 import useMyParams from '@/hooks/useMyParams';
 import buscarPorCodigoDeBarras from '@/lib/buscarPorCodigoDeBarras';
 import SelectorImagenes from '../formComponents/SelectorImagenes';
@@ -15,6 +15,7 @@ import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import GestionPresentaciones from '../productos/GestionPresentaciones';
 import SelectProveedorClient from '../proveedores/SelectProveedorClient';
+import SelectMarcaClient from '../marcas/SelectMarcaClient';
 import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
 import { textos } from '@/lib/manipularTextos';
 import InputArrayListCategorias from '../categorias/InputArrayListCategorias';
@@ -25,8 +26,9 @@ import generateBarCode from '@/lib/barCodeGenerator.mjs';
 import useHotkey from '@/hooks/useHotkey';
 
 
-export const CargaProductoBuscadorClient = () => {
+export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
   const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
+  const { param: editParam, deleteParam: deleteEditParam } = useMyParams('edit');
 
   const blankForm = useMemo(() => ({
     id:'',
@@ -35,6 +37,8 @@ export const CargaProductoBuscadorClient = () => {
     descripcion: '',
     size: '',
     unidad: '',
+    marcaId: '',
+    stockSuelto: 0,
     imagen: '',
     proveedores: [],
     categorias: [],
@@ -74,8 +78,9 @@ export const CargaProductoBuscadorClient = () => {
     const { error } = await guardarProducto(data);
     if (!error) {
       await handleBuscar(data.codigoBarra);
+      onSaved?.();
     }
-  }, [handleBuscar]);
+  }, [handleBuscar, onSaved]);
 
   const handleSave = async (e) => {
     if (formData.codigoBarra) {
@@ -98,6 +103,14 @@ export const CargaProductoBuscadorClient = () => {
     setFormData(prev => ({
       ...prev,
       proveedores: [...new Set([...prev.proveedores, {proveedorId: selected.id, proveedor:selected}])]
+    }));
+  };
+
+  const handleMarcaSelected = ({ selected }) => {
+    setFormData((prev) => ({
+      ...prev,
+      marcaId: selected?.id || '',
+      marca: selected || null,
     }));
   };
 
@@ -161,6 +174,31 @@ export const CargaProductoBuscadorClient = () => {
   }, [codigoBarraParam, handleBuscar]);
 
   useEffect(() => {
+    const cargarPorId = async () => {
+      if (!editParam) return;
+      try {
+        const producto = await getProductoPorId(editParam);
+        if (!producto || producto?.error) return;
+
+        setLocal(true);
+        setFormData((prev) => ({
+          ...prev,
+          ...producto,
+          presentaciones: producto.presentaciones || [],
+        }));
+        setImagenes([{ imagen: { src: producto.imagen, alt: "Imagen Guardada" } }]);
+      } catch (e) {
+        console.error('Error cargando producto por id:', e);
+      } finally {
+        // limpiar para evitar re-disparos raros al editar/guardar
+        deleteEditParam('edit');
+      }
+    };
+
+    cargarPorId();
+  }, [editParam, deleteEditParam]);
+
+  useEffect(() => {
     console.log("formData", formData)
 
   }, [formData]);
@@ -201,7 +239,7 @@ export const CargaProductoBuscadorClient = () => {
             />
           </div>
 
-          <div className="grid col-span-full gap-1 grid-cols-1 lg:grid-cols-2 lg:col-span-3">
+          <div className="grid col-span-full gap-1 grid-cols-1 lg:grid-cols-3 lg:col-span-4">
             <div className="col-span-full  lg:col-span-1">
               <Input
                 name="size"
@@ -218,6 +256,16 @@ export const CargaProductoBuscadorClient = () => {
                 placeholder="Litros, gramos, etc.."
                 onChange={handleInputChange}
                 value={formData.unidad}
+              />
+            </div>
+            <div className="col-span-full lg:col-span-1">
+              <Input
+                name="stockSuelto"
+                label="Stock suelto"
+                placeholder="0"
+                type="number"
+                onChange={handleInputChange}
+                value={formData.stockSuelto}
               />
             </div>
           </div>
@@ -263,6 +311,15 @@ export const CargaProductoBuscadorClient = () => {
               tabIndex={-1}
             />
           </div>
+
+          <div className="col-span-full lg:col-span-3">
+            <SelectMarcaClient
+              onChange={handleMarcaSelected}
+              value={formData.marcaId}
+              placeholder="Elija una Marca"
+            />
+          </div>
+
           <div className="col-span-full lg:col-span-3">
             <SelectProveedorClient onChange={handleProveedoresSelected} />
           </div>

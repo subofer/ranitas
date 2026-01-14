@@ -8,6 +8,38 @@ import { showImagenProducto } from './showImagenProducto';
 import Counter from '../formComponents/Counter';
 import RenderCategorias from '../categorias/RenderCategorias';
 import BotonAgregarPedidoTabla from './BotonAgregarPedidoTabla';
+import Icon from '../formComponents/Icon';
+
+const CantidadVenta = ({ item, especialCounter, onEditarGranel }) => {
+  if (item?.tipoVenta === 'GRANEL') {
+    const cant = Number(item?.cantidad) || 0;
+    const unidad = item?.unidadVenta || item?.unidad || 'kg';
+    const textoCant = `${cant.toFixed(3)} ${unidad}`;
+    const variedad = (item?.variedad || '').trim();
+
+    return (
+      <button
+        type="button"
+        onClick={() => onEditarGranel?.(item)}
+        className="text-left px-2 py-1 rounded-md hover:bg-gray-100"
+        title="Editar peso/variedad"
+      >
+        <div className="font-medium text-gray-900 tabular-nums">{textoCant}</div>
+        {variedad ? <div className="text-xs text-gray-600 truncate">{variedad}</div> : <div className="text-xs text-gray-400">(sin variedad)</div>}
+      </button>
+    );
+  }
+
+  return <Counter especialCounter={especialCounter} item={item} valueKey="cantidad" />;
+};
+
+const EliminarVenta = ({ item, onEliminarVenta }) => (
+  <Icon
+    icono={"eliminar"}
+    className={"text-red-600 cursor-pointer"}
+    onClick={() => onEliminarVenta?.(item)}
+  />
+);
 
 
 export const tablaListaProductosColumnasNames = {
@@ -78,6 +110,14 @@ export const tablaListaProductosColumnasNames = {
     ordenable: true,
     noselect: true,
   },
+  cantidadVenta: {
+    titulo: "Cantidad",
+    key: "cantidad",
+    Component: CantidadVenta,
+    className: "px-2 pr-4 text-right w-px",
+    ordenable: true,
+    noselect: true,
+  },
   stock: {
     titulo: "Stock",
     key: "stock",
@@ -131,6 +171,38 @@ export const tablaListaProductosColumnasNames = {
     },
     componentClassname: "p-0 m-0",
     noselect: true,
+  },
+  eliminarVenta: {
+    titulo: "",
+    className: "px-2 text-center w-px",
+    Component: BotonEliminarProducto,
+    onClick: (item, items) => {
+      const index = items.findIndex(({ id }) => item.id == id);
+      if (index !== -1) items.splice(index, 1);
+      return {
+        isParams: true,
+        action: "recarga",
+      };
+    },
+    componentClassname: "p-0 m-0",
+    noselect: true,
+  },
+
+  // Columnas para POS/venta (no afectan BD)
+  cantidadVenta: {
+    titulo: "Cantidad",
+    key: "cantidad",
+    Component: CantidadVenta,
+    className: "px-2 pr-4 text-right w-px",
+    ordenable: true,
+    noselect: true,
+  },
+  eliminarVenta: {
+    titulo: "",
+    className: "px-2 text-center w-px",
+    Component: EliminarVenta,
+    noselect: true,
+    colw: "w-px",
   },
 }
 

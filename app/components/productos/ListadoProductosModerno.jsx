@@ -1,14 +1,15 @@
 "use client"
-import { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { useMemo, useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import debounce from '@/lib/debounce';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { getProductos } from '@/prisma/consultas/productos';
-import { eliminarProductoConPreciosPorId } from '@/prisma/serverActions/productos';
+import { eliminarProductoConPreciosPorId, guardarCambiosListadoProductos, guardarProducto, actualizarPrecioProducto } from '@/prisma/serverActions/productos';
 import { restaurarProducto } from '@/prisma/serverActions/undo';
 import { alertaBorrarProducto } from '../alertas/alertaBorrarProducto';
 import { useNotification } from '@/context/NotificationContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Icon from '../formComponents/Icon';
 import FilterSelect from '../formComponents/FilterSelect';
 import BotonAgregarPedido from '../pedidos/BotonAgregarPedido';
@@ -17,38 +18,165 @@ import { useErrorNotification } from '@/hooks/useErrorNotification';
 import ProductListPlaceholder from './ProductListPlaceholder';
 import ProductGridPlaceholder from './ProductGridPlaceholder';
 import HighlightMatch from '../HiglightMatch';
+import { CONTROL_PANEL } from '@/lib/controlPanelConfig';
+import useSelect from '@/app/hooks/useSelect';
+import { getMarcasSelect } from '@/prisma/consultas/marcas';
+import { getCategorias } from '@/prisma/consultas/categorias';
+import { getTiposPresentacion } from '@/prisma/consultas/tiposPresentacion';
+import normalizar from '@/lib/normalizar';
+import useProductosEdit from '@/app/hooks/useProductosEdit';
+import useProductosTable from '@/app/hooks/useProductosTable';
+import ProductoFila from './ProductoFila';
+import { guardarPresentacion, eliminarPresentacion } from '@/prisma/serverActions/presentaciones';
+import { abrirPresentacion } from '@/prisma/serverActions/stock';
 
-const normalizarTexto = (value) => (value ?? '').toString().trim().toLowerCase();
+let productosCache = null;
+let productosCacheAt = 0;
+
+
+const construirAdyacenciasContenedoraAContenida = (producto) => {
+  const map = new Map();
+  const presentaciones = Array.isArray(producto?.presentaciones) ? producto.presentaciones : [];
+
+  for (const p of presentaciones) {
+    const edges = Array.isArray(p?.contenedoras) ? p.contenedoras : [];
+    for (const e of edges) {
+      const from = e.presentacionContenedoraId;
+      const to = e.presentacionContenidaId;
+      const factor = Number(e.cantidad);
+      if (!from || !to) continue;
+      if (!Number.isFinite(factor) || factor <= 0) continue;
+      const lista = map.get(from) ?? [];
+      lista.push({ to, factor });
+      map.set(from, lista);
+    }
+  }
+
+  return map;
+};
+
+const calcularFactorAUnidadBase = (producto, desdePresentacionId, basePresentacionId) => {
+  if (!desdePresentacionId || !basePresentacionId) return null;
+  if (desdePresentacionId === basePresentacionId) return 1;
+
+  const ady = construirAdyacenciasContenedoraAContenida(producto);
+  const queue = [{ id: desdePresentacionId, factor: 1 }];
+  const visited = new Set([desdePresentacionId]);
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    const edges = ady.get(cur.id) ?? [];
+    for (const e of edges) {
+      const nextFactor = cur.factor * e.factor;
+      if (e.to === basePresentacionId) return nextFactor;
+      if (visited.has(e.to)) continue;
+      visited.add(e.to);
+      queue.push({ id: e.to, factor: nextFactor });
+    }
+  }
+
+  return null;
+};
+
+const getUnidadBaseId = (producto) => {
+  const presentaciones = Array.isArray(producto?.presentaciones) ? producto.presentaciones : [];
+  return presentaciones.find((p) => p?.esUnidadBase)?.id ?? null;
+};
+
+const getStockCerradoPresentacion = (presentacion) => {
+  const n = presentacion?.stock?.stockCerrado;
+  return Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : 0;
+};
+
+const calcularStockEquivalente = (producto) => {
+  const stockSuelto = normalizar.enteroPositivo(producto?.stockSuelto ?? 0);
+  const baseId = getUnidadBaseId(producto);
+  const presentaciones = Array.isArray(producto?.presentaciones) ? producto.presentaciones : [];
+
+  let equivalenteDesdePresentaciones = 0;
+  if (baseId) {
+    for (const p of presentaciones) {
+      if (!p?.id) continue;
+      if (p.id === baseId) continue;
+
+      const stockCerrado = getStockCerradoPresentacion(p);
+      if (stockCerrado <= 0) continue;
+
+      const factor = calcularFactorAUnidadBase(producto, p.id, baseId);
+      if (!Number.isFinite(factor) || factor == null) continue;
+
+      equivalenteDesdePresentaciones += Math.round(stockCerrado * factor);
+    }
+  }
+
+  return {
+    stockSuelto,
+    equivalenteDesdePresentaciones,
+    totalEquivalente: stockSuelto + equivalenteDesdePresentaciones,
+    baseId,
+  };
+};
 
 const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false }) => {
   const { showError } = useErrorNotification();
+  const { addNotification } = useNotification();
   const { userName } = useCurrentUser();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busquedaInput, setBusquedaInput] = useState('');
-  const [busquedaProducto, setBusquedaProducto] = useState('');
-  const [categoriaFiltro, setCategoriaFiltro] = useState('');
   const [vistaTipo, setVistaTipo] = useState('lista');
-  const [pagina, setPagina] = useState(1);
-  const [perPage, setPerPage] = useState(10);
-  const [total, setTotal] = useState(0);
-  const [categoriasUnicas, setCategoriasUnicas] = useState([]);
-  const [ordenamiento, setOrdenamiento] = useState({ columna: null, direccion: 'asc' });
 
+  // Hooks de estado de edición y tabla
+  const {
+    modoEdicionManual,
+    toggleModoEdicion: setModoEdicionManual,
+    guardandoCambios,
+    editsProductos,
+    editsPresentaciones,
+    setProductoEdit,
+    setPresentacionEdit,
+    hayCambios,
+    guardarCambios: ejecutarGuardarCambios,
+  } = useProductosEdit();
+
+  const {
+    pagina,
+    perPage,
+    setPerPage,
+    busquedaInput,
+    setBusquedaInput,
+    categoriaFiltro,
+    setCategoriaFiltro,
+    ordenamiento,
+    handleOrdenar,
+    searchFields,
+    toggleCampoBusqueda,
+    productosEnPagina,
+    totalFiltrados,
+    totalPaginas,
+    productosFiltrados,
+    navegarPagina: setPagina,
+  } = useProductosTable(productos);
+
+  const { data: marcasOptions = [] } = useSelect(getMarcasSelect, 'marcas');
+  const { data: categoriasOptions = [] } = useSelect(getCategorias, 'categorias');
+  const { data: tiposPresentacionOptions = [] } = useSelect(getTiposPresentacion, 'tiposPresentacion');
+
+  const [presentacionSeleccionadaPorProducto, setPresentacionSeleccionadaPorProducto] = useState({});
+  const [filaEditandoId, setFilaEditandoId] = useState(null);
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
-  const [searchFields, setSearchFields] = useState({
-    nombre: true,
-    codigoBarra: true,
-    descripcion: true,
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [columnasVisibles, setColumnasVisibles] = useState(() => ({
+    codigo: Boolean(mostrarCodigo),
     categoria: true,
     tamano: true,
-    unidad: true,
     precio: true,
     stock: true,
-  });
+  }));
 
-  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
-  const [copyFields, setCopyFields] = useState({
+  const [searchFields_local, setSearchFields_local] = useState({
     nombre: true,
     codigoBarra: true,
     precio: false,
@@ -57,183 +185,284 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     unidad: false,
     descripcion: false,
   });
+
   const inputBusquedaRef = useRef(null);
   const filaProductoRef = useRef({});
   const tablaRef = useRef(null);
   const categoryFilterRef = useRef(null);
   const copyMenuRef = useRef(null);
   const searchMenuRef = useRef(null);
+  const columnsMenuRef = useRef(null);
   const scopeRef = useRef(null);
 
-  const cargarProductos = useCallback(async () => {
+  const setQueryParams = useCallback((patch = {}) => {
+    const params = new URLSearchParams(searchParams?.toString?.() || '');
+    for (const [k, v] of Object.entries(patch)) {
+      if (v == null || v === '') params.delete(k);
+      else params.set(k, String(v));
+    }
+    const qs = params.toString();
+    router.replace(qs ? `/listadoProductos?${qs}` : '/listadoProductos', { scroll: false });
+  }, [router, searchParams]);
+
+  const abrirAbmEditar = useCallback((productoId) => {
+    if (!productoId) return;
+    setQueryParams({ edit: productoId, codigoBarra: null });
+    window?.scrollTo?.({ top: 0, behavior: 'smooth' });
+  }, [setQueryParams]);
+
+  const cargarProductos = useCallback(async ({ force = false } = {}) => {
     try {
       setLoading(true);
+      // Cache simple para evitar doble POST de montaje (StrictMode dev)
+      if (!force && Array.isArray(productosCache) && productosCache.length >= 0) {
+        const ageMs = Date.now() - (productosCacheAt || 0);
+        if (ageMs < 30_000) {
+          setProductos(productosCache);
+          setLoading(false);
+          return;
+        }
+      }
+
       const { productos: productosData = [] } = await getProductos({ take: 10000 }) || {};
       const lista = Array.isArray(productosData) ? productosData : [];
       setProductos(lista);
-      setTotal(lista.length);
-
-      // Derivar categorías desde el mismo fetch (evita duplicar requests)
-      const cats = [...new Set(
-        lista.flatMap((p) => p.categorias?.map((c) => c.nombre) || [])
-      )]
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b, 'es'));
-      setCategoriasUnicas(cats);
+      productosCache = lista;
+      productosCacheAt = Date.now();
     } catch (error) {
       console.error('Error cargando productos:', error);
       setProductos([]);
-      setTotal(0);
-      setCategoriasUnicas([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (!copyMenuOpen) return;
+    cargarProductos();
+  }, [cargarProductos]);
 
+  const guardarCambios = useCallback(async () => {
+    if (!hayCambios) return;
+    try {
+      const entries = Object.entries(editsProductos || {});
+
+      const presentacionesPayload = Object.entries(editsPresentaciones || {})
+        .filter(([presentacionId]) => presentacionId && !String(presentacionId).startsWith('__new__'))
+        .map(([presentacionId, edit]) => ({ presentacionId, ...(edit || {}) }));
+
+      const nuevos = entries
+        .filter(([id]) => String(id).startsWith('__new__'))
+        .map(([tempId, edit]) => ({ tempId, ...(edit || {}) }));
+
+      const existentes = entries
+        .filter(([id]) => !String(id).startsWith('__new__'))
+        .map(([id, edit]) => ({ id, ...(edit || {}) }))
+        .filter((x) => x && x.id);
+
+      // 1) Crear nuevos productos (alta rápida en tabla)
+      for (const n of nuevos) {
+        const codigo = (n.codigoBarra ?? '').toString().trim();
+        const nombre = (n.nombre ?? '').toString().trim();
+        if (!codigo) throw new Error('Nuevo producto: falta código de barras');
+        if (!nombre) throw new Error('Nuevo producto: falta nombre');
+
+        const categoriaId = n.categoriaId ? String(n.categoriaId) : null;
+        const marcaId = n.marcaId ? String(n.marcaId) : null;
+
+        const resCrear = await guardarProducto({
+          id: '',
+          codigoBarra: codigo,
+          nombre,
+          descripcion: n.descripcion ?? '',
+          size: n.size ?? '',
+          unidad: n.unidad ?? '',
+          stockSuelto: n.stockSuelto ?? 0,
+          imagen: '',
+          marcaId: marcaId || '',
+          proveedores: [],
+          categorias: categoriaId ? [{ id: categoriaId, nombre: '' }] : [],
+          presentaciones: [],
+        });
+        if (resCrear?.error) throw new Error(resCrear?.msg || 'Error creando nuevo producto');
+
+        const productoCreadoId = resCrear?.data?.id;
+        if (!productoCreadoId) throw new Error('Error creando nuevo producto (sin id)');
+
+        if (n.precio !== undefined && n.precio !== null && n.precio !== '') {
+          const rPrecio = await actualizarPrecioProducto({
+            productoId: productoCreadoId,
+            nuevoPrecio: n.precio,
+            motivo: 'alta_listado',
+          });
+          if (rPrecio?.error) throw new Error(rPrecio?.msg || 'Error guardando precio inicial');
+        }
+      }
+
+      // 2) Guardar cambios de productos existentes
+      if (existentes.length > 0 || presentacionesPayload.length > 0) {
+        const res = await guardarCambiosListadoProductos({
+          productos: existentes,
+          presentaciones: presentacionesPayload,
+          motivo: 'edicion_listado',
+        });
+        if (res?.error) throw new Error(res.msg || 'No se pudieron guardar los cambios');
+      }
+
+      addNotification({ type: 'success', message: `✓ Cambios guardados` });
+      setProductoEdit({});
+      setPresentacionEdit({});
+      setFilaEditandoId(null);
+      await cargarProductos({ force: true });
+    } catch (e) {
+      console.error(e);
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error guardando cambios'}` });
+    }
+  }, [hayCambios, editsProductos, editsPresentaciones, addNotification, cargarProductos, setProductoEdit, setPresentacionEdit]);
+
+  useEffect(() => {
+    if (!copyMenuOpen) return;
     const onMouseDown = (e) => {
       if (!copyMenuRef.current) return;
       if (!copyMenuRef.current.contains(e.target)) setCopyMenuOpen(false);
     };
-
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [copyMenuOpen]);
 
   useEffect(() => {
     if (!searchMenuOpen) return;
-
     const onMouseDown = (e) => {
       if (!searchMenuRef.current) return;
       if (!searchMenuRef.current.contains(e.target)) setSearchMenuOpen(false);
     };
-
     document.addEventListener('mousedown', onMouseDown);
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [searchMenuOpen]);
 
-  const toggleCampoBusqueda = useCallback((key) => {
-    setSearchFields((prev) => ({ ...prev, [key]: !prev[key] }));
-    setPagina(1);
-  }, []);
-
   useEffect(() => {
-    cargarProductos();
-  }, [cargarProductos]);
-
-  // Debounce de búsqueda (evita recalcular filtros/orden en cada tecla)
-  useEffect(() => {
-    const debounced = debounce((value) => {
-      setBusquedaProducto(value);
-    }, 250);
-
-    debounced(busquedaInput);
-
-    return () => {
-      debounced.cancel?.();
+    if (!columnsMenuOpen) return;
+    const onMouseDown = (e) => {
+      if (!columnsMenuRef.current) return;
+      if (!columnsMenuRef.current.contains(e.target)) setColumnsMenuOpen(false);
     };
-  }, [busquedaInput]);
+    document.addEventListener('mousedown', onMouseDown);
+    return () => document.removeEventListener('mousedown', onMouseDown);
+  }, [columnsMenuOpen]);
 
-  const handleOrdenar = useCallback((columna) => {
-    setOrdenamiento((prev) => {
-      const direccion = prev.columna === columna && prev.direccion === 'asc' ? 'desc' : 'asc';
-      return { columna, direccion };
-    });
-    setPagina(1);
-  }, []);
+  const productoPorId = useMemo(() => {
+    const map = new Map();
+    for (const p of productos) map.set(p.id, p);
+    return map;
+  }, [productos]);
 
-  const productosFiltrados = useMemo(() => {
-    const q = normalizarTexto(busquedaProducto);
-    const tokens = q.split(/\s+/).filter(Boolean);
-    if (tokens.length === 0 && !categoriaFiltro) return productos;
-
-    return productos.filter((producto) => {
-      const coincideCategoria = !categoriaFiltro || producto.categorias?.some((c) => c.nombre === categoriaFiltro);
-      if (!coincideCategoria) return false;
-      if (tokens.length === 0) return true;
-
-      const nombre = normalizarTexto(producto.nombre);
-      const descripcion = normalizarTexto(producto.descripcion);
-      const codigo = normalizarTexto(producto.codigoBarra);
-
-      const categorias = Array.isArray(producto.categorias)
-        ? producto.categorias.map((c) => normalizarTexto(c?.nombre)).filter(Boolean).join(' ')
-        : '';
-      const tamano = normalizarTexto(producto.size);
-      const unidad = normalizarTexto(producto.unidad);
-
-      const precioRaw = producto.precios?.[0]?.precio;
-      const precioNumero = precioRaw == null ? '' : String(precioRaw);
-      const precioLocale =
-        typeof precioRaw === 'number'
-          ? String(precioRaw.toLocaleString()).toLowerCase()
-          : '';
-
-      // "Stock" hoy se representa con size.
-      const stock = tamano;
-
-      const partes = [];
-      if (searchFields.nombre) partes.push(nombre);
-      if (searchFields.descripcion) partes.push(descripcion);
-      if (searchFields.codigoBarra) partes.push(codigo);
-      if (searchFields.categoria) partes.push(categorias);
-      if (searchFields.tamano) partes.push(tamano);
-      if (searchFields.unidad) partes.push(unidad);
-      if (searchFields.precio) partes.push(precioNumero, precioLocale);
-      if (searchFields.stock) partes.push(stock);
-
-      const searchable = partes.filter(Boolean).join(' ');
-      return tokens.every((t) => searchable.includes(t));
-    });
-  }, [productos, busquedaProducto, categoriaFiltro, searchFields]);
-
-  const productosOrdenados = useMemo(() => {
-    if (!ordenamiento.columna) return productosFiltrados;
-
-    const dir = ordenamiento.direccion === 'asc' ? 1 : -1;
-    const col = ordenamiento.columna;
-    return [...productosFiltrados].sort((a, b) => {
-      let valorA;
-      let valorB;
-
-      switch (col) {
-        case 'nombre':
-          valorA = normalizarTexto(a.nombre);
-          valorB = normalizarTexto(b.nombre);
-          break;
-        case 'categoria':
-          valorA = normalizarTexto(a.categorias?.[0]?.nombre);
-          valorB = normalizarTexto(b.categorias?.[0]?.nombre);
-          break;
-        case 'tamaño':
-          valorA = a.size || 0;
-          valorB = b.size || 0;
-          break;
-        case 'precio':
-          valorA = a.precios?.[0]?.precio || 0;
-          valorB = b.precios?.[0]?.precio || 0;
-          break;
-        case 'stock':
-          // En este proyecto hoy se muestra “stock” con size (no hay campo stock en el modelo)
-          valorA = a.size || 0;
-          valorB = b.size || 0;
-          break;
-        default:
-          return 0;
+  const handleEliminarProducto = async (producto) => {
+    console.log('[CLIENTE] userName:', userName);
+    await alertaBorrarProducto(producto, async () => {
+      console.log('[CLIENTE] Antes de eliminar, userName:', userName);
+      const resultado = await eliminarProductoConPreciosPorId(producto.id, userName);
+      console.log('[CLIENTE] Resultado:', resultado);
+      
+      if (!resultado.error && resultado.undoData) {
+        addNotification({
+          type: 'success',
+          message: `✓ ${producto.nombre} eliminado`,
+          action: {
+            label: '↶ Deshacer',
+            onClick: async () => {
+              const undoResult = await restaurarProducto(resultado.undoData);
+              if (undoResult.success) {
+                addNotification({
+                  type: 'success',
+                  message: `✓ ${resultado.undoData.nombre} restaurado`,
+                });
+                cargarProductos({ force: true });
+              } else {
+                addNotification({
+                  type: 'error',
+                  message: `✗ Error al restaurar: ${undoResult.error}`,
+                });
+              }
+            }
+          }
+        });
       }
-
-      if (valorA < valorB) return -1 * dir;
-      if (valorA > valorB) return 1 * dir;
-      return 0;
     });
-  }, [productosFiltrados, ordenamiento]);
+    cargarProductos({ force: true });
+  };
 
-  const totalFiltrados = productosOrdenados.length;
-  const perPageEsAll = perPage === 'all';
-  const perPageNum = perPageEsAll ? Math.max(totalFiltrados, 1) : Number(perPage) || 5;
-  const totalPaginas = perPageEsAll ? 1 : Math.max(1, Math.ceil(totalFiltrados / perPageNum));
+  const handleSearchFilterNavigateNext = () => {
+    categoryFilterRef.current?.focus();
+  };
+
+  const limpiarSeleccion = () => {
+    setProductosSeleccionados([]);
+  };
+
+  const toggleCampoCopiado = (campo) => {
+    setSearchFields_local((prev) => {
+      const next = { ...prev, [campo]: !prev[campo] };
+      const algunoSeleccionado = Object.values(next).some(Boolean);
+      if (!algunoSeleccionado) return { ...next, nombre: true };
+      return next;
+    });
+  };
+
+  const formatearLineaCopiado = (prod) => {
+    if (!prod) return '';
+
+    const partes = [];
+    if (searchFields_local.nombre) partes.push(prod.nombre);
+    if (searchFields_local.codigoBarra) partes.push(prod.codigoBarra ? `(${prod.codigoBarra})` : '');
+    if (searchFields_local.precio) {
+      const precio = prod.precios?.[0]?.precio;
+      partes.push(typeof precio === 'number' ? `$${precio.toLocaleString()}` : '');
+    }
+    if (searchFields_local.categoria) partes.push(prod.categorias?.[0]?.nombre);
+    if (searchFields_local.tamano) partes.push((prod.size ?? 0).toString());
+    if (searchFields_local.unidad) partes.push(prod.unidad);
+    if (searchFields_local.descripcion) partes.push(prod.descripcion);
+
+    return partes
+      .map((p) => (p ?? '').toString().trim())
+      .filter(Boolean)
+      .join(' ');
+  };
+
+  const copiarSeleccionados = () => {
+    const datos = productosSeleccionados
+      .map((id) => formatearLineaCopiado(productos.find((p) => p.id === id)))
+      .filter(Boolean)
+      .join('\n');
+    navigator.clipboard.writeText(datos)
+      .then(() => {
+        showError('Productos copiados al portapapeles');
+      })
+      .catch(() => {
+        showError('No se pudo copiar al portapapeles');
+      });
+  };
+
+  const filasEnPagina = useMemo(() => {
+    const list = Array.isArray(productosEnPagina) ? productosEnPagina : [];
+    const rows = [];
+    for (const p of list) {
+      if (!p?.id) continue;
+      rows.push({ id: p.id, selectId: p.id, tipo: 'producto', productoId: p.id });
+      const presentaciones = Array.isArray(p?.presentaciones) ? p.presentaciones : [];
+      for (const pres of presentaciones) {
+        if (!pres?.id) continue;
+        if (pres?.esUnidadBase) continue; // obviar base en navegación/lista
+        rows.push({
+          id: `${p.id}::pres::${pres.id}`,
+          selectId: p.id,
+          tipo: 'presentacion',
+          productoId: p.id,
+          presentacionId: pres.id,
+        });
+      }
+    }
+    return rows;
+  }, [productosEnPagina]);
 
   const {
     productoFocused,
@@ -242,15 +471,13 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     setProductosSeleccionados,
     toggleProductoSeleccionado,
     handleInputKeyDown,
-    handleCategoryFilterNavigateNext,
-    handleCategoryFilterNavigatePrev,
     handleProductoKeyDown,
     handleTableWheel,
   } = useKeyboard({
-    itemsOrdenados: productosOrdenados,
+    itemsOrdenados: filasEnPagina,
     pagina,
-    perPageEsAll,
-    perPageNum,
+    perPageEsAll: perPage === 'all',
+    perPageNum: perPage === 'all' ? Math.max(totalFiltrados, 1) : Number(perPage) || 5,
     totalPaginas,
     setPagina,
     inputBusquedaRef,
@@ -263,32 +490,111 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     scopeRef,
   });
 
-  const productosEnPagina = useMemo(() => {
-    if (perPageEsAll) return productosOrdenados;
-    const inicio = (pagina - 1) * perPageNum;
-    return productosOrdenados.slice(inicio, inicio + perPageNum);
-  }, [productosOrdenados, pagina, perPageEsAll, perPageNum]);
-
   const todosSeleccionados = useMemo(() => {
-    if (productosOrdenados.length === 0) return false;
-    return productosOrdenados.every((p) => productosSeleccionados.includes(p.id));
-  }, [productosOrdenados, productosSeleccionados]);
+    if (productosFiltrados.length === 0) return false;
+    return productosFiltrados.every((p) => productosSeleccionados.includes(p.id));
+  }, [productosFiltrados, productosSeleccionados]);
 
   const idsDeTodosLosProductos = useMemo(
-    () => productosOrdenados.map((p) => p.id).filter(Boolean),
-    [productosOrdenados]
+    () => productosFiltrados.map((p) => p.id).filter(Boolean),
+    [productosFiltrados]
   );
 
-  const handlePerPageChange = (nuevoPerPage) => {
-    setPerPage(nuevoPerPage === 'all' ? 'all' : Number(nuevoPerPage));
-    setPagina(1);
-  };
+  const agregarNuevoProductoEnTabla = useCallback(() => {
+    const tempId = `__new__${Date.now()}`;
+    const nuevo = {
+      id: tempId,
+      nombre: '',
+      codigoBarra: '',
+      descripcion: '',
+      size: '',
+      unidad: '',
+      stockSuelto: 0,
+      marcaId: '',
+      marca: null,
+      categorias: [],
+      precios: [{ precio: 0 }],
+      presentaciones: [],
+      proveedores: [],
+    };
 
-  // Si cambian filtros/orden/cantidad y la página queda fuera de rango, corregirla
-  useEffect(() => {
-    if (pagina > totalPaginas) setPagina(totalPaginas);
-    if (pagina < 1) setPagina(1);
-  }, [pagina, totalPaginas]);
+    setProductos((prev) => [nuevo, ...(Array.isArray(prev) ? prev : [])]);
+    setModoEdicionManual(true);
+    setFilaEditandoId(tempId);
+    setProductoFocused(tempId);
+    setProductoEdit((prev) => ({
+      ...(prev || {}),
+      [tempId]: {
+        nombre: '',
+        codigoBarra: '',
+        descripcion: '',
+        size: '',
+        unidad: '',
+        stockSuelto: 0,
+        marcaId: null,
+        categoriaId: null,
+        precio: 0,
+      },
+    }));
+  }, [setModoEdicionManual, setProductoEdit, setProductoFocused]);
+
+  const agregarPresentacionInline = useCallback(async ({ productoId, nombre, tipoPresentacionId, cantidad, unidadMedida }) => {
+    if (!productoId) return;
+    try {
+      const res = await guardarPresentacion({
+        id: '',
+        productoId,
+        nombre: (nombre ?? '').toString().trim(),
+        tipoPresentacionId: String(tipoPresentacionId || ''),
+        cantidad: Number(cantidad) || 1,
+        unidadMedida: (unidadMedida ?? '').toString().trim(),
+        contenidoPorUnidad: null,
+        unidadContenido: null,
+      });
+      if (res?.error) throw new Error(res?.msg || 'No se pudo crear la presentación');
+      addNotification({ type: 'success', message: '✓ Presentación agregada' });
+      await cargarProductos({ force: true });
+    } catch (e) {
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error agregando presentación'}` });
+    }
+  }, [addNotification, cargarProductos]);
+
+  const eliminarPresentacionInline = useCallback(async (presentacionId) => {
+    if (!presentacionId) return;
+    const ok = window.confirm('¿Eliminar esta presentación?');
+    if (!ok) return;
+    try {
+      const res = await eliminarPresentacion(presentacionId);
+      if (res?.error) throw new Error(res?.msg || 'No se pudo eliminar la presentación');
+      addNotification({ type: 'success', message: '✓ Presentación eliminada' });
+      await cargarProductos({ force: true });
+    } catch (e) {
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error eliminando presentación'}` });
+    }
+  }, [addNotification, cargarProductos]);
+
+  const abrirCajaInline = useCallback(async (presentacionId) => {
+    if (!presentacionId) return;
+    try {
+      const res = await abrirPresentacion({ presentacionId, cantidad: 1 });
+      if (res?.error) throw new Error(res?.msg || 'No se pudo abrir la caja');
+      addNotification({ type: 'success', message: `✓ Caja abierta` });
+      await cargarProductos({ force: true });
+    } catch (e) {
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error abriendo caja'}` });
+    }
+  }, [addNotification, cargarProductos]);
+
+  const cancelarEdicion = useCallback(() => {
+    setModoEdicionManual(false);
+    setProductoEdit({});
+    setPresentacionEdit({});
+    setFilaEditandoId(null);
+  }, [setModoEdicionManual, setProductoEdit, setPresentacionEdit]);
+
+  const handlePerPageChange = (nuevoPerPage) => {
+    setPerPage(nuevoPerPage);
+  };
 
   const goToNextPage = () => {
     if (pagina < totalPaginas) {
@@ -320,7 +626,9 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     const fin = Math.min(totalPaginas, pagina + 2);
     return Array.from({ length: fin - inicio + 1 }, (_, i) => inicio + i);
   }, [pagina, totalPaginas]);
-  const { addNotification } = useNotification();
+
+
+  // (UX nueva) Se dejó de usar el expand/celdas editables por click.
 
   const HeaderConPaginacion = ({ icono, titulo }) => (
     <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
@@ -441,95 +749,6 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     </div>
   );
 
-  const handleEliminarProducto = async (producto) => {
-    console.log('[CLIENTE] userName:', userName);
-    await alertaBorrarProducto(producto, async () => {
-      console.log('[CLIENTE] Antes de eliminar, userName:', userName);
-      const resultado = await eliminarProductoConPreciosPorId(producto.id, userName);
-      console.log('[CLIENTE] Resultado:', resultado);
-      
-      if (!resultado.error && resultado.undoData) {
-        // Mostrar notificación con opción de deshacer
-        addNotification({
-          type: 'success',
-          message: `✓ ${producto.nombre} eliminado`,
-          action: {
-            label: '↶ Deshacer',
-            onClick: async () => {
-              const undoResult = await restaurarProducto(resultado.undoData);
-              if (undoResult.success) {
-                addNotification({
-                  type: 'success',
-                  message: `✓ ${resultado.undoData.nombre} restaurado`,
-                });
-                cargarProductos();
-              } else {
-                addNotification({
-                  type: 'error',
-                  message: `✗ Error al restaurar: ${undoResult.error}`,
-                });
-              }
-            }
-          }
-        });
-      }
-    });
-    cargarProductos(); // Recargar la lista después de eliminar
-  };
-
-  const handleSearchFilterNavigateNext = () => {
-    // Tab en el FilterSelect de búsqueda - ir a categorías
-    categoryFilterRef.current?.focus();
-  };
-
-  const limpiarSeleccion = () => {
-    setProductosSeleccionados([]);
-  };
-
-  const toggleCampoCopiado = (campo) => {
-    setCopyFields((prev) => {
-      const next = { ...prev, [campo]: !prev[campo] };
-      const algunoSeleccionado = Object.values(next).some(Boolean);
-      if (!algunoSeleccionado) return { ...next, nombre: true };
-      return next;
-    });
-  };
-
-  const formatearLineaCopiado = (prod) => {
-    if (!prod) return '';
-
-    const partes = [];
-    if (copyFields.nombre) partes.push(prod.nombre);
-    if (copyFields.codigoBarra) partes.push(prod.codigoBarra ? `(${prod.codigoBarra})` : '');
-    if (copyFields.precio) {
-      const precio = prod.precios?.[0]?.precio;
-      partes.push(typeof precio === 'number' ? `$${precio.toLocaleString()}` : '');
-    }
-    if (copyFields.categoria) partes.push(prod.categorias?.[0]?.nombre);
-    if (copyFields.tamano) partes.push((prod.size ?? 0).toString());
-    if (copyFields.unidad) partes.push(prod.unidad);
-    if (copyFields.descripcion) partes.push(prod.descripcion);
-
-    return partes
-      .map((p) => (p ?? '').toString().trim())
-      .filter(Boolean)
-      .join(' ');
-  };
-
-  const copiarSeleccionados = () => {
-    const datos = productosSeleccionados
-      .map((id) => formatearLineaCopiado(productos.find((p) => p.id === id)))
-      .filter(Boolean)
-      .join('\n');
-    navigator.clipboard.writeText(datos)
-      .then(() => {
-        showError('Productos copiados al portapapeles');
-      })
-      .catch(() => {
-        showError('No se pudo copiar al portapapeles');
-      });
-  };
-
   // Componente para vista de lista moderna
   const VistaLista = () => {
     // Función auxiliar para renderizar header con ordenamiento
@@ -538,12 +757,12 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
       return (
         <th 
           onClick={() => handleOrdenar(columna)}
-          className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+          className="px-3 py-2 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider cursor-pointer hover:bg-gray-200 transition-colors"
         >
           <div className="flex items-center gap-1 whitespace-nowrap">
             {children}
             {esActivo && (
-              <span className="text-gray-700 font-bold">
+              <span className="text-gray-900 font-bold text-lg">
                 {ordenamiento.direccion === 'asc' ? '▲' : '▼'}
               </span>
             )}
@@ -553,109 +772,212 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     };
 
     return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      {/* Barra de selección múltiple */}
-      {productosSeleccionados.length > 0 && (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-blue-900">
-              {productosSeleccionados.length} producto{productosSeleccionados.length !== 1 ? 's' : ''} seleccionado{productosSeleccionados.length !== 1 ? 's' : ''}
-            </span>
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      <div className="sticky top-0 z-30 bg-white">
+        {/* Header con paginación */}
+        <HeaderConPaginacion icono="list" titulo="Vista de Lista" />
+
+        {/* Alta rápida en tabla */}
+        <div className="px-4 py-2 border-b border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={agregarNuevoProductoEnTabla}
+                className="px-3 py-2 text-sm font-medium rounded bg-gray-800 text-white hover:bg-gray-900"
+                title="Crear producto nuevo como renglón editable"
+              >
+                Nuevo producto
+              </button>
+            </div>
+            <div className="text-xs text-gray-500">
+              Completá el renglón nuevo y tocá Guardar cambios.
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div ref={copyMenuRef} className="relative">
-              <div className="flex">
-                <button
-                  onClick={copiarSeleccionados}
-                  className="px-3 py-1 text-sm font-medium rounded-l bg-blue-600 text-white hover:bg-blue-700 transition-colors flex items-center gap-1"
-                  title="Copiar al portapapeles"
-                >
-                  <Icon icono="copy" className="text-sm" />
-                  Copiar
-                </button>
-                <button
-                  onClick={() => setCopyMenuOpen((v) => !v)}
-                  className="px-2 py-1 text-sm font-medium rounded-r bg-blue-600 text-white hover:bg-blue-700 transition-colors border-l border-blue-700"
-                  title="Opciones de copia"
-                  aria-expanded={copyMenuOpen}
-                >
-                  ▾
-                </button>
-              </div>
+        </div>
 
-              {copyMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-2 z-20">
-                  <div className="text-sm font-medium text-gray-700 px-1 pb-2">
-                    Campos a copiar
-                  </div>
-
-                  <div className="space-y-2">
-                    {[
-                      { key: 'nombre', label: 'Nombre' },
-                      { key: 'codigoBarra', label: 'Código de barras' },
-                      { key: 'precio', label: 'Precio' },
-                      { key: 'categoria', label: 'Categoría' },
-                      { key: 'tamano', label: 'Tamaño' },
-                      { key: 'unidad', label: 'Unidad' },
-                      { key: 'descripcion', label: 'Descripción' },
-                    ].map(({ key, label }) => (
-                      <label key={key} className="flex items-center gap-2 text-sm text-gray-700 px-1 select-none">
-                        <input
-                          type="checkbox"
-                          checked={!!copyFields[key]}
-                          onChange={() => toggleCampoCopiado(key)}
-                          className="w-4 h-4"
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="pt-2 flex justify-end">
+        {/* Modo + Guardar general */}
+        <div className="px-4 py-2 border-b border-gray-200 bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            {productosSeleccionados.length > 0 && (
+              <>
+                <div className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  {productosSeleccionados.length} seleccionado{productosSeleccionados.length !== 1 ? 's' : ''}
+                </div>
+                <div ref={copyMenuRef} className="relative">
+                  <div className="flex">
                     <button
-                      onClick={() => {
-                        copiarSeleccionados();
-                        setCopyMenuOpen(false);
-                      }}
-                      className="px-3 py-1 text-sm font-medium rounded bg-gray-800 text-white hover:bg-gray-900 transition-colors"
-                      title="Copiar con estos campos"
+                      onClick={copiarSeleccionados}
+                      className="px-3 py-2 text-sm font-medium rounded-l bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors flex items-center gap-1"
+                      title="Copiar selección"
                     >
+                      <Icon icono="copy" className="text-sm" />
                       Copiar
                     </button>
+                    <button
+                      onClick={() => setCopyMenuOpen((v) => !v)}
+                      className="px-2 py-2 text-sm font-medium rounded-r bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors border-l border-gray-300"
+                      title="Opciones de copia"
+                      aria-expanded={copyMenuOpen}
+                    >
+                      ▾
+                    </button>
+                    <button
+                      onClick={limpiarSeleccion}
+                      className="ml-2 px-3 py-2 text-sm font-medium rounded bg-gray-200 text-gray-900 hover:bg-gray-300 transition-colors flex items-center gap-1"
+                      title="Limpiar selección"
+                    >
+                      <Icon icono="times" className="text-sm" />
+                      Limpiar
+                    </button>
                   </div>
+
+                  {copyMenuOpen && (
+                    <div className="absolute left-0 mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-sm p-2 z-20">
+                      <div className="text-sm font-medium text-gray-700 px-1 pb-2">
+                        Campos a copiar
+                      </div>
+
+                      <div className="space-y-2">
+                        {[
+                          { key: 'nombre', label: 'Nombre' },
+                          { key: 'codigoBarra', label: 'Código de barras' },
+                          { key: 'precio', label: 'Precio' },
+                          { key: 'categoria', label: 'Categoría' },
+                          { key: 'tamano', label: 'Tamaño' },
+                          { key: 'unidad', label: 'Unidad' },
+                          { key: 'descripcion', label: 'Descripción' },
+                        ].map(({ key, label }) => (
+                          <label key={key} className="flex items-center gap-2 text-sm text-gray-700 px-1 select-none">
+                            <input
+                              type="checkbox"
+                              checked={!!searchFields_local[key]}
+                              onChange={() => toggleCampoCopiado(key)}
+                              className="w-4 h-4"
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => {
+                            copiarSeleccionados();
+                            setCopyMenuOpen(false);
+                          }}
+                          className="px-3 py-1 text-sm font-medium rounded bg-gray-800 text-white hover:bg-gray-900 transition-colors"
+                          title="Copiar con estos campos"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div ref={columnsMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setColumnsMenuOpen((v) => !v)}
+                className="px-3 py-2 text-sm font-medium rounded border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
+                title="Elegir columnas"
+                aria-expanded={columnsMenuOpen}
+              >
+                Columnas ▾
+              </button>
+              {columnsMenuOpen && (
+                <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-sm p-2 z-20">
+                  <div className="text-sm font-medium text-gray-700 px-1 pb-2">Mostrar</div>
+                  {(
+                    [
+                      { key: 'codigo', label: 'Código' },
+                      { key: 'categoria', label: 'Categoría' },
+                      { key: 'tamano', label: 'Tamaño' },
+                      { key: 'precio', label: 'Precio' },
+                      { key: 'stock', label: 'Stock' },
+                    ]
+                  ).map((c) => {
+                    const disabled = c.key === 'codigo' && !mostrarCodigo;
+                    const checked = Boolean(columnasVisibles?.[c.key]) && !disabled;
+                    return (
+                      <label
+                        key={c.key}
+                        className={`flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={disabled}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            setColumnasVisibles((prev) => ({ ...(prev || {}), [c.key]: next }));
+                          }}
+                        />
+                        <span className="text-sm text-gray-700">{c.label}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>
+
             <button
-              onClick={limpiarSeleccion}
-              className="px-3 py-1 text-sm font-medium rounded bg-gray-300 text-gray-900 hover:bg-gray-400 transition-colors flex items-center gap-1"
-              title="Limpiar selección"
+              type="button"
+              onClick={() => {
+                if (!modoEdicionManual) {
+                  setModoEdicionManual(true);
+                  return;
+                }
+                if (!hayCambios) {
+                  cancelarEdicion();
+                  return;
+                }
+                guardarCambios();
+              }}
+              disabled={guardandoCambios}
+              className="px-3 py-2 text-sm font-medium rounded bg-gray-800 text-white hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={!modoEdicionManual ? 'Entrar en modo edición' : (!hayCambios ? 'Cancelar edición' : 'Guardar')}
             >
-              <Icon icono="times" className="text-sm" />
-              Limpiar
+              {guardandoCambios
+                ? 'Guardando…'
+                : (!modoEdicionManual ? 'Editar' : (hayCambios ? 'Guardar' : 'Cancelar'))}
             </button>
+
+            {modoEdicionManual && hayCambios && (
+              <button
+                type="button"
+                onClick={cancelarEdicion}
+                className="px-3 py-2 text-sm font-medium rounded border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
+                title="Descartar cambios y salir"
+              >
+                Cancelar
+              </button>
+            )}
           </div>
         </div>
-      )}
-      {/* Header con paginación */}
-      <HeaderConPaginacion icono="list" titulo="Vista de Lista" />
+      </div>
+      </div>
 
       {/* Tabla */}
-      <div className="overflow-hidden">
+      <div className="overflow-x-auto border border-gray-200 rounded-lg">
         <table ref={tablaRef} onWheel={handleTableWheel} className="w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50 border-b border-gray-200">
+          <thead className="bg-gray-50">
             <tr>
-              <th className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider w-12">
+              <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700 w-12 sticky left-0 bg-gray-50 z-10">
                 <div className="flex items-center justify-center">
                   <input
                     type="checkbox"
                     checked={todosSeleccionados}
                     onChange={(e) => {
                       if (e.target.checked) {
-                        // TODO absoluto: seleccionar todos los productos del listado (no solo la página)
                         setProductosSeleccionados(idsDeTodosLosProductos);
                       } else {
-                        // TODO absoluto: limpiar toda la selección
                         setProductosSeleccionados([]);
                       }
                     }}
@@ -667,169 +989,70 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
               <HeaderColumna columna="nombre">
                 <span className="min-w-0 flex-1">Producto</span>
               </HeaderColumna>
-              {mostrarCodigo && (
-                <th className="px-3 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider w-24">
+              {mostrarCodigo && columnasVisibles.codigo && (
+                <th className="px-3 py-2 text-left text-sm font-semibold text-gray-700 w-32">
                   Código
                 </th>
               )}
-              <HeaderColumna columna="categoria">
-                <span className="w-32">Categoría</span>
-              </HeaderColumna>
-              <HeaderColumna columna="tamaño">
-                <span className="w-24">Tamaño</span>
-              </HeaderColumna>
-              <HeaderColumna columna="precio">
-                <span className="w-28">Precio</span>
-              </HeaderColumna>
-              <HeaderColumna columna="stock">
-                <span className="w-24 text-center">Stock</span>
-              </HeaderColumna>
-              <th className="px-3 py-3 text-center text-sm font-medium text-gray-500 uppercase tracking-wider w-36">
+              {columnasVisibles.categoria && (
+                <HeaderColumna columna="categoria">
+                  <span className="w-40">Categoría</span>
+                </HeaderColumna>
+              )}
+              {columnasVisibles.tamano && (
+                <HeaderColumna columna="tamaño">
+                  <span className="w-32">Tamaño</span>
+                </HeaderColumna>
+              )}
+              {columnasVisibles.precio && (
+                <HeaderColumna columna="precio">
+                  <span className="w-32">Precio</span>
+                </HeaderColumna>
+              )}
+              {columnasVisibles.stock && (
+                <HeaderColumna columna="stock">
+                  <span className="w-24 text-center">Stock</span>
+                </HeaderColumna>
+              )}
+              <th className="px-3 py-2 text-center text-sm font-semibold text-gray-700 w-40 sticky right-0 bg-gray-50 z-10">
                 Acciones
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
-            {productosEnPagina.map((producto, indexEnPagina) => (
-              <tr
+          <tbody className="divide-y divide-gray-200 bg-white">
+            {productosEnPagina.map((producto) => (
+              <ProductoFila
                 key={producto.id}
-                ref={(el) => { if (el) filaProductoRef.current[producto.id] = el; }}
-                tabIndex={0}
+                producto={producto}
+                editable={modoEdicionManual}
+                activeRowId={filaEditandoId}
+                onSetActiveRowId={setFilaEditandoId}
+                marcasOptions={marcasOptions}
+                categoriasOptions={categoriasOptions}
+                tiposPresentacionOptions={tiposPresentacionOptions}
+                editsProductos={editsProductos}
+                editsPresentaciones={editsPresentaciones}
+                searchFields={searchFields}
+                mostrarCodigo={mostrarCodigo}
+                columnasVisibles={columnasVisibles}
+                onSetProductoEdit={setProductoEdit}
+                onSetPresentacionEdit={setPresentacionEdit}
+                onAgregarPresentacion={agregarPresentacionInline}
+                onEliminarPresentacion={eliminarPresentacionInline}
+                onAbrirCaja={abrirCajaInline}
+                onEliminarProducto={handleEliminarProducto}
+                onToggleSeleccion={toggleProductoSeleccionado}
+                esSeleccionado={productosSeleccionados.includes(producto.id)}
+                focusedRowId={productoFocused}
+                onSetFocused={setProductoFocused}
+                filaProductoRef={filaProductoRef}
                 onKeyDown={handleProductoKeyDown}
-                onFocus={(e) => {
-                  // En React, onFocus burbujea: si el foco es un hijo (checkbox/botón), no queremos "robar" el click.
-                  if (e.target !== e.currentTarget) return;
-                  setProductoFocused(producto.id);
+                calcularStockEquivalente={calcularStockEquivalente}
+                presentacionSeleccionadaPorProducto={presentacionSeleccionadaPorProducto}
+                onSetPresentacionSeleccionada={(id, presentacionId) => {
+                  setPresentacionSeleccionadaPorProducto((prev) => ({ ...prev, [id]: presentacionId }));
                 }}
-                className={`transition-colors cursor-pointer outline-none focus:outline-blue-400 focus:outline-2 ${
-                  productoFocused === producto.id
-                    ? 'bg-blue-100 border-l-4 border-l-blue-500'
-                    : 'hover:bg-gray-50 focus:bg-blue-50'
-                } ${productosSeleccionados.includes(producto.id) ? 'bg-green-50' : ''}`}
-                onClick={(e) => {
-                  // Ignorar clicks en botones, links y otros elementos interactivos
-                  const isInteractive = e.target.closest('button, a, input[type="checkbox"]');
-                  if (isInteractive) return;
-                  
-                  setProductoFocused(producto.id);
-                  filaProductoRef.current[producto.id]?.focus();
-                }}
-              >
-                <td className="px-3 py-3">
-                  <div className="flex items-center justify-center">
-                    <input
-                      type="checkbox"
-                      checked={productosSeleccionados.includes(producto.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggleProductoSeleccionado(producto.id);
-                      }}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0 h-8 w-8 relative">
-                      <ImageWithFallback
-                        src={producto.imagen}
-                        alt={producto.nombre}
-                        fill
-                        className="rounded object-cover"
-                      />
-                    </div>
-                    <div className="ml-3">
-                      <div className="text-base font-medium text-gray-900 line-clamp-1">
-                        {searchFields.nombre ? (
-                          <HighlightMatch text={producto.nombre} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
-                        ) : (
-                          producto.nombre
-                        )}
-                      </div>
-                      {producto.descripcion && (
-                        <div className="text-base text-gray-500 line-clamp-1">
-                          {searchFields.descripcion ? (
-                            <HighlightMatch text={producto.descripcion} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
-                          ) : (
-                            producto.descripcion
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                {mostrarCodigo && (
-                  <td className="px-3 py-3">
-                    <div className="text-sm text-gray-600 font-mono truncate">
-                      {searchFields.codigoBarra ? (
-                        <HighlightMatch text={producto.codigoBarra} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
-                      ) : (
-                        producto.codigoBarra
-                      )}
-                    </div>
-                  </td>
-                )}
-                <td className="px-3 py-3">
-                  <div className="text-sm text-gray-600 truncate">
-                    {producto.categorias?.[0]?.nombre || '-'}
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  <div className="text-sm text-gray-600">
-                    {producto.size || 0} {producto.unidad}
-                  </div>
-                </td>
-                <td className="px-3 py-3">
-                  {producto.precios && producto.precios[0] ? (
-                    <div className="text-base font-medium text-green-600">
-                      ${producto.precios[0].precio.toLocaleString()}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-gray-400">-</div>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-center">
-                  <div className="flex items-center justify-center">
-                    <span className={`text-base font-medium ${
-                      producto.size < 10 ? 'text-red-600' : 'text-gray-900'
-                    }`}>
-                      {producto.size || 0}
-                    </span>
-                    {producto.size < 10 && (
-                      <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-sm" />
-                    )}
-                  </div>
-                </td>
-                <td className="px-3 py-3 w-36">
-                  <div className="flex items-center justify-end space-x-1">
-                    <BotonAgregarPedido
-                      producto={producto}
-                      variant="outline"
-                      size="xs"
-                      onSuccess={() => {
-                        // Podríamos mostrar una notificación aquí
-                      }}
-                    />
-                    <Link
-                      href={`/cargarProductos?edit=${producto.id}`}
-                      className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition-colors"
-                      title="Editar producto"
-                    >
-                      <Icon icono="editar" className="text-sm" />
-                    </Link>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEliminarProducto(producto);
-                      }}
-                      className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      title="Eliminar producto"
-                    >
-                      <Icon icono="trash-can" className="text-sm" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              />
             ))}
           </tbody>
         </table>
@@ -847,7 +1070,12 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
       {/* Grid de productos */}
       <div className="p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {productosEnPagina.map((producto) => (
+          {productosEnPagina.map((producto) => {
+            const { stockSuelto, equivalenteDesdePresentaciones, totalEquivalente, baseId } = calcularStockEquivalente(producto);
+            const presentacionesNoBase = (producto.presentaciones || []).filter((p) => p?.id && p.id !== baseId);
+            const basePresentacion = (producto.presentaciones || []).find((p) => p?.id === baseId);
+
+            return (
             <div key={producto.id} className="bg-gray-50 rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow duration-300">
               {/* Imagen del producto */}
               <div className="bg-gray-200 relative w-full h-48">
@@ -865,14 +1093,14 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   <div className="flex items-start justify-between mb-2 gap-2">
                     <h3 className="text-base font-semibold text-gray-900 line-clamp-2">
                       {searchFields.nombre ? (
-                        <HighlightMatch text={producto.nombre} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                        <HighlightMatch text={producto.nombre} filter={busquedaInput} highlightClass="bg-green-200 rounded px-0.5" />
                       ) : (
                         producto.nombre
                       )}
                     </h3>
                     <span className="bg-gray-100 text-gray-800 text-sm font-medium px-1.5 py-0.5 rounded flex-shrink-0">
                       {searchFields.codigoBarra ? (
-                        <HighlightMatch text={producto.codigoBarra} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                        <HighlightMatch text={producto.codigoBarra} filter={busquedaInput} highlightClass="bg-green-200 rounded px-0.5" />
                       ) : (
                         producto.codigoBarra
                       )}
@@ -882,7 +1110,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   {producto.descripcion && (
                     <p className="text-sm text-gray-600 line-clamp-2 mb-3">
                       {searchFields.descripcion ? (
-                        <HighlightMatch text={producto.descripcion} filter={busquedaProducto} highlightClass="bg-yellow-100 rounded px-0.5" />
+                        <HighlightMatch text={producto.descripcion} filter={busquedaInput} highlightClass="bg-green-200 rounded px-0.5" />
                       ) : (
                         producto.descripcion
                       )}
@@ -908,15 +1136,49 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                     <div className="flex items-center justify-between">
                       <span className="text-gray-600">Stock:</span>
                       <span className="flex items-center">
-                        <span className={`font-medium ${producto.size < 10 ? 'text-red-600' : 'text-gray-900'}`}>
-                          {producto.size || 0}
+                        <span className={`font-medium ${totalEquivalente < 10 ? 'text-red-600' : 'text-gray-900'}`}>
+                          {totalEquivalente}
                         </span>
-                        {producto.size < 10 && (
+                        {totalEquivalente < 10 && (
                           <Icon icono="exclamation-triangle" className="text-red-600 ml-1 text-sm" />
                         )}
                       </span>
                     </div>
+                    <div className="text-xs text-gray-500 flex items-center justify-between">
+                      <span>Suelto: {stockSuelto}</span>
+                      <span>Pres.: +{equivalenteDesdePresentaciones}</span>
+                    </div>
                   </div>
+
+                  {Boolean(CONTROL_PANEL?.productos?.listado?.presentacionesAbiertasPorDefecto) && (
+                    <div className="mt-3 border-t border-gray-200 pt-3">
+                      <div className="text-xs font-medium text-gray-700 mb-2">
+                        Presentaciones
+                        {basePresentacion?.nombre ? (
+                          <span className="text-gray-500 font-normal"> · Base: {basePresentacion.nombre}</span>
+                        ) : (
+                          <span className="text-red-600 font-normal"> · Falta base</span>
+                        )}
+                      </div>
+                      {presentacionesNoBase.length === 0 ? (
+                        <div className="text-xs text-gray-500">Sin presentaciones adicionales</div>
+                      ) : (
+                        <div className="space-y-1">
+                          {presentacionesNoBase.slice(0, 4).map((p) => {
+                            const stockCerrado = getStockCerradoPresentacion(p);
+                            const factor = baseId ? calcularFactorAUnidadBase(producto, p.id, baseId) : null;
+                            const eq = Number.isFinite(factor) && factor != null ? Math.round(stockCerrado * factor) : null;
+                            return (
+                              <div key={p.id} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 truncate pr-2">{p.nombre}</span>
+                                <span className="text-gray-600">{stockCerrado} ({eq == null ? '—' : eq})</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Categorías */}
                   {producto.categorias && producto.categorias.length > 0 && (
@@ -966,7 +1228,8 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       </div>
     </div>
@@ -1004,17 +1267,22 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   Catálogo de Productos
                 </h1>
                 <p className="text-gray-600 mt-2">
-                  {productosOrdenados.length} de {productos.length} productos
+                  {totalFiltrados} de {productos.length} productos
                 </p>
               </div>
               <div className="flex items-center space-x-3">
-                <Link
-                  href="/cargarProductos"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVistaTipo('lista');
+                    agregarNuevoProductoEnTabla();
+                  }}
                   className="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 transition-colors flex items-center"
+                  title="Crear producto nuevo como renglón editable"
                 >
                   <Icon icono="plus" className="mr-2" />
                   Nuevo Producto
-                </Link>
+                </button>
                 <Link
                   href="/"
                   className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
@@ -1028,7 +1296,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
           <div className={`flex ${modoCompacto ? 'justify-end' : 'items-center justify-between'}`}>
             {!modoCompacto && (
               <div className="text-sm text-gray-600">
-                {productosOrdenados.length} producto{productosOrdenados.length !== 1 ? 's' : ''} encontrado{productosOrdenados.length !== 1 ? 's' : ''}
+                {totalFiltrados} producto{totalFiltrados !== 1 ? 's' : ''} encontrado{totalFiltrados !== 1 ? 's' : ''}
               </div>
             )}
             <div className="flex items-center space-x-3">
@@ -1079,7 +1347,6 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   handleInputKeyDown(e);
                   if (e.key === 'Escape') {
                     setBusquedaInput('');
-                    setBusquedaProducto('');
                     e.currentTarget.blur();
                     setPagina(1);
                   }
@@ -1124,6 +1391,7 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   <div className="space-y-2">
                     {[
                       { key: 'nombre', label: 'Nombre' },
+                      { key: 'marca', label: 'Marca' },
                       { key: 'codigoBarra', label: 'Código' },
                       { key: 'descripcion', label: 'Descripción' },
                       { key: 'categoria', label: 'Categoría' },
@@ -1157,7 +1425,9 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
               <FilterSelect
                 ref={categoryFilterRef}
                 size="kiosk"
-                options={categoriasUnicas.map((cat) => ({ id: cat, nombre: cat }))}
+                options={Array.from(new Set(
+                  productos.flatMap((p) => p.categorias?.map((c) => c.nombre) || [])
+                )).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es')).map((cat) => ({ id: cat, nombre: cat }))}
                 value={categoriaFiltro}
                 valueField="id"
                 textField="nombre"
@@ -1171,15 +1441,15 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
                   setCategoriaFiltro('');
                   setPagina(1);
                 }}
-                onNavigateNext={handleCategoryFilterNavigateNext}
-                onNavigatePrev={handleCategoryFilterNavigatePrev}
+                onNavigateNext={handleSearchFilterNavigateNext}
+                onNavigatePrev={() => {}}
               />
             </div>
           </div>
         </div>
 
         {/* Lista de productos */}
-        {productosOrdenados.length > 0 ? (
+        {productosFiltrados.length > 0 ? (
           vistaTipo === 'cuadricula' ? <VistaCuadricula /> : <VistaLista />
         ) : (
           <div className="bg-white rounded-xl shadow-lg p-12 text-center">
@@ -1195,7 +1465,6 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
             <button
               onClick={() => {
                 setBusquedaInput('');
-                setBusquedaProducto('');
                 setCategoriaFiltro('');
                 setPagina(1);
               }}

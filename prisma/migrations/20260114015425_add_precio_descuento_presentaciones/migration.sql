@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Presentaciones" ADD COLUMN     "descuento" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN     "precio" DOUBLE PRECISION;

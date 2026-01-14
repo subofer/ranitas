@@ -35,7 +35,7 @@ const Separadores = ({style = {}, stick = null, alto = null, columnas = [], colo
   );
 }
 
-export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...props } = {}) => {
+export const Tabla = ({ columnas:cc, handleSort, children, titulo, className, size, ...props } = {}) => {
   const columnas = convertirArray(cc)
   const captionRef = useRef(null)
   const headRef = useRef(null)
@@ -53,10 +53,27 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
     setAlturaHead(alturaCaption + headRef.current.offsetHeight-5)
   },[alturaCaption])
 
+  const sizeClasses = (() => {
+    if (size === 'kiosk') {
+      return {
+        table: 'text-base [&_td]:py-2 [&_td]:px-3',
+        caption: 'text-xl',
+        thCell: 'px-3 py-2 text-sm',
+        container: 'min-h-[520px]',
+      };
+    }
+    return {
+      table: 'lg:text-sm text-xs [&_td]:py-1 [&_td]:px-2',
+      caption: 'text-lg',
+      thCell: 'px-2 py-1 text-xs',
+      container: 'min-h-[400px]',
+    };
+  })();
+
   return (
-    <div className="flex flex-col overflow-auto min-h-[400px] hideScroll">
-      <table className="table-auto max-w-full lg:text-sm text-xs text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm">
-        <caption ref={captionRef} className="table-caption sticky top-0 text-lg font-semibold text-gray-800 bg-gray-200 ">
+    <div className={`flex flex-col overflow-auto ${sizeClasses.container} hideScroll`}>
+      <table className={`table-auto max-w-full text-gray-600 bg-white border border-gray-200 rounded-lg shadow-sm ${sizeClasses.table} ${className || ''}`.trim()}>
+        <caption ref={captionRef} className={`table-caption sticky top-0 z-40 font-semibold text-gray-800 bg-gray-200 ${sizeClasses.caption}`.trim()}>
           {titulo}
         </caption>
         <thead className="table-header-group bg-gray-200 w-full">
@@ -66,12 +83,11 @@ export const Tabla = ({ columnas:cc, handleSort, children, titulo, className,...
             {columnas && columnas.map(({colw, titulo, ordenable, key}, i) => (
               <th key={i} className={`
                   whitespace-nowrap
-                  px-0 py-0.5
-                  text-xs
                   font-medium
                   text-gray-600
                   uppercase
                   tracking-wider
+                  ${sizeClasses.thCell}
                   ${colw}
                 `}>
                 {ordenable && <Orden handleSort={handleSort} col={key}/>} {titulo}
@@ -97,7 +113,7 @@ export const Tr = ({ ultimo, children, className, seleccionado, ...props } = {})
 )
 
 export const Td = ({ children, className, ...props } = {}) => (
-  <td className={`table-cell ${className} py-1`} {...props}>
+  <td className={`table-cell ${className}`} {...props}>
     {children}
   </td>
 );

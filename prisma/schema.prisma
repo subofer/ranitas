@@ -23,8 +23,11 @@ model Productos {
   descripcion      String?
   imagen           String?
   tipoVenta        TipoVenta           @default(UNIDAD)
+  stockSuelto      Int                 @default(0)
   size             Float?
   unidad           String?
+  marcaId          String?
+  marca            Contactos?          @relation("MarcaProducto", fields: [marcaId], references: [id])
   detalleDocumento DetalleDocumento[]
   precios          Precios[]
   proveedores      ProductoProveedor[]
@@ -45,16 +48,29 @@ model Presentaciones {
   id                  String                  @id @default(uuid())
   createdAt           DateTime                @default(now())
   nombre              String
+  codigoBarra          String?                 @unique
   productoId          String
   tipoPresentacionId  String
   cantidad            Float
   unidadMedida        String
   contenidoPorUnidad  Float?
   unidadContenido     String?
+  precio              Float?
+  descuento           Float                   @default(0)
+  esUnidadBase        Boolean                 @default(false)
   producto            Productos               @relation(fields: [productoId], references: [id], onDelete: Cascade)
   tipoPresentacion    TiposPresentacion      @relation(fields: [tipoPresentacionId], references: [id])
   contenidas          AgrupacionPresentaciones[] @relation("PresentacionContenida")
   contenedoras        AgrupacionPresentaciones[] @relation("PresentacionContenedora")
+  stock               StockPresentacion?
+}
+
+model StockPresentacion {
+  id             String        @id @default(uuid())
+  createdAt      DateTime      @default(now())
+  presentacionId String        @unique
+  stockCerrado   Int           @default(0)
+  presentacion   Presentaciones @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
 }
 
 model AgrupacionPresentaciones {
@@ -111,8 +127,10 @@ model DetalleDocumento {
   createdAt      DateTime   @default(now())
   docRelacionado String
   idProducto     String
-  cantidad       Int
+  cantidad       Float
   precioUnitario Float
+  unidadVenta    String?
+  variedad       String?
   documento      Documentos @relation(fields: [docRelacionado], references: [id], onDelete: Cascade)
   producto       Productos  @relation(fields: [idProducto], references: [id], onDelete: Cascade)
 }
@@ -135,6 +153,7 @@ model Contactos {
   productos           ProductoProveedor[]
   cuentaBancaria      CuentaBancaria[]
   pedidos             Pedidos[]           @relation("PedidoProveedor")
+  productosMarca       Productos[]         @relation("MarcaProducto")
 }
 
 model Usuarios {

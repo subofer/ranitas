@@ -5,6 +5,20 @@ import { revalidatePath } from "next/cache";
 const revalidarPresentaciones = () => revalidatePath("/cargarProductos");
 
 export async function guardarPresentacion(formData) {
+  const normalizarNumero = (value) => {
+    if (value == null || value === '') return null;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return null;
+    return n;
+  };
+
+  const normalizarPorcentaje = (value) => {
+    if (value == null || value === '') return 0;
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(100, n));
+  };
+
   const transformedData = {
     nombre: formData.nombre,
     productoId: formData.productoId,
@@ -13,6 +27,8 @@ export async function guardarPresentacion(formData) {
     unidadMedida: formData.unidadMedida,
     contenidoPorUnidad: formData.contenidoPorUnidad ? parseFloat(formData.contenidoPorUnidad) : null,
     unidadContenido: formData.unidadContenido || null,
+    precio: normalizarNumero(formData.precio),
+    descuento: normalizarPorcentaje(formData.descuento),
   };
 
   try {

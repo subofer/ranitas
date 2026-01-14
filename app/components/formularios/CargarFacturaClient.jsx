@@ -1,5 +1,6 @@
 "use client"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Button from "../formComponents/Button";
 import Input from "../formComponents/Input";
 import SelectOnClientByProps from "../proveedores/SelectOnClientByProps";
@@ -12,52 +13,45 @@ import { showImagenProducto } from "../productos/showImagenProducto";
 import { guardarFacturaCompra } from "@/prisma/serverActions/documentos";
 import FormTitle from "../formComponents/Title";
 import Switch from "../formComponents/Switch";
-import { obtenerProductosPorProveedor } from "@/prisma/serverActions/proveedores";
 
 const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
+  const router = useRouter();
   const [guardando, setGuardando] = useState(false);
+  const [editarCantidad, setEditarCantidad] = useState(true);
+  const [editarPrecio, setEditarPrecio] = useState(true);
+  const [editarDescuento, setEditarDescuento] = useState(true);
   const detallesRefs = useRef([]);
+  const filasRefs = useRef([]);
   const blankForm = {
     idProveedor: '',
     numeroDocumento: '',
     fecha: fechaHoy(),
     tieneImpuestos: false,
-    detalles: [{ idProducto: '', cantidad: 1, precioUnitario: 0}]
+    detalles: [{ idProducto: '', presentacionId: '', cantidad: 1, precioUnitario: 0, descuento: 0 }]
   };
   const [formData, setFormData] = useState(blankForm);
 
   const handleReset = () => {
     setFormData(blankForm)
   }
+  const optionProductosFiltradoPorProveedor = useMemo(() => {
+    const proveedorId = formData.idProveedor;
+    const lista = Array.isArray(productosProps?.options) ? productosProps.options : [];
+    if (!proveedorId) return { options: [] };
 
-  const [optionProductosFiltradoPorProveedor, setProductosProveedor] = useState({options:[]});
+    const options = lista
+      .filter(({ proveedores }) => proveedores?.some(({ proveedorId: pid }) => pid === proveedorId))
+      .map((producto) => {
+        const rel = producto?.proveedores?.find(({ proveedorId: pid }) => pid === proveedorId);
+        const codigoProv = rel?.codigo ? String(rel.codigo).trim() : '';
+        return {
+          ...producto,
+          nombre: codigoProv ? `${codigoProv} -/- ${producto.nombre}` : producto.nombre,
+        };
+      });
 
-  const optionProductosFiltradoPorProveedor2 = useMemo(() => ({
-    options: productosProps.options.filter(({ proveedores }) =>
-      formData.idProveedor && proveedores.some(({ proveedorId }) => proveedorId === formData.idProveedor)
-    )
-  }), [productosProps, formData.idProveedor]);
-  
-  useEffect(() => {
-    const fetchProductos = async () => {
-      if (formData.idProveedor) {
-        const productos = await obtenerProductosPorProveedor(formData.idProveedor);
-        console.log(productos)
-        const newList = productos.map(({producto, ...resto}) => (
-          {
-            ...producto,
-            ...resto,
-            nombre: `${resto.codigo} -/- ${producto.nombre}`
-          }
-        ))
-        setProductosProveedor({options:newList});
-        console.log(newList)
-        console.log(optionProductosFiltradoPorProveedor2)
-      }
-    };
-  
-    fetchProductos();
-  }, [formData.idProveedor, optionProductosFiltradoPorProveedor2]);
+    return { options };
+  }, [productosProps, formData.idProveedor]);
 
 
 
@@ -67,16 +61,54 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
   }, []);
 
   const handleDetalleChange = useCallback((index, {name, value}) => {
-    const updated = formData.detalles
-    updated[index][name] = value
-    setFormData((prev) => ({ ...prev, detalles: updated }));
-  }, [formData.detalles]);
+    setFormData((prev) => {
+      const detallesPrev = Array.isArray(prev.detalles) ? prev.detalles : [];
+      const detallesNext = detallesPrev.map((d, i) => (i === index ? { ...d, [name]: value } : d));
+      return { ...prev, detalles: detallesNext };
+    });
+  }, []);
 
   const setItem = (item, index) => {
-    const updated = formData.detalles
-    updated[index].item = item
-    setFormData((prev) => ({ ...prev, detalles: updated }));
+    setFormData((prev) => {
+      const detallesPrev = Array.isArray(prev.detalles) ? prev.detalles : [];
+      const detallesNext = detallesPrev.map((d, i) => (i === index ? { ...d, item } : d));
+      return { ...prev, detalles: detallesNext };
+    });
   }
+
+  const normalizarNumero = (value, fallback = 0) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const getLineaSubtotal = (detalle) => {
+    const cantidad = Math.max(0, normalizarNumero(detalle?.cantidad, 0));
+    const precioUnitario = Math.max(0, normalizarNumero(detalle?.precioUnitario, 0));
+    const descuento = Math.max(0, normalizarNumero(detalle?.descuento, 0));
+    return Math.max(0, (precioUnitario * cantidad) - descuento);
+  };
+
+  const subtotalGeneral = useMemo(() => (
+    (formData.detalles || []).reduce((suma, d) => suma + getLineaSubtotal(d), 0)
+  ), [formData.detalles]);
+
+  const totalGeneral = useMemo(() => {
+    const factor = formData.tieneImpuestos ? 1.21 : 1;
+    return subtotalGeneral * factor;
+  }, [formData.tieneImpuestos, subtotalGeneral]);
+
+  const abrirFichaProducto = ({ detalle }) => {
+    const productoId = detalle?.idProducto;
+    if (!productoId) return;
+    const presentacionId = detalle?.presentacionId || '';
+    const qs = presentacionId ? `&presentacion=${encodeURIComponent(presentacionId)}` : '';
+    router.push(`/cargarProductos?edit=${encodeURIComponent(productoId)}${qs}`);
+  };
+
+  const focusFila = (index) => {
+    const el = filasRefs.current[index];
+    if (el && typeof el.focus === 'function') el.focus();
+  };
 
 
   const handleAgregarDetalle = useCallback(() => {
@@ -132,9 +164,10 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
 
   )
   const handleFormKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-    }
+    if (e.key !== 'Enter') return;
+    // Evitar submit por Enter dentro de inputs, pero permitir Enter en la fila (navegación)
+    const isInput = e.target?.closest?.('input, select, textarea');
+    if (isInput) e.preventDefault();
   };
 
   return (
@@ -187,13 +220,66 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
       </div>
       <div className="col-span-full"></div>
 
+      <div className="col-span-12 flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-lg p-3">
+        <div className="text-sm font-semibold text-slate-700">Edición en tabla:</div>
+        <label className="flex items-center gap-2 text-sm text-slate-700 select-none">
+          <input
+            type="checkbox"
+            checked={editarCantidad}
+            onChange={(e) => setEditarCantidad(e.target.checked)}
+          />
+          Cantidad/stock
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 select-none">
+          <input
+            type="checkbox"
+            checked={editarPrecio}
+            onChange={(e) => setEditarPrecio(e.target.checked)}
+          />
+          Precio
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700 select-none">
+          <input
+            type="checkbox"
+            checked={editarDescuento}
+            onChange={(e) => setEditarDescuento(e.target.checked)}
+          />
+          Descuento
+        </label>
+      </div>
+
       <div className="grid grid-cols-12 col-span-12">
 
         <label className="col-span-12 text-2xl text-gray-700">Productos:</label>
 
         <div className="col-span-12 p-4 bg-gray-50 border rounded-lg">
           {formData.detalles.map((detalle, index) => (
-            <div key={index} className="flex gap-2 mb-2 justify-between">
+            <div
+              key={index}
+              ref={(el) => { filasRefs.current[index] = el; }}
+              tabIndex={0}
+              className="flex gap-2 mb-2 justify-between outline-none focus:ring-2 focus:ring-blue-400 rounded"
+              onClick={(e) => {
+                if (e.target.closest('button, input, select, textarea, a')) return;
+                focusFila(index);
+              }}
+              onKeyDown={(e) => {
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  focusFila(Math.min(formData.detalles.length - 1, index + 1));
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  focusFila(Math.max(0, index - 1));
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  abrirFichaProducto({ detalle });
+                }
+              }}
+              title="Enter: abrir ficha del producto"
+            >
               <div className="flex flex-row gap-1 w-8 justify-around text-slate-600">
                 <Icon tabIndex={-1} type="button" icono={"trash"} onClick={() => {handleQuitarDetalleIndex(index)}}/>
               </div>
@@ -207,6 +293,18 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   onChange={({name, value, option}) => {
                     handleDetalleChange(index, { name, value })
                     setItem(option, index)
+
+                    // Default presentación (preferir unidad base)
+                    const pres = Array.isArray(option?.presentaciones) ? option.presentaciones : [];
+                    const base = pres.find((p) => p?.esUnidadBase) || pres[0];
+                    if (base?.id) handleDetalleChange(index, { name: 'presentacionId', value: base.id });
+
+                    // Autocompletar precio si no hay uno cargado
+                    const precioActual = normalizarNumero(detalle?.precioUnitario, 0);
+                    const precioSugerido = normalizarNumero(option?.precios?.[0]?.precio, 0);
+                    if (precioActual <= 0 && precioSugerido > 0) {
+                      handleDetalleChange(index, { name: 'precioUnitario', value: precioSugerido });
+                    }
                   }}
                   value={detalle.idProducto}
                   save={true}
@@ -214,6 +312,21 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   {...optionProductosFiltradoPorProveedor}
                   />
               </div>
+
+              <div className="w-[220px]">
+                <SelectOnClientByProps
+                  valueField="id"
+                  textField="nombre"
+                  label="Presentación"
+                  placeholder="Presentación"
+                  name="presentacionId"
+                  onChange={(data) => handleDetalleChange(index, data)}
+                  value={detalle.presentacionId}
+                  options={(detalle?.item?.presentaciones || []).slice().sort((a, b) => (a?.nombre || '').localeCompare(b?.nombre || '', 'es'))}
+                  save={true}
+                />
+              </div>
+
               <div className="w-[150px]">
                 <Input
                   name="cantidad"
@@ -222,6 +335,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   value={detalle.cantidad}
                   onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Cantidad"
+                  disabled={!editarCantidad}
                   />
               </div>
               <div className="w-[150px]">
@@ -233,6 +347,18 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Precio Unitario"
                   onKeyDown={(data) => handleDetalleKeyDown(index, data) }
+                  disabled={!editarPrecio}
+                />
+              </div>
+              <div className="w-[140px]">
+                <Input
+                  name="descuento"
+                  label="Descuento"
+                  type="number"
+                  value={detalle.descuento ?? 0}
+                  onChange={(data) => handleDetalleChange(index, data)}
+                  placeholder="0"
+                  disabled={!editarDescuento}
                 />
               </div>
               <div className="w-[150px]">
@@ -241,7 +367,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
                   label="SubTotal"
                   type="text"
                   disabled
-                  value={textos.monedaDecimales(detalle.precioUnitario * detalle.cantidad)}
+                  value={textos.monedaDecimales(getLineaSubtotal(detalle))}
                   onChange={(data) => handleDetalleChange(index, data)}
                   placeholder="Precio Unitario"
                 />
@@ -275,11 +401,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
             label="Subtotal"
             type="text"
             disabled
-            value= {
-              formData.tieneImpuestos ?
-              textos.monedaDecimales(formData.detalles.reduce((suma, {precioUnitario, cantidad}) => suma + (precioUnitario * cantidad), 0))
-              : "Remito"
-            }
+            value={textos.monedaDecimales(subtotalGeneral)}
             onChange={(e) => handleDetalleChange(index, e)}
             placeholder="Precio Unitario"
             onKeyDown={(e) => handleDetalleKeyDown(index, e)}
@@ -293,7 +415,7 @@ const CargaFacturaForm = ({ proveedoresProps, productosProps, className }) => {
             label="Total"
             type="text"
             disabled
-            value={textos.monedaDecimales((formData.tieneImpuestos ? 1.21 : 1) * formData.detalles.reduce((suma, {precioUnitario, cantidad}) => suma + (precioUnitario * cantidad), 0))}
+            value={textos.monedaDecimales(totalGeneral)}
             onChange={(e) => handleDetalleChange(index, e)}
             placeholder="Precio Unitario"
             onKeyDown={(e) => handleDetalleKeyDown(index, e)}

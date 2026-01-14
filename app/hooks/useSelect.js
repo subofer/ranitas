@@ -1,6 +1,8 @@
 "use client"
 import { useEffect, useState, useCallback } from "react";
 
+const selectCache = new Map();
+
 export default function useSelect(geter, t) {
   if(!geter) throw Error('useSelect geter necesita una opcion')
   const [data, setData] = useState([])
@@ -10,7 +12,16 @@ export default function useSelect(geter, t) {
   const getDatos = useCallback(async () => {
     try {
       setBusy(true);
-      setData(await geter());
+      const key = `${t || ''}`;
+      if (selectCache.has(key)) {
+        setData(selectCache.get(key) || []);
+        return;
+      }
+
+      const res = await geter();
+      const arr = Array.isArray(res) ? res : [];
+      selectCache.set(key, arr);
+      setData(arr);
     } catch (error) {
       console.error('Error al obtener datos:', error);
       setData([]);
@@ -18,7 +29,7 @@ export default function useSelect(geter, t) {
     } finally {
       setBusy(false);
     }
-  },[geter])
+  },[geter, t])
 
 
   const filterByKeyList = useCallback(async (list, key) => {
@@ -38,7 +49,7 @@ export default function useSelect(geter, t) {
     return () => {
       setBusy(false)
     }
-  }, [getDatos, t])
+  }, [getDatos])
 
   return {
     busy,
