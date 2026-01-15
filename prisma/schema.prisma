@@ -24,6 +24,7 @@ model Productos {
   imagen           String?
   tipoVenta        TipoVenta           @default(UNIDAD)
   stockSuelto      Int                 @default(0)
+  puntoPedido      Int                 @default(0)
   size             Float?
   unidad           String?
   marcaId          String?
@@ -31,9 +32,11 @@ model Productos {
   detalleDocumento DetalleDocumento[]
   precios          Precios[]
   proveedores      ProductoProveedor[]
+  skuAliases       ProveedorSkuAlias[]
   categorias       Categorias[]        @relation("CategoriasToProductos")
   presentaciones   Presentaciones[]
   detallePedidos   DetallePedidos[]
+  compraItems      CompraPedidoItem[]
 }
 
 model TiposPresentacion {
@@ -63,6 +66,9 @@ model Presentaciones {
   contenidas          AgrupacionPresentaciones[] @relation("PresentacionContenida")
   contenedoras        AgrupacionPresentaciones[] @relation("PresentacionContenedora")
   stock               StockPresentacion?
+  skuAliases          ProveedorSkuAlias[]
+  compraItems         CompraPedidoItem[]
+  detallePedidos      DetallePedidos[]
 }
 
 model StockPresentacion {
@@ -112,12 +118,16 @@ model Documentos {
   numeroDocumento String
   fecha           DateTime
   tieneImpuestos  Boolean            @default(false)
-  tipoDocumento   TipoDocumento
+  idTipoDocumento String
+  idEstadoDocumento String
+  tipoDocumento   TiposDocumento    @relation(fields: [idTipoDocumento], references: [id])
+  estadoDocumento EstadosDocumento  @relation(fields: [idEstadoDocumento], references: [id])
   tipoMovimiento  TipoMovimiento
   total           Float              @default(0)
   detalle         DetalleDocumento[]
   emisor          Contactos          @relation("EmisorDocumento", fields: [idContacto], references: [id])
   receptor        Contactos          @relation("ReceptorDocumento", fields: [idDestinatario], references: [id])
+  pagos           Pagos[]
 
   @@unique([idContacto, numeroDocumento])
 }
@@ -146,6 +156,9 @@ model Contactos {
   esInterno           Boolean             @default(false)
   esProveedor         Boolean             @default(false)
   esMarca             Boolean             @default(false)
+  frecuenciaEntrega   FrecuenciaEntrega?
+  diasEntrega         String[]            @default([])
+  leadTimeDias        Int?
   direcciones         Direcciones[]
   documentosEmitidos  Documentos[]        @relation("EmisorDocumento")
   documentosRecibidos Documentos[]        @relation("ReceptorDocumento")
@@ -154,6 +167,155 @@ model Contactos {
   cuentaBancaria      CuentaBancaria[]
   pedidos             Pedidos[]           @relation("PedidoProveedor")
   productosMarca       Productos[]         @relation("MarcaProducto")
+
+  compraPedidos       CompraPedido[]
+  skuAliases          ProveedorSkuAlias[]
+  compraItems         CompraPedidoItem[]
+}
+
+enum FrecuenciaEntrega {
+  SEMANAL
+  QUINCENAL
+}
+
+enum CompraEstadoPedido {
+  BORRADOR
+  PENDIENTE_SELECCION
+  ENVIADO
+  RECIBIDO
+}
+
+enum CorreccionPendienteEstado {
+  ABIERTO
+  RESUELTO
+}
+
+enum CorreccionPendienteTipo {
+  MAPEAR_ITEM_FACTURA
+  ALIAS_PRESENTACION_PROVEEDOR
+  DATO_FALTANTE
+}
+
+model CorreccionPendiente {
+  id              String                    @id @default(uuid())
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  estado          CorreccionPendienteEstado @default(ABIERTO)
+  tipo            CorreccionPendienteTipo
+
+  titulo          String
+  descripcion     String?
+
+  // Para poder filtrar/entender qué se debe arreglar
+  entidadTipo     String?
+  entidadId       String?
+  contexto        String?
+
+  // Datos para continuar sin cortar el flujo
+  payload         Json?
+
+  creadoPor       String?
+  resueltoAt      DateTime?
+  resueltoPor     String?
+  notasResolucion String?
+
+  @@index([estado])
+  @@index([tipo])
+  @@index([createdAt])
+}
+
+model ProveedorSkuAlias {
+  id                String   @id @default(uuid())
+  createdAt         DateTime @default(now())
+
+  proveedorId       String
+  productoId        String?
+  presentacionId    String?
+
+  sku               String
+  nombreEnProveedor String?
+  leadTimeDias      Int?
+  esPreferido       Boolean  @default(false)
+
+  proveedor         Contactos       @relation(fields: [proveedorId], references: [id])
+  producto          Productos?      @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  presentacion      Presentaciones? @relation(fields: [presentacionId], references: [id], onDelete: Cascade)
+
+  @@index([proveedorId])
+  @@index([productoId])
+  @@index([presentacionId])
+  @@unique([proveedorId, sku])
+  @@unique([proveedorId, presentacionId])
+}
+
+model CompraPedido {
+  id          String            @id @default(uuid())
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Identificador humano
+  numero      String            @unique
+  fecha       DateTime          @default(now())
+
+  // Pedido “inteligente” puede ser genérico (proveedorId null)
+  proveedorId String?
+  proveedor   Contactos?        @relation(fields: [proveedorId], references: [id])
+
+  estado      CompraEstadoPedido @default(BORRADOR)
+  notas       String?
+  creadoPor   String?
+
+  // Link opcional al Pedido real (tabla Pedidos) cuando se materializa
+  pedidoId    String?
+
+  items       CompraPedidoItem[]
+
+  @@index([proveedorId])
+  @@index([pedidoId])
+}
+
+model CompraPedidoItem {
+  id               String   @id @default(uuid())
+  createdAt        DateTime @default(now())
+
+  compraPedidoId   String
+  compraPedido     CompraPedido @relation(fields: [compraPedidoId], references: [id], onDelete: Cascade)
+
+  proveedorId      String?
+  proveedor        Contactos? @relation(fields: [proveedorId], references: [id])
+
+  productoId       String
+  producto         Productos @relation(fields: [productoId], references: [id])
+
+  presentacionId   String?
+  presentacion     Presentaciones? @relation(fields: [presentacionId], references: [id])
+
+  proveedorSku      String?
+  nombreEnProveedor String?
+
+  // Snapshot de cálculo (visibilidad total)
+  stockActual          Float?
+  puntoPedido          Float?
+  ventasPeriodo        Float?
+  ventasPromDiaria     Float?
+  leadTimeDias         Float?
+  demandaLeadTime      Float?
+
+  tendencia7dVsPrev7d  Float?
+  tendenciaYoYMes      Float?
+  externos             Json?
+
+  cantidadSugerida     Float?
+  cantidadFinal        Float?
+  fueEditadoManual     Boolean @default(false)
+
+  lastPurchasePrice    Float?
+
+  @@index([compraPedidoId])
+  @@index([proveedorId])
+  @@index([productoId])
+  @@index([presentacionId])
 }
 
 model Usuarios {
@@ -164,6 +326,7 @@ model Usuarios {
   createdAt DateTime @default(now())
   email     String?  @unique
   pedidos   Pedidos[] @relation("PedidoUsuario")
+  auditLogs AuditLog[]
 }
 
 model Emails {
@@ -245,10 +408,18 @@ enum TipoVenta {
 }
 
 enum TipoDocumento {
-  FACTURA
+  FACTURA_A
+  FACTURA_B
+  FACTURA_C
   REMITO
   PRESUPUESTO
   CONTEO
+}
+
+enum EstadoDocumento {
+  IMPAGA
+  PAGA
+  PARCIAL
 }
 
 enum FormaPago {
@@ -305,16 +476,49 @@ model DetallePedidos {
   pedido        Pedidos     @relation(fields: [idPedido], references: [id], onDelete: Cascade)
   idProducto    String
   producto      Productos   @relation(fields: [idProducto], references: [id])
+  presentacionId String?
+  presentacion  Presentaciones? @relation(fields: [presentacionId], references: [id])
   cantidad      Float
   precioUnitario Float?
   observaciones String?
 
-  @@unique([idPedido, idProducto])
+  @@unique([idPedido, idProducto, presentacionId])
+}
+
+model TiposDocumento {
+  id          String      @id @default(uuid())
+  createdAt   DateTime    @default(now())
+  codigo      String      @unique
+  nombre      String      @unique
+  descripcion String?
+  activo      Boolean     @default(true)
+  documentos  Documentos[]
+}
+
+model EstadosDocumento {
+  id          String      @id @default(uuid())
+  createdAt   DateTime    @default(now())
+  codigo      String      @unique
+  nombre      String      @unique
+  descripcion String?
+  activo      Boolean     @default(true)
+  documentos  Documentos[]
+}
+
+model Pagos {
+  id            String     @id @default(uuid())
+  createdAt     DateTime   @default(now())
+  idDocumento   String
+  documento     Documentos @relation(fields: [idDocumento], references: [id], onDelete: Cascade)
+  formaPago     FormaPago
+  monto         Float
+  fechaPago     DateTime   @default(now())
+  observaciones String?
 }
 
 model AuditLog {
-  id        String        @id @default(cuid())
-  createdAt DateTime      @default(now())
+  id        String       @id @default(uuid())
+  createdAt DateTime     @default(now())
   userId    String?
   level     AuditLevel
   category  AuditCategory
@@ -322,6 +526,7 @@ model AuditLog {
   message   String
   metadata  Json?
   path      String
+  user      Usuarios?    @relation(fields: [userId], references: [id])
 
   @@index([createdAt])
   @@index([userId])

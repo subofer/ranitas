@@ -12,6 +12,7 @@ export default function NotificationRenderer() {
           key={notification.id}
           message={notification.message}
           duration={notification.duration}
+          type={notification.type || 'error'}
           onClose={() => closeError(notification.id)}
         />
       ))}

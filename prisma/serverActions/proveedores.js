@@ -1,6 +1,7 @@
 "use server"
 
 import formToObject from "@/lib/formToObject";
+import { createAuditLog } from "@/lib/actions/audit";
 
 
 export async function getProveedorConProducto(proveedorId, productoId) {
@@ -66,6 +67,74 @@ export async function eliminarRelacionProductoProveedor(proveedorId, productoId)
         productoId: productoId,
       },
     },
+  });
+
+  return resultado;
+}
+
+export async function agregarProductoAProveedor(proveedorId, productoId, codigo = '') {
+  const relacion = await prisma.productoProveedor.create({
+    data: {
+      proveedorId: proveedorId,
+      productoId: productoId,
+      codigo: codigo,
+    },
+  });
+
+  return relacion;
+}
+
+export async function obtenerProveedoresPorPresentacion(presentacionId) {
+  if (presentacionId) {
+    const proveedoresRelacionados = await prisma.proveedorSkuAlias.findMany({
+      where: {
+        presentacionId: presentacionId,
+      },
+      include: {
+        proveedor: true,
+      },
+    });
+
+    return proveedoresRelacionados;
+  }
+  return [];
+}
+
+export async function agregarProveedorAPresentacion(proveedorId, presentacionId, sku = '', nombreEnProveedor = '') {
+  const relacion = await prisma.proveedorSkuAlias.create({
+    data: {
+      proveedorId: proveedorId,
+      presentacionId: presentacionId,
+      sku: sku,
+      nombreEnProveedor: nombreEnProveedor,
+    },
+  });
+
+  await createAuditLog({
+    level: 'INFO',
+    category: 'DB',
+    action: 'CREATE_PROVEEDOR_PRESENTACION',
+    message: `Asignado proveedor ${proveedorId} a presentación ${presentacionId} con SKU ${sku}`,
+    metadata: { proveedorId, presentacionId, sku, nombreEnProveedor },
+  });
+
+  return relacion;
+}
+
+export async function eliminarProveedorDePresentacion(proveedorId, presentacionId) {
+  const resultado = await prisma.proveedorSkuAlias.deleteMany({
+    where: {
+      proveedorId: proveedorId,
+      presentacionId: presentacionId,
+    },
+  });
+
+  await createAuditLog({
+    level: 'INFO',
+    category: 'DB',
+    action: 'DELETE_PROVEEDOR_PRESENTACION',
+    message: `Eliminado proveedor ${proveedorId} de presentación ${presentacionId}`,
+    metadata: { proveedorId, presentacionId },
   });
 
   return resultado;

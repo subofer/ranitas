@@ -8,7 +8,7 @@ export default function CargarProductosPage() {
       <div className='container mx-auto max-w-full px-1'>
         <div className='flex flex-col gap-4'>
           <CargaProductoBuscadorClient />
-          <ListadoProductosModerno mostrarCodigo={false} modoCompacto={true} />
+          <ListadoProductosModerno autoFoco={false} mostrarCodigo={false} modoCompacto={true} />
         </div>
       </div>
     </main>

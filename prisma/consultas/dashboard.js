@@ -11,7 +11,9 @@ export async function getDashboardMetrics() {
 
     const salesThisMonth = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'FACTURA',
+        tipoDocumento: {
+          codigo: 'FACTURA_A' // O cualquier tipo de factura de venta
+        },
         fecha: {
           gte: currentMonth
         },
@@ -25,7 +27,9 @@ export async function getDashboardMetrics() {
     // Compras del mes (suma de documentos de compra del mes actual)
     const purchasesThisMonth = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'FACTURA',
+        tipoDocumento: {
+          codigo: 'FACTURA_A' // O cualquier tipo de factura de compra
+        },
         fecha: {
           gte: currentMonth
         },
@@ -49,9 +53,9 @@ export async function getDashboardMetrics() {
     // Facturas pendientes (documentos no pagados)
     const pendingInvoices = await prisma.documentos.aggregate({
       where: {
-        tipoMovimiento: 'SALIDA',
-        // Aquí iría la lógica para documentos no pagados
-        // Por ahora, asumimos que todos los documentos de salida son pendientes
+        estadoDocumento: {
+          codigo: 'IMPAGA'
+        }
       },
       _sum: {
         total: true
@@ -117,21 +121,16 @@ export async function getDashboardMetrics() {
 }
 
 // Función para obtener facturas (documentos)
-export async function getInvoices(status = 'all') {
+export async function getInvoices(filter = 'all') {
   try {
     let whereClause = {};
 
-    if (status === 'pending') {
-      // Lógica para facturas pendientes
+    if (filter !== 'all') {
+      // Filtrar por código de estado
       whereClause = {
-        tipoMovimiento: 'SALIDA',
-        // Aquí iría la lógica específica para documentos no pagados
-      };
-    } else if (status === 'paid') {
-      // Lógica para facturas pagadas
-      whereClause = {
-        tipoMovimiento: 'ENTRADA',
-        // Aquí iría la lógica específica para documentos pagados
+        estadoDocumento: {
+          codigo: filter
+        }
       };
     }
 
@@ -139,7 +138,9 @@ export async function getInvoices(status = 'all') {
       where: whereClause,
       include: {
         emisor: true,
-        receptor: true
+        receptor: true,
+        tipoDocumento: true,
+        estadoDocumento: true
       },
       orderBy: {
         fecha: 'desc'

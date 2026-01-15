@@ -7,7 +7,7 @@ import Icon from "../formComponents/Icon";
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 export const CargarCategoria = ({ onCategoriaCreated }) => {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
   const [categoriaNombre, setCategoriaNombre] = useState("");
   const [loading, setLoading] = useState(false);
   const [categorias, setCategorias] = useState([]);
@@ -27,7 +27,7 @@ export const CargarCategoria = ({ onCategoriaCreated }) => {
       if (result?.error) {
         showError(result.msg || "Error al guardar la categoría");
       } else {
-        showError("Categoría creada exitosamente", 3000);
+        showSuccess("Categoría creada exitosamente", 3000);
         setCategoriaNombre("");
         onCategoriaCreated && onCategoriaCreated();
       }

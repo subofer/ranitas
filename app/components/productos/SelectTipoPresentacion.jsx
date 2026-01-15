@@ -30,17 +30,19 @@ export const SelectTipoPresentacion = ({ value, onChange, ...props }) => {
   }));
 
   return (
-    <FilterSelect
-      value={value}
-      onChange={onChange}
-      options={opciones}
-      valueField="id"
-      textField="nombre"
-      loading={loading}
-      placeholder="Buscar tipo de empaque..."
-      label="Tipo de empaque"
-      {...props}
-    />
+    <div className="relative w-full">
+      <FilterSelect
+        value={value}
+        onChange={onChange}
+        options={opciones}
+        valueField="id"
+        textField="nombre"
+        loading={loading}
+        placeholder="Buscar tipo de empaque..."
+        compact={true}
+        {...props}
+      />
+    </div>
   );
 };
 

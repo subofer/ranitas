@@ -1,7 +1,8 @@
-
 import CargaFacturaForm from "@/components/formularios/CargarFacturaClient"
 import { getProductos } from "@/prisma/consultas/productos"
 import { getProveedoresCompletos } from "@/prisma/consultas/proveedores"
+
+export const dynamic = 'force-dynamic'
 
 export default async function CargarFacturaPage() {
   const proveedores = await getProveedoresCompletos()

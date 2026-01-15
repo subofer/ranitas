@@ -5,7 +5,7 @@ import { getAuditLogs, getAuditStats } from '@/lib/actions/audit';
 import { restaurarProducto } from '@/prisma/serverActions/undo';
 import { useNotification } from '@/context/NotificationContext';
 import Icon from '@/components/formComponents/Icon';
-import Select from '@/components/formComponents/Select';
+import FilterSelect from '@/components/formComponents/FilterSelect';
 
 const levelColors = {
   INFO: 'bg-blue-100 text-blue-800 border-blue-300',
@@ -252,7 +252,7 @@ export default function AuditPage() {
 
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Select
+            <FilterSelect
               label="Nivel"
               options={levelOptions}
               valueField="value"
@@ -262,7 +262,7 @@ export default function AuditPage() {
               onChange={(val) => handleFilterChange('level', val)}
             />
 
-            <Select
+            <FilterSelect
               label="Categoría"
               options={categoryOptions}
               valueField="value"
@@ -272,7 +272,7 @@ export default function AuditPage() {
               onChange={(val) => handleFilterChange('category', val)}
             />
 
-            <Select
+            <FilterSelect
               label="Resultados por página"
               options={[
                 { value: 25, label: '25' },

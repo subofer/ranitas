@@ -7,7 +7,7 @@ import Icon from "../formComponents/Icon";
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const EditarCategoriaModal = ({ categoria, isOpen, onClose, onSave }) => {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
   const [nombre, setNombre] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -42,7 +42,7 @@ const EditarCategoriaModal = ({ categoria, isOpen, onClose, onSave }) => {
       if (result?.error) {
         showError(result.msg || `Error al ${isEditing ? 'actualizar' : 'crear'} la categoría`);
       } else {
-        showError(`Categoría ${isEditing ? 'actualizada' : 'creada'} exitosamente`, 3000);
+        showSuccess(`Categoría ${isEditing ? 'actualizada' : 'creada'} exitosamente`, 3000);
         onSave && onSave(result);
         onClose();
       }

@@ -20,7 +20,7 @@ export async function guardarFacturaConStock(formData) {
         idProveedor,
         numeroDocumento,
         tipoMovimiento: "ENTRADA",
-        tipoDocumento: tieneImpuestos ? "FACTURA" : "REMITO",
+        tipoDocumento: tieneImpuestos ? "FACTURA_A" : "REMITO",
         fecha: new Date(fecha),
         tieneImpuestos,
         total: detallesTransformados.reduce((acc, curr) => acc + curr.precioUnitario * curr.cantidad,0), // Calcular el total de la factura

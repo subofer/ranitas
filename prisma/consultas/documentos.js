@@ -5,11 +5,13 @@ export const getDocumentos = async () => (
   await prisma.documentos.findMany({orderBy: [{createdAt: 'asc'}]})
 );
 
-export const getLastDocumentosVenta = async (tipoMovimiento, tipoDocumento) => (
+export const getLastDocumentosVenta = async (tipoMovimiento, tipoDocumentoCodigo) => (
   await prisma.documentos.findMany({
     where: {
       tipoMovimiento: tipoMovimiento,
-      tipoDocumento: tipoDocumento,
+      tipoDocumento: {
+        codigo: tipoDocumentoCodigo
+      }
     },
     orderBy: {
       createdAt: 'desc',

@@ -1,6 +1,25 @@
 "use server"
 import prisma from "../prisma";
 
+const getPresentacionBasePorProductoIds = async (productoIds) => {
+  const ids = Array.from(new Set((productoIds || []).filter(Boolean)));
+  if (ids.length === 0) return new Map();
+
+  const presentaciones = await prisma.presentaciones.findMany({
+    where: { productoId: { in: ids } },
+    select: { id: true, productoId: true, esUnidadBase: true, createdAt: true },
+    orderBy: [{ productoId: 'asc' }, { esUnidadBase: 'desc' }, { createdAt: 'asc' }],
+  });
+
+  const map = new Map();
+  for (const p of presentaciones) {
+    if (!map.has(p.productoId)) {
+      map.set(p.productoId, p.id);
+    }
+  }
+  return map;
+};
+
 // Obtener todos los pedidos con sus detalles
 export const getPedidos = async () => {
   return await prisma.pedidos.findMany({
@@ -14,6 +33,7 @@ export const getPedidos = async () => {
       },
       detallePedidos: {
         include: {
+          presentacion: true,
           producto: {
             include: {
               categorias: true,
@@ -44,6 +64,7 @@ export const getPedidoById = async (id) => {
       },
       detallePedidos: {
         include: {
+          presentacion: true,
           producto: {
             include: {
               categorias: true,
@@ -72,6 +93,7 @@ export const getPedidosByProveedor = async (idProveedor) => {
       },
       detallePedidos: {
         include: {
+          presentacion: true,
           producto: {
             include: {
               categorias: true,
@@ -95,6 +117,8 @@ export const crearPedido = async (datosPedido) => {
   // Generar número de pedido único
   const numeroPedido = `PED-${Date.now()}`;
 
+  const presentacionesBase = await getPresentacionBasePorProductoIds(productos?.map(p => p?.id));
+
   return await prisma.pedidos.create({
     data: {
       numero: numeroPedido,
@@ -105,6 +129,7 @@ export const crearPedido = async (datosPedido) => {
       detallePedidos: {
         create: productos.map(producto => ({
           idProducto: producto.id,
+          presentacionId: producto.presentacionId ?? presentacionesBase.get(producto.id) ?? null,
           cantidad: producto.cantidad || 1,
           precioUnitario: producto.precioUnitario,
           observaciones: producto.observaciones
@@ -115,6 +140,7 @@ export const crearPedido = async (datosPedido) => {
       proveedor: true,
       detallePedidos: {
         include: {
+          presentacion: true,
           producto: true
         }
       }
@@ -131,6 +157,7 @@ export const actualizarEstadoPedido = async (idPedido, nuevoEstado) => {
       proveedor: true,
       detallePedidos: {
         include: {
+          presentacion: true,
           producto: true
         }
       }
@@ -147,12 +174,16 @@ export const eliminarPedido = async (idPedido) => {
 
 // Agregar producto a pedido existente
 export const agregarProductoAPedido = async (idPedido, producto) => {
+  const presentacionesBase = await getPresentacionBasePorProductoIds([producto?.id]);
+  const presentacionId = producto?.presentacionId ?? presentacionesBase.get(producto?.id) ?? null;
+
   return await prisma.detallePedidos.upsert({
     where: {
-      idPedido_idProducto: {
+      idPedido_idProducto_presentacionId: {
         idPedido,
-        idProducto: producto.id
-      }
+        idProducto: producto.id,
+        presentacionId,
+      },
     },
     update: {
       cantidad: {
@@ -162,13 +193,54 @@ export const agregarProductoAPedido = async (idPedido, producto) => {
     create: {
       idPedido,
       idProducto: producto.id,
+      presentacionId,
       cantidad: producto.cantidad || 1,
       precioUnitario: producto.precioUnitario,
       observaciones: producto.observaciones
     },
     include: {
+      presentacion: true,
       producto: true
     }
+  });
+};
+
+// Actualizar cantidad de un producto en un pedido
+export const actualizarCantidadDetallePedido = async (idPedido, idProducto, cantidad, presentacionId) => {
+  const cantidadNum = Number(cantidad);
+  if (!Number.isFinite(cantidadNum)) {
+    throw new Error('Cantidad inválida');
+  }
+  if (cantidadNum <= 0) {
+    throw new Error('La cantidad debe ser mayor a 0');
+  }
+
+  if (presentacionId === undefined) {
+    const detalle = await prisma.detallePedidos.findFirst({
+      where: { idPedido, idProducto },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!detalle) throw new Error('No se encontró el item del pedido');
+
+    return await prisma.detallePedidos.update({
+      where: { id: detalle.id },
+      data: { cantidad: cantidadNum },
+      include: { producto: true, presentacion: true },
+    });
+  }
+
+  return await prisma.detallePedidos.update({
+    where: {
+      idPedido_idProducto_presentacionId: { idPedido, idProducto, presentacionId },
+    },
+    data: {
+      cantidad: cantidadNum,
+    },
+    include: {
+      producto: true,
+      presentacion: true,
+    },
   });
 };
 

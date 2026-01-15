@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { guardarProducto } from "@/prisma/serverActions/productos";
+import { crearPendiente } from "@/prisma/serverActions/pendientes";
 
 import Input from "../formComponents/Input";
 import { FormCard } from "../formComponents/FormCard";
@@ -83,16 +84,13 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
   }, [handleBuscar, onSaved]);
 
   const handleSave = async (e) => {
-    if (formData.codigoBarra) {
-      return await handleGuardar(formData);
-    } else {
-      alertaCrearCodigoDeBarras(formData, async () => {
-        const generarCodigoDeBarras = await generateBarCode(formData)
-        const newFormData = { ...formData, codigoBarra: generarCodigoDeBarras}
-        setFormData(newFormData)
-        handleGuardar(newFormData);
-      });
+    let dataToSave = formData;
+    if (!formData.codigoBarra) {
+      const generarCodigoDeBarras = await generateBarCode(formData);
+      dataToSave = { ...formData, codigoBarra: generarCodigoDeBarras };
+      setFormData(dataToSave);
     }
+    return await handleGuardar(dataToSave);
   };
 
   const handleInputChange =({name, value}) => {
@@ -104,6 +102,18 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
       ...prev,
       proveedores: [...new Set([...prev.proveedores, {proveedorId: selected.id, proveedor:selected}])]
     }));
+  };
+
+  const handleProveedorCreate = async (txt) => {
+    await crearPendiente({
+      tipo: "PROVEEDOR_NO_ENCONTRADO",
+      titulo: `Proveedor "${txt}" no encontrado`,
+      descripcion: `Al cargar producto ${formData.nombre || formData.codigoBarra || 'sin nombre'}, se intentó seleccionar proveedor "${txt}" que no existe.`,
+      entidadTipo: "PRODUCTO",
+      entidadId: formData.id || null,
+      contexto: "CARGA_PRODUCTO",
+      payload: { proveedorNombre: txt, productoData: formData }
+    });
   };
 
   const handleMarcaSelected = ({ selected }) => {
@@ -321,7 +331,7 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
           </div>
 
           <div className="col-span-full lg:col-span-3">
-            <SelectProveedorClient onChange={handleProveedoresSelected} />
+            <SelectProveedorClient onChange={handleProveedoresSelected} allowCreate={true} onCreate={handleProveedorCreate} />
           </div>
           <div className="col-span-full lg:col-span-9">
             <InputArrayListProveedores

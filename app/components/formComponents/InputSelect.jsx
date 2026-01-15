@@ -1,7 +1,7 @@
 "use client"
 import { useState, useEffect } from "react";
 import Input from "./Input";
-import Select from "./Select";
+import FilterSelect from "./FilterSelect";
 import Icon from "./Icon";
 
 const InputSelect = ({
@@ -39,7 +39,7 @@ const InputSelect = ({
 
   if (currentMode === "select") {
     return (
-      <Select
+      <FilterSelect
         {...enhancedProps}
         options={options}
         valueField={valueField}

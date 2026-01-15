@@ -2,6 +2,7 @@ import prisma from './prisma.js';
 import { hashPassword } from '../lib/sesion/crypto.js';
 import { readFileSync } from 'fs';
 import { textos } from '../lib/manipularTextos.js';
+import { seedDocumentTypes } from './seedDocumentTypes.js';
 
 const seedUsuarios = async () => {
   const data = [
@@ -76,8 +77,10 @@ const seedCategorias = async () => {
 
 const crearProveedor = async (proveedorData) => {
   try {
-    await prisma.contactos.create({
-      data: {
+    await prisma.contactos.upsert({
+      where: { cuit: proveedorData.cuit },
+      update: {}, // No actualizamos si ya existe
+      create: {
         cuit: proveedorData.cuit,
         nombre: proveedorData.nombre,
         telefono: proveedorData.telefono || '0800-completar-telefono',
@@ -98,7 +101,7 @@ const crearProveedor = async (proveedorData) => {
         },
       },
     });
-    console.log(`Proveedor ${proveedorData.nombre} creado.`);
+    console.log(`Proveedor ${proveedorData.nombre} creado o ya existente.`);
   } catch (error) {
     console.error(`Error al crear el proveedor ${proveedorData.nombre}:`, error);
   }
@@ -275,6 +278,166 @@ const seedTiposPresentacion = async () => {
   }
 };
 
+// Función para crear productos con presentaciones
+const seedProductos = async () => {
+  try {
+    console.log('🌱 Creando productos de prueba...');
+
+    // Obtener IDs de tipos de presentación y categorías
+    const tiposPresentacion = await prisma.tiposPresentacion.findMany();
+    const categorias = await prisma.categorias.findMany();
+
+    const getTipoId = (nombre) => tiposPresentacion.find(t => t.nombre === nombre)?.id;
+    const getCategoriaId = (nombre) => categorias.find(c => c.nombre === nombre)?.id;
+
+    const productos = [
+      {
+        codigoBarra: '7791234567890',
+        nombre: 'Proteína Whey Premium',
+        descripcion: 'Proteína de suero de leche de alta calidad para deportistas',
+        unidad: 'gramos',
+        size: 1000,
+        categorias: [getCategoriaId('Proteínas'), getCategoriaId('Para Deportistas')].filter(Boolean),
+        presentaciones: [
+          {
+            nombre: 'Frasco 1kg',
+            tipoPresentacionId: getTipoId('botella'),
+            cantidad: 1,
+            unidadMedida: 'kg',
+            contenidoPorUnidad: 1000,
+            unidadContenido: 'gramos',
+            precio: 25000,
+            esUnidadBase: true,
+          },
+          {
+            nombre: 'Caja 12 frascos',
+            tipoPresentacionId: getTipoId('caja'),
+            cantidad: 12,
+            unidadMedida: 'frascos',
+            precio: 280000,
+            esUnidadBase: false,
+          },
+          {
+            nombre: 'Pallet 50 cajas',
+            tipoPresentacionId: getTipoId('pallet'),
+            cantidad: 50,
+            unidadMedida: 'cajas',
+            precio: 14000000,
+            esUnidadBase: false,
+          }
+        ]
+      },
+      {
+        codigoBarra: '7791234567891',
+        nombre: 'Omega 3 Fish Oil',
+        descripcion: 'Aceite de pescado rico en ácidos grasos esenciales EPA y DHA',
+        unidad: 'cápsulas',
+        size: 120,
+        categorias: [getCategoriaId('Vitaminas'), getCategoriaId('Superalimentos')].filter(Boolean),
+        presentaciones: [
+          {
+            nombre: 'Frasco 120 cápsulas',
+            tipoPresentacionId: getTipoId('botella'),
+            cantidad: 1,
+            unidadMedida: 'frasco',
+            contenidoPorUnidad: 120,
+            unidadContenido: 'cápsulas',
+            precio: 18000,
+            esUnidadBase: true,
+          },
+          {
+            nombre: 'Caja 24 frascos',
+            tipoPresentacionId: getTipoId('caja'),
+            cantidad: 24,
+            unidadMedida: 'frascos',
+            precio: 400000,
+            esUnidadBase: false,
+          },
+          {
+            nombre: 'Pallet 30 cajas',
+            tipoPresentacionId: getTipoId('pallet'),
+            cantidad: 30,
+            unidadMedida: 'cajas',
+            precio: 12000000,
+            esUnidadBase: false,
+          }
+        ]
+      },
+      {
+        codigoBarra: '7791234567892',
+        nombre: 'Colágeno Hidrolizado',
+        descripcion: 'Colágeno tipo 1 y 3 hidrolizado para piel, cabello y articulaciones',
+        unidad: 'gramos',
+        size: 300,
+        categorias: [getCategoriaId('Suplementos y proteínas'), getCategoriaId('Productos orgánicos')].filter(Boolean),
+        presentaciones: [
+          {
+            nombre: 'Bolsa 300g',
+            tipoPresentacionId: getTipoId('bolsa'),
+            cantidad: 1,
+            unidadMedida: 'bolsa',
+            contenidoPorUnidad: 300,
+            unidadContenido: 'gramos',
+            precio: 15000,
+            esUnidadBase: true,
+          },
+          {
+            nombre: 'Caja 12 bolsas',
+            tipoPresentacionId: getTipoId('caja'),
+            cantidad: 12,
+            unidadMedida: 'bolsas',
+            precio: 165000,
+            esUnidadBase: false,
+          },
+          {
+            nombre: 'Pallet 40 cajas',
+            tipoPresentacionId: getTipoId('pallet'),
+            cantidad: 40,
+            unidadMedida: 'cajas',
+            precio: 6600000,
+            esUnidadBase: false,
+          }
+        ]
+      }
+    ];
+
+    for (const productoData of productos) {
+      try {
+        const { presentaciones, categorias: cats, ...productoFields } = productoData;
+
+        const producto = await prisma.productos.upsert({
+          where: { codigoBarra: productoFields.codigoBarra },
+          update: {},
+          create: {
+            ...productoFields,
+            categorias: cats.length > 0 ? {
+              connect: cats.map(id => ({ id }))
+            } : undefined,
+            presentaciones: {
+              create: presentaciones.map(pres => ({
+                ...pres,
+                stock: {
+                  create: {
+                    stockCerrado: Math.floor(Math.random() * 50) + 10 // Stock aleatorio entre 10-60
+                  }
+                }
+              }))
+            }
+          }
+        });
+
+        console.log(`✅ Producto "${producto.nombre}" creado con ${presentaciones.length} presentaciones`);
+      } catch (error) {
+        console.error(`❌ Error creando producto "${productoData.nombre}":`, error);
+      }
+    }
+
+    console.log('✅ Productos de prueba creados exitosamente');
+  } catch (error) {
+    console.error('❌ Error en seedProductos:', error);
+  }
+};
+
 // Función para poblar datos de prueba
 const seedMockData = async () => {
   try {
@@ -296,21 +459,25 @@ const seedMockData = async () => {
 
     // Crear proveedores adicionales
     const proveedoresData = [
-      { nombre: 'Proveedor Salud Natural', telefono: '1123456789', email: 'info@saludnatural.com' },
-      { nombre: 'Distribuidora Nutricional', telefono: '1134567890', email: 'ventas@nutricional.com' },
-      { nombre: 'Importadora Orgánica', telefono: '1145678901', email: 'contacto@importadora.com' }
+      { nombre: 'Proveedor Salud Natural', telefono: '1123456789', emails: ['info@saludnatural.com'] },
+      { nombre: 'Distribuidora Nutricional', telefono: '1134567890', emails: ['ventas@nutricional.com'] },
+      { nombre: 'Importadora Orgánica', telefono: '1145678901', emails: ['contacto@importadora.com'] }
     ];
 
     for (const prov of proveedoresData) {
+      const { emails, ...provFields } = prov;
       await prisma.contactos.upsert({
         where: { nombre: prov.nombre },
         update: {},
         create: {
-          ...prov,
+          ...provFields,
           esProveedor: true,
           cuit: `20${Math.random().toString().substr(2, 8)}9`,
           persona: 'JURIDICA',
-          iva: 'RESPONSABLE_INSCRIPTO'
+          iva: 'RESPONSABLE_INSCRIPTO',
+          emails: {
+            create: emails.map(email => ({ email }))
+          }
         }
       });
     }
@@ -418,35 +585,41 @@ const seedMockData = async () => {
 
       for (const pres of presentaciones) {
         if (pres.tipoPresentacionId) {
-          await prisma.presentaciones.upsert({
+          // Verificar si ya existe esta presentación para el producto
+          const existing = await prisma.presentaciones.findFirst({
             where: {
-              productoId_tipoPresentacionId: {
-                productoId: producto.id,
-                tipoPresentacionId: pres.tipoPresentacionId
-              }
-            },
-            update: {},
-            create: {
-              ...pres,
-              productoId: producto.id
+              productoId: producto.id,
+              nombre: pres.nombre
             }
           });
+
+          if (!existing) {
+            await prisma.presentaciones.create({
+              data: {
+                ...pres,
+                productoId: producto.id
+              }
+            });
+          }
         }
       }
     }
 
     // Crear algunos precios para los productos
     for (const producto of productos) {
-      await prisma.precios.upsert({
-        where: {
-          idProducto: producto.id
-        },
-        update: {},
-        create: {
-          precio: Math.floor(Math.random() * 5000) + 1000, // Precio entre 1000 y 6000
-          idProducto: producto.id
-        }
+      // Verificar si ya existe un precio para este producto
+      const existingPrecio = await prisma.precios.findFirst({
+        where: { idProducto: producto.id }
       });
+
+      if (!existingPrecio) {
+        await prisma.precios.create({
+          data: {
+            precio: Math.floor(Math.random() * 5000) + 1000, // Precio entre 1000 y 6000
+            idProducto: producto.id
+          }
+        });
+      }
     }
 
     // Crear algunos documentos de prueba (facturas)
@@ -456,18 +629,18 @@ const seedMockData = async () => {
       const fecha = new Date();
       fecha.setDate(fecha.getDate() - i * 7); // Documentos de las últimas 5 semanas
 
-      await prisma.documentos.upsert({
-        where: {
-          numero: `F001-${i + 1}`
-        },
-        update: {},
-        create: {
-          numero: `F001-${i + 1}`,
+      await prisma.documentos.create({
+        data: {
+          numeroDocumento: `F001-${i + 1}`,
           fecha,
-          tipoDocumento: 'FACTURA',
+          tipoDocumento: 'FACTURA_A',
           tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA', // Alternar entre compras y ventas
           total: Math.floor(Math.random() * 10000) + 5000,
-          idContacto: proveedores[i % proveedores.length]?.id
+          idContacto: proveedores[i % proveedores.length]?.id,
+          idDestinatario: proveedores.find(p => p.cuit === '27269425496')?.id, // Receptor es la empresa interna
+          estadoDocumento: {
+            connect: { codigo: 'IMPAGA' }
+          }
         }
       });
     }
@@ -482,7 +655,9 @@ await seed([
   seedUsuarios,
   seedTiposPresentacion,
   cargarGeoRef,
+  seedDocumentTypes,
   seedProveedores,
   seedCategorias,
+  seedProductos,
   seedMockData, // Agregar los datos de prueba
 ]);

@@ -1,10 +1,10 @@
-"use server"
-
 import ListadoVenta from "@/components/venta/ListadoVenta"
 import { getLastDocumentosVenta } from "@/prisma/consultas/documentos"
 
+export const dynamic = 'force-dynamic'
+
 export default async function Venta({numeroVenta}) {
-  const ultimaVenta = getLastDocumentosVenta("SALIDA", "FACTURA")
+  const ultimaVenta = await getLastDocumentosVenta("SALIDA", "FACTURA")
   return(
     <section className="flex flex-col gap-3 w-full h-full mx-auto max-h-full md:h-fit">
       <div className="

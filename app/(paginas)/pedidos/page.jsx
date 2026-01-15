@@ -10,7 +10,7 @@ import CrearPedidoAutomatico from '@/components/pedidos/CrearPedidoAutomatico';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 export default function PedidosPage() {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
   const [pedidos, setPedidos] = useState([]);
   const [productosPorProveedor, setProductosPorProveedor] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,15 +40,13 @@ export default function PedidosPage() {
 
   const handleCrearPedidosAutomaticos = async () => {
     try {
-      // Aquí necesitaríamos obtener el ID del usuario actual
-      // Por ahora usamos un ID dummy
-      const resultado = await crearPedidosAutomaticos('default-user');
+      const resultado = await crearPedidosAutomaticos();
 
       if (resultado.success) {
-        showError(`Se crearon ${resultado.pedidos.length} pedidos automáticamente`, 3000);
+        showSuccess(`Se crearon ${resultado.pedidos.length} pedidos automáticamente`, 3000);
         cargarDatos();
       } else {
-        showError('Error creando pedidos automáticos: ' + resultado.error);
+        showError('Error creando pedidos automáticos: ' + (resultado.msg || 'Error'));
       }
     } catch (error) {
       console.error('Error:', error);
@@ -118,6 +116,7 @@ export default function PedidosPage() {
                 <Icon icono="magic" className="mr-2" />
                 Crear Automáticos
               </button>
+
               <Link
                 href="/"
                 className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"

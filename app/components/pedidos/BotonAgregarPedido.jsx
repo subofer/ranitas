@@ -1,7 +1,7 @@
 "use client"
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { crearNuevoPedido } from '@/prisma/serverActions/pedidos';
-import { getSession } from '@/lib/sesion/sesion';
+import { useRouter } from 'next/navigation';
 import Icon from '../formComponents/Icon';
 import AgregarProductoPedido from './AgregarProductoPedido';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
@@ -14,22 +14,10 @@ const BotonAgregarPedido = ({
   onSuccess,
   yaPedido = false
 }) => {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
+  const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [currentUser, setCurrentUser] = useState(null);
-
-  useEffect(() => {
-    const cargarUsuarioActual = async () => {
-      try {
-        const session = await getSession();
-        setCurrentUser(session?.user || null);
-      } catch (error) {
-        console.error('Error obteniendo usuario actual:', error);
-      }
-    };
-    cargarUsuarioActual();
-  }, []);
 
   const handleClick = async () => {
     // Si el producto ya está pedido, no hacer nada
@@ -65,15 +53,15 @@ const BotonAgregarPedido = ({
           precioUnitario: producto.precios?.[0]?.precio,
           observaciones: 'Pedido automático desde catálogo'
         }],
-        idUsuario: currentUser?.id || 'default-user',
         notas: `Pedido automático para ${producto.nombre}`
       });
 
       if (resultado.success) {
-        showError(`Pedido creado automáticamente al proveedor ${resultado.pedido.proveedor.nombre}`, 3000);
+        showSuccess(`Pedido creado automáticamente al proveedor ${resultado.pedido.proveedor.nombre}`, 3000);
+        router.refresh();
         onSuccess && onSuccess();
       } else {
-        throw new Error(resultado.error);
+        throw new Error(resultado.msg || 'No se pudo crear el pedido');
       }
     } catch (error) {
       console.error('Error creando pedido automático:', error);
@@ -82,6 +70,7 @@ const BotonAgregarPedido = ({
   };
 
   const handleSuccess = () => {
+    router.refresh();
     onSuccess && onSuccess();
     setShowModal(false);
   };

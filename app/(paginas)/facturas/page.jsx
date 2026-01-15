@@ -2,30 +2,61 @@
 
 import { useState, useEffect } from 'react';
 import { getInvoices } from '@/prisma/consultas/dashboard';
+import { cambiarEstadoDocumento } from '@/prisma/serverActions/documentos';
+import { getEstadoDocumentoOptions } from '@/prisma/consultas/opcionesDocumento';
+import { CONTROL_PANEL } from '@/lib/controlPanelConfig';
 import FormCard from '@/components/formComponents/FormCard';
 import FormContainer from '@/components/formComponents/FormContainer';
 import Button from '@/components/formComponents/Button';
+import FilterSelect from '@/components/formComponents/FilterSelect';
 
 export default function FacturasPage() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // all, pending, paid
+  const [estadoOptions, setEstadoOptions] = useState([]);
 
   useEffect(() => {
-    const loadInvoices = async () => {
+    const loadData = async () => {
       try {
-        const data = await getInvoices(filter);
+        const estados = await getEstadoDocumentoOptions();
+        setEstadoOptions(estados);
+
+        const filterValue = filter === 'all' ? 'all' : CONTROL_PANEL.facturas.filtros[filter]?.estado || 'all';
+        const data = await getInvoices(filterValue);
         setInvoices(data);
       } catch (error) {
-        console.error('Error cargando facturas:', error);
+        console.error('Error cargando datos:', error);
         setInvoices([]);
+        setEstadoOptions([]);
       } finally {
         setLoading(false);
       }
     };
 
-    loadInvoices();
+    loadData();
   }, [filter]);
+
+  const handleEstadoChange = async (documentoId, nuevoEstadoCodigo) => {
+    try {
+      const result = await cambiarEstadoDocumento(documentoId, nuevoEstadoCodigo);
+      if (result.success) {
+        // Actualizar el estado local
+        setInvoices(prev => prev.map(inv => 
+          inv.id === documentoId 
+            ? { 
+                ...inv, 
+                estadoDocumento: result.documento.estadoDocumento,
+                idEstadoDocumento: result.documento.idEstadoDocumento
+              }
+            : inv
+        ));
+      }
+    } catch (error) {
+      console.error('Error cambiando estado:', error);
+      alert('Error al cambiar el estado del documento');
+    }
+  };
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('es-AR', {
@@ -38,23 +69,30 @@ export default function FacturasPage() {
     return new Intl.DateTimeFormat('es-AR').format(new Date(date));
   };
 
-  const getStatusBadge = (tipoMovimiento) => {
-    if (tipoMovimiento === 'SALIDA') {
+  const getStatusBadge = (estadoDocumento) => {
+    if (!estadoDocumento) return null;
+
+    const codigo = estadoDocumento.codigo || estadoDocumento;
+    const configEstado = CONTROL_PANEL.facturas.estados[codigo];
+
+    if (configEstado) {
+      const colorClasses = {
+        red: 'bg-red-100 text-red-800',
+        green: 'bg-green-100 text-green-800',
+        yellow: 'bg-yellow-100 text-yellow-800',
+        gray: 'bg-gray-100 text-gray-800'
+      };
+
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-          Pendiente
-        </span>
-      );
-    } else if (tipoMovimiento === 'ENTRADA') {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-          Pagada
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colorClasses[configEstado.color] || colorClasses.gray}`}>
+          {configEstado.label}
         </span>
       );
     }
+
     return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-        {tipoMovimiento}
+        {estadoDocumento.nombre || estadoDocumento}
       </span>
     );
   };
@@ -71,35 +109,24 @@ export default function FacturasPage() {
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Gestión de Facturas</h1>
-          <p className="text-gray-600">Administra tus facturas pagadas e impagas</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">{CONTROL_PANEL.facturas.titulo}</h1>
+          <p className="text-gray-600">{CONTROL_PANEL.facturas.descripcion}</p>
         </div>
 
         <FormContainer>
           {/* Filtros */}
           <div className="mb-6">
             <div className="flex gap-2">
-              <Button
-                tipo={filter === 'all' ? 'enviar' : 'neutro'}
-                onClick={() => setFilter('all')}
-                className="px-4 py-2"
-              >
-                Todas
-              </Button>
-              <Button
-                tipo={filter === 'pending' ? 'enviar' : 'neutro'}
-                onClick={() => setFilter('pending')}
-                className="px-4 py-2"
-              >
-                Pendientes
-              </Button>
-              <Button
-                tipo={filter === 'paid' ? 'enviar' : 'neutro'}
-                onClick={() => setFilter('paid')}
-                className="px-4 py-2"
-              >
-                Pagadas
-              </Button>
+              {Object.entries(CONTROL_PANEL.facturas.filtros).map(([key, config]) => (
+                <Button
+                  key={key}
+                  tipo={filter === key ? 'enviar' : 'neutro'}
+                  onClick={() => setFilter(key)}
+                  className="px-4 py-2"
+                >
+                  {config.label}
+                </Button>
+              ))}
             </div>
           </div>
 
@@ -145,22 +172,33 @@ export default function FacturasPage() {
                         {invoice.receptor?.razonSocial || invoice.emisor?.razonSocial || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {invoice.tipoDocumento}
+                        {invoice.tipoDocumento?.nombre || 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(invoice.tipoMovimiento)}
+                        {getStatusBadge(invoice.estadoDocumento)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {formatCurrency(invoice.total || 0)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <Button
-                          tipo="neutro"
-                          onClick={() => console.log('Ver detalles:', invoice.id)}
-                          className="px-3 py-1 text-xs"
-                        >
-                          Ver
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <FilterSelect
+                            options={estadoOptions}
+                            valueField="codigo"
+                            textField="nombre"
+                            value={invoice.estadoDocumento?.codigo || ''}
+                            onChange={(option) => handleEstadoChange(invoice.id, option?.codigo)}
+                            className="w-24"
+                            placeholder="Estado"
+                          />
+                          <Button
+                            tipo="neutro"
+                            onClick={() => console.log('Ver detalles:', invoice.id)}
+                            className="px-3 py-1 text-xs"
+                          >
+                            Ver
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -184,24 +222,21 @@ export default function FacturasPage() {
           {/* Resumen */}
           {invoices.length > 0 && (
             <div className="mt-6 bg-gray-50 rounded-lg p-4">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Resumen</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">{CONTROL_PANEL.facturas.resumen.titulo}</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-white p-4 rounded-lg border">
-                  <div className="text-sm text-gray-500">Total de Facturas</div>
+                  <div className="text-sm text-gray-500">{CONTROL_PANEL.facturas.resumen.totalLabel}</div>
                   <div className="text-2xl font-bold text-gray-900">{invoices.length}</div>
                 </div>
-                <div className="bg-white p-4 rounded-lg border">
-                  <div className="text-sm text-gray-500">Pendientes</div>
-                  <div className="text-2xl font-bold text-yellow-600">
-                    {invoices.filter(inv => inv.tipoMovimiento === 'SALIDA').length}
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border">
-                  <div className="text-sm text-gray-500">Pagadas</div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {invoices.filter(inv => inv.tipoMovimiento === 'ENTRADA').length}
-                  </div>
-                </div>
+                {Object.entries(CONTROL_PANEL.facturas.filtros).filter(([key]) => key !== 'all').map(([key, config]) => {
+                  const count = invoices.filter(inv => inv.estadoDocumento?.codigo === config.estado).length;
+                  return (
+                    <div key={key} className="bg-white p-4 rounded-lg border">
+                      <div className="text-sm text-gray-500">{config.label}</div>
+                      <div className="text-2xl font-bold text-gray-900">{count}</div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

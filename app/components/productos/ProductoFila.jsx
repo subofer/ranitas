@@ -659,9 +659,6 @@ const ProductoFila = ({
                     title="Stock cerrado (reserva)"
                   />
                 )}
-                {baseId && pres.id !== baseId && (
-                  <div className="text-xs text-gray-500">(equiv.)</div>
-                )}
               </td>
             )}
 

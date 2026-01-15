@@ -1,16 +1,14 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { getPedidos, crearPedido } from '@/prisma/consultas/pedidos';
-import { agregarProductoPedido } from '@/prisma/serverActions/pedidos';
-import { getSession } from '@/lib/sesion/sesion';
+import { getPedidos } from '@/prisma/consultas/pedidos';
+import { agregarProductoPedido, crearNuevoPedido } from '@/prisma/serverActions/pedidos';
 import Icon from '../formComponents/Icon';
-import Select from '../formComponents/Select';
 import FilterSelect from '../formComponents/FilterSelect';
 import Input from '../formComponents/Input';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
   const [pedidos, setPedidos] = useState([]);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState('');
   const [cantidad, setCantidad] = useState(1);
@@ -19,7 +17,6 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
   const [showCrearNuevo, setShowCrearNuevo] = useState(false);
   const [modoCrearNuevo, setModoCrearNuevo] = useState('conProveedor'); // 'conProveedor' o 'sinProveedor'
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
 
   const cargarPedidosPendientes = async () => {
     try {
@@ -34,17 +31,7 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
 
   useEffect(() => {
     cargarPedidosPendientes();
-    cargarUsuarioActual();
   }, []);
-
-  const cargarUsuarioActual = async () => {
-    try {
-      const session = await getSession();
-      setCurrentUser(session?.user || null);
-    } catch (error) {
-      console.error('Error obteniendo usuario actual:', error);
-    }
-  };
 
   const handleAgregar = async () => {
     if (showCrearNuevo) {
@@ -69,9 +56,9 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
       if (resultado.success) {
         onSuccess && onSuccess();
         onClose && onClose();
-        showError('Producto agregado al pedido exitosamente', 3000);
+        showSuccess('Producto agregado al pedido exitosamente', 3000);
       } else {
-        showError('Error agregando producto: ' + resultado.error);
+        showError('Error agregando producto: ' + (resultado.msg || 'Error'));
       }
     } catch (error) {
       console.error('Error:', error);
@@ -92,24 +79,29 @@ const AgregarProductoPedido = ({ producto, onClose, onSuccess }) => {
         idProveedor = proveedorSeleccionado;
       }
 
-      const resultado = await crearPedido({
+      const resultado = await crearNuevoPedido({
         idProveedor,
         productos: [{
-          idProducto: producto.id,
+          id: producto.id,
           cantidad: parseFloat(cantidad),
           precioUnitario: producto.precios?.[0]?.precio,
           observaciones
         }],
-        idUsuario: currentUser?.id || 'default-user',
         notas: idProveedor ? `Pedido creado desde catálogo` : `Pedido sin proveedor asignado - requiere revisión`
       });
 
-      onSuccess && onSuccess();
-      onClose && onClose();
-      showError(idProveedor
-        ? `Nuevo pedido creado al proveedor ${resultado.proveedor?.nombre || 'desconocido'}`
-        : 'Nuevo pedido creado sin proveedor asignado', 3000
-      );
+      if (resultado.success) {
+        onSuccess && onSuccess();
+        onClose && onClose();
+        showSuccess(
+          idProveedor
+            ? `Nuevo pedido creado al proveedor ${resultado.pedido?.proveedor?.nombre || 'desconocido'}`
+            : 'Nuevo pedido creado sin proveedor asignado',
+          3000
+        );
+      } else {
+        showError('Error creando pedido: ' + (resultado.msg || 'Error'));
+      }
     } catch (error) {
       console.error('Error creando pedido:', error);
       showError('Error creando pedido: ' + error.message);

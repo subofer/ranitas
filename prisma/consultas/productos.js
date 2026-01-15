@@ -405,3 +405,27 @@ export const getProductos = async ({ take = 50, skip = 0, filter = '', categoryF
 
   return { productos };
 }
+
+export const getAllProductosBasic = async () => {
+  const productos = await prisma.productos.findMany({
+    select: {
+      id: true,
+      nombre: true,
+      presentaciones: {
+        select: {
+          id: true,
+          tipoPresentacion: {
+            select: {
+              nombre: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: {
+      nombre: 'asc',
+    },
+  });
+
+  return productos;
+};

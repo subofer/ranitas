@@ -1,7 +1,7 @@
 "use server"
 import prisma from "../prisma";
 import { revalidatePath } from "next/cache";
-import { crearPedido, actualizarEstadoPedido, agregarProductoAPedido, eliminarPedido } from "../consultas/pedidos";
+import { crearPedido, actualizarEstadoPedido, agregarProductoAPedido, eliminarPedido, actualizarCantidadDetallePedido } from "../consultas/pedidos";
 import { auditAction } from "@/lib/actions/audit";
 import { getSession } from "@/lib/sesion/sesion";
 
@@ -10,13 +10,46 @@ const revalidate = () => {
   revalidatePath("/");
 };
 
+const resolveUsuarioId = async ({ idUsuario, sessionUserName }) => {
+  if (idUsuario) {
+    const existing = await prisma.usuarios.findUnique({
+      where: { id: idUsuario },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+  }
+
+  if (sessionUserName) {
+    const byName = await prisma.usuarios.findUnique({
+      where: { nombre: sessionUserName },
+      select: { id: true },
+    });
+    if (byName) return byName.id;
+  }
+
+  const fallback = await prisma.usuarios.findFirst({
+    select: { id: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return fallback?.id || null;
+};
+
 // Crear un nuevo pedido
 export const crearNuevoPedido = async (datosPedido) => {
   const session = await getSession();
   const userId = session?.user || 'Sistema';
 
   try {
-    const pedido = await crearPedido(datosPedido);
+    const idUsuario = await resolveUsuarioId({ idUsuario: datosPedido?.idUsuario, sessionUserName: session?.user });
+    if (!idUsuario) throw new Error('No se pudo resolver el usuario para crear el pedido');
+
+    const datosPedidoNormalizados = {
+      ...datosPedido,
+      idUsuario,
+    };
+
+    const pedido = await crearPedido(datosPedidoNormalizados);
     
     // Auditar éxito
     await auditAction({
@@ -121,6 +154,41 @@ export const agregarProductoPedido = async (idPedido, producto) => {
   }
 };
 
+// Actualizar cantidad de un producto en un pedido existente
+export const actualizarCantidadProductoPedido = async (idPedido, idProducto, cantidad) => {
+  const session = await getSession();
+  const userId = session?.user || 'Sistema';
+
+  try {
+    const detalle = await actualizarCantidadDetallePedido(idPedido, idProducto, cantidad);
+
+    await auditAction({
+      level: 'SUCCESS',
+      action: 'ACTUALIZAR_CANTIDAD_PEDIDO',
+      message: `Cantidad actualizada para producto ${idProducto} en pedido ${idPedido}`,
+      category: 'DB',
+      metadata: { pedidoId: idPedido, productoId: idProducto, cantidad },
+      userId,
+    });
+
+    revalidate();
+    return { success: true, error: false, detalle };
+  } catch (error) {
+    console.error('Error actualizando cantidad del pedido:', error);
+
+    await auditAction({
+      level: 'ERROR',
+      action: 'ACTUALIZAR_CANTIDAD_PEDIDO',
+      message: error.message,
+      category: 'DB',
+      metadata: { pedidoId: idPedido, productoId: idProducto, cantidad },
+      userId,
+    });
+
+    return { success: false, error: true, msg: error.message };
+  }
+};
+
 // Eliminar pedido
 export const eliminarPedidoCompleto = async (idPedido) => {
   const session = await getSession();
@@ -164,6 +232,9 @@ export const crearPedidosAutomaticos = async (idUsuario) => {
   const userId = session?.user || 'Sistema';
 
   try {
+    const idUsuarioResolved = await resolveUsuarioId({ idUsuario, sessionUserName: session?.user });
+    if (!idUsuarioResolved) throw new Error('No se pudo resolver el usuario para crear pedidos automáticos');
+
     const { getProductosAgrupadosPorProveedor } = await import("../consultas/pedidos");
     const productosPorProveedor = await getProductosAgrupadosPorProveedor();
 
@@ -178,7 +249,7 @@ export const crearPedidosAutomaticos = async (idUsuario) => {
           precioUnitario: p.precios?.[0]?.precio,
           observaciones: `Reposición automática - Stock bajo: ${p.size || 0} unidades`
         })),
-        idUsuario,
+        idUsuario: idUsuarioResolved,
         notas: `Pedido automático generado por sistema - Productos con stock bajo`
       });
 

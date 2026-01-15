@@ -204,7 +204,7 @@ const seedProductosDesdePlanilla = async () => {
               idDestinatario: null, // Receptor (empresa)
               numeroDocumento: `FACT-${Date.now()}`,
               tipoMovimiento: 'ENTRADA',
-              tipoDocumento: 'FACTURA',
+              tipoDocumento: 'FACTURA_A',
               fecha: new Date(),
               tieneImpuestos: true,
               total: precioUnitario.precio * cantidadRandom,

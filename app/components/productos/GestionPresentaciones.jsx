@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Button from '../formComponents/Button';
 import SelectTipoPresentacion from './SelectTipoPresentacion';
+import ProveedoresPresentacionPanel from './ProveedoresPresentacionPanel';
 import Icon from '../formComponents/Icon';
 
 export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
@@ -113,18 +114,7 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
               </tr>
             </thead>
 
-            <tbody className="bg-white">
-              {presentaciones.length === 0 && (
-                <tr>
-                  <td className="px-4 py-6 text-center text-gray-500" colSpan={11}>
-                    <div className="flex items-center justify-center gap-2">
-                      <Icon icono="box" className="text-gray-300" />
-                      <span>No hay presentaciones</span>
-                    </div>
-                  </td>
-                </tr>
-              )}
-
+            <tbody className="bg-white overflow-visible">
               {presentaciones.map((presentacion) => (
                 <tr key={presentacion.id} className="border-b border-gray-100">
                   <td className={tdClass}>
@@ -343,9 +333,9 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
                     tipo="enviar"
                     onClick={agregarPresentacion}
                     disabled={!nuevaPresentacion.nombre || !nuevaPresentacion.tipoPresentacionId}
+                    className="py-1 h-[32px] flex items-center"
                   >
-                    <Icon icono="plus" className="mr-2" />
-                    Agregar
+                      Guardar
                   </Button>
                 </td>
               </tr>
@@ -357,6 +347,8 @@ export const GestionPresentaciones = ({ presentaciones = [], onChange }) => {
           Marcá una sola presentación como <b>Base</b> (stock suelto).
         </p>
       </div>
+
+      <ProveedoresPresentacionPanel presentaciones={presentaciones} />
     </div>
   );
 };

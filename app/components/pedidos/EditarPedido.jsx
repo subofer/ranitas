@@ -1,15 +1,14 @@
 "use client"
 import { useState, useEffect } from 'react';
-import { agregarProductoPedido } from '@/prisma/serverActions/pedidos';
+import { agregarProductoPedido, actualizarCantidadProductoPedido } from '@/prisma/serverActions/pedidos';
 import { getProductos } from '@/prisma/consultas/productos';
 import Icon from '../formComponents/Icon';
-import Select from '../formComponents/Select';
 import FilterSelect from '../formComponents/FilterSelect';
 import Input from '../formComponents/Input';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 
 const EditarPedido = ({ pedido, onClose, onUpdate }) => {
-  const { showError } = useErrorNotification();
+  const { showError, showSuccess } = useErrorNotification();
   const [productosActuales, setProductosActuales] = useState([]);
   const [showAgregarProducto, setShowAgregarProducto] = useState(false);
   const [cargando, setCargando] = useState(false);
@@ -30,12 +29,19 @@ const EditarPedido = ({ pedido, onClose, onUpdate }) => {
       });
 
       if (resultado.success) {
-        // Actualizar la lista de productos
-        setProductosActuales(prev => [...prev, resultado.detalle]);
+        // Actualizar la lista de productos (upsert: reemplazar si ya existe)
+        const productoId = resultado.detalle?.idProducto || resultado.detalle?.producto?.id;
+        setProductosActuales(prev => {
+          const idx = prev.findIndex(d => (d.idProducto || d.producto?.id) === productoId);
+          if (idx === -1) return [...prev, resultado.detalle];
+          const copy = [...prev];
+          copy[idx] = resultado.detalle;
+          return copy;
+        });
         onUpdate && onUpdate();
-        showError('Producto agregado exitosamente', 3000);
+        showSuccess('Producto agregado exitosamente', 2000);
       } else {
-        showError('Error agregando producto: ' + resultado.error);
+        showError('Error agregando producto: ' + (resultado.msg || 'Error'));
       }
     } catch (error) {
       console.error('Error:', error);
@@ -43,6 +49,34 @@ const EditarPedido = ({ pedido, onClose, onUpdate }) => {
     } finally {
       setCargando(false);
       setShowAgregarProducto(false);
+    }
+  };
+
+  const handleActualizarCantidad = async (idProducto, nuevaCantidad) => {
+    if (pedido.estado !== 'PENDIENTE') return;
+
+    const cantidadNum = Number(nuevaCantidad);
+    if (!Number.isFinite(cantidadNum) || cantidadNum <= 0) {
+      showError('La cantidad debe ser mayor a 0');
+      return;
+    }
+
+    try {
+      const res = await actualizarCantidadProductoPedido(pedido.id, idProducto, cantidadNum);
+      if (!res.success) {
+        showError(res.msg || 'Error actualizando cantidad');
+        return;
+      }
+
+      setProductosActuales(prev => prev.map(d => {
+        const pid = d.idProducto || d.producto?.id;
+        if (pid !== idProducto) return d;
+        return { ...d, cantidad: res.detalle?.cantidad ?? cantidadNum };
+      }));
+      onUpdate && onUpdate();
+      showSuccess('Cantidad actualizada', 1200);
+    } catch (e) {
+      showError('Error actualizando cantidad: ' + (e?.message || 'Error'));
     }
   };
 
@@ -126,7 +160,26 @@ const EditarPedido = ({ pedido, onClose, onUpdate }) => {
                     </div>
                     <div className="flex items-center space-x-4">
                       <div className="text-right">
-                        <p className="font-medium text-gray-900">x{detalle.cantidad}</p>
+                        <div className="flex items-center justify-end space-x-2">
+                          <span className="text-sm text-gray-600">Cant</span>
+                          <input
+                            type="number"
+                            min="0.1"
+                            step="0.1"
+                            disabled={pedido.estado !== 'PENDIENTE'}
+                            value={detalle.cantidad}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setProductosActuales(prev => prev.map(d => d.id === detalle.id ? { ...d, cantidad: v } : d));
+                            }}
+                            onBlur={(e) => {
+                              const idProducto = detalle.idProducto || detalle.producto?.id;
+                              if (!idProducto) return;
+                              handleActualizarCantidad(idProducto, e.target.value);
+                            }}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded-lg text-right text-gray-900 bg-white focus:ring-2 focus:ring-gray-500 focus:border-transparent"
+                          />
+                        </div>
                         {detalle.precioUnitario && (
                           <p className="text-sm text-gray-600">
                             ${detalle.precioUnitario.toLocaleString()}
@@ -182,22 +235,24 @@ const AgregarProductoAPedido = ({ pedido, productosActuales, onAgregar, onClose,
     const cargarProductosDisponibles = async () => {
       try {
         setCargandoProductos(true);
-        const todosLosProductos = await getProductos();
+        const res = await getProductos({ take: undefined });
+        const todosLosProductos = Array.isArray(res) ? res : (res?.productos || []);
 
         // Filtrar productos según el proveedor del pedido
         let productosFiltrados = todosLosProductos;
 
-        if (pedido.proveedor) {
+        const proveedorId = pedido.idProveedor || pedido.proveedor?.id;
+        if (proveedorId) {
           // Si el pedido tiene proveedor, mostrar solo productos de ese proveedor
           productosFiltrados = todosLosProductos.filter(producto =>
-            producto.proveedores?.some(provRel => provRel.proveedor.id === pedido.proveedor.id)
+            producto.proveedores?.some(provRel => provRel?.proveedor?.id === proveedorId)
           );
         }
         // Si no tiene proveedor, mostrar todos los productos
 
         // Excluir productos que ya están en el pedido
         const productosNoEnPedido = productosFiltrados.filter(producto =>
-          !productosActuales.some(pa => pa.producto.id === producto.id)
+          !productosActuales.some(pa => (pa.idProducto || pa.producto?.id) === producto.id)
         );
 
         setProductosDisponibles(productosNoEnPedido);
@@ -210,13 +265,13 @@ const AgregarProductoAPedido = ({ pedido, productosActuales, onAgregar, onClose,
     };
 
     cargarProductosDisponibles();
-  }, [pedido.proveedor, productosActuales]);
+  }, [pedido.idProveedor, pedido.proveedor?.id, productosActuales]);
 
   const handleSubmit = () => {
     const producto = productosDisponibles.find(p => p.id === productoSeleccionado);
     if (producto) {
       onAgregar({
-        idProducto: producto.id,
+        id: producto.id,
         cantidad: parseFloat(cantidad),
         precioUnitario: producto.precios?.[0]?.precio || 0,
         observaciones

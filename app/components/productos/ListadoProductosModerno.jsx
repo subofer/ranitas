@@ -117,7 +117,9 @@ const calcularStockEquivalente = (producto) => {
   };
 };
 
-const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false }) => {
+const ListadoProductosModerno = ({ 
+  mostrarCodigo = true, modoCompacto = false, autoFoco = true,  
+}) => {
   const { showError } = useErrorNotification();
   const { addNotification } = useNotification();
   const { userName } = useCurrentUser();
@@ -204,12 +206,6 @@ const ListadoProductosModerno = ({ mostrarCodigo = true, modoCompacto = false })
     const qs = params.toString();
     router.replace(qs ? `/listadoProductos?${qs}` : '/listadoProductos', { scroll: false });
   }, [router, searchParams]);
-
-  const abrirAbmEditar = useCallback((productoId) => {
-    if (!productoId) return;
-    setQueryParams({ edit: productoId, codigoBarra: null });
-    window?.scrollTo?.({ top: 0, behavior: 'smooth' });
-  }, [setQueryParams]);
 
   const cargarProductos = useCallback(async ({ force = false } = {}) => {
     try {

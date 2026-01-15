@@ -48,7 +48,7 @@ const Input = forwardRef(({
   const hasValue = value && value !== "";
 
   return (
-    <div className="relative w-full">
+    <div className="relative w-full bg-white">
       <input
         ref={ref}
         id={name}
@@ -67,14 +67,14 @@ const Input = forwardRef(({
           px-2.5 pt-6 pb-3
           h-[52px]
           border-0 border-b-2 border-gray-300
-          bg-transparent
+          bg-white
           focus:outline-none focus:ring-0
           focus:border-slate-400 peer
           transition-all duration-500 ease-in-out
           disabled:opacity-50 disabled:cursor-not-allowed
           placeholder:text-gray-500
           ${error?.error ? "border-red-500" : ""}
-          ${pending || loading ? "bg-gray-50" : ""}
+          ${pending || loading ? "bg-gray-100" : ""}
           ${type === "checkbox" ? "form-checkbox text-gray-900 mr-1 ml-auto h-auto py-0" : ""}
           ${actionIcon ? "pr-10" : ""}
           ${className}
@@ -87,7 +87,7 @@ const Input = forwardRef(({
       {/* Label flotante dentro del input */}
       {label && (
         <span
-          className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
+          className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5 bg-white
             text-sm font-medium top-1 text-black
             ${hasValue || placeholder ? "top-1 text-sm" : "top-3 text-base"}`
           }

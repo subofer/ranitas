@@ -6,9 +6,9 @@ const ErrorNotificationContext = createContext();
 export const ErrorNotificationProvider = ({ children }) => {
   const [notifications, setNotifications] = useState([]);
 
-  const showError = (message, duration = 5000) => {
+  const showNotification = (message, { type = 'error', duration = 5000 } = {}) => {
     const id = Date.now() + Math.random();
-    setNotifications(prev => [...prev, { id, message, duration }]);
+    setNotifications(prev => [...prev, { id, message, duration, type }]);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -19,12 +19,16 @@ export const ErrorNotificationProvider = ({ children }) => {
     return id;
   };
 
+  const showError = (message, duration = 5000) => showNotification(message, { type: 'error', duration });
+  const showSuccess = (message, duration = 3000) => showNotification(message, { type: 'success', duration });
+  const showInfo = (message, duration = 3000) => showNotification(message, { type: 'info', duration });
+
   const closeError = (id) => {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   return (
-    <ErrorNotificationContext.Provider value={{ showError, closeError, notifications }}>
+    <ErrorNotificationContext.Provider value={{ showNotification, showError, showSuccess, showInfo, closeError, notifications }}>
       {children}
     </ErrorNotificationContext.Provider>
   );

@@ -74,7 +74,7 @@ export async function guardarVentaConStock(venta = {}) {
   }
   const consumidorId = await getContactoConsumidorFinal();
 
-  const tipoDocumento = "FACTURA";
+  const tipoDocumento = "FACTURA_A";
   const tipoMovimiento = "SALIDA";
   const fecha = new Date();
   const tieneImpuestos = false;

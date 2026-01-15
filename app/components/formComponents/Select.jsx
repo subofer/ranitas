@@ -18,25 +18,25 @@ const Select = ({
   const displayPlaceholder = !hasValue && placeholder;
 
   return(
-    <div className="relative w-full">
+    <div className="relative w-full bg-white">
       <select
         className={`
           appearance-none
-          text-right
-          text-gray-900
+          text-left
           block w-full
           px-2.5 pt-6 pb-2
           h-[56px]
           border-0 border-b-2 border-gray-300
-          bg-transparent
+          bg-white
           focus:outline-none focus:ring-0
           focus:border-slate-400 peer
           transition-all duration-500 ease-in-out
           disabled:opacity-50 disabled:cursor-not-allowed
-          ${loading ? "bg-gray-50" : ""}
-          ${displayPlaceholder ? "text-gray-500" : ""}
           pr-8
+          ${loading ? "bg-gray-100" : ""}
+          ${displayPlaceholder ? "text-gray-500" : "text-gray-900"}
         `}
+        style={{ color: displayPlaceholder ? '#6b7280' : '#111827' }}
         disabled={loading}
         {...props}
       >
@@ -57,7 +57,7 @@ const Select = ({
       {/* Label flotante dentro del select */}
       {label && (
         <span
-          className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5
+          className={`absolute left-0 transition-all duration-500 ease-in-out px-2.5 bg-white
             text-sm font-medium top-1 text-black
             ${hasValue || props.placeholder ? "top-1 text-sm" : "top-3 text-base"}`
           }
