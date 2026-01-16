@@ -156,6 +156,124 @@ export async function abrirPresentacion({ presentacionId, cantidad } = {}) {
   }
 }
 
+/**
+ * Cerrar una presentación (convertir unidades sueltas a cajas cerradas)
+ * Es la operación inversa de abrirPresentacion
+ */
+export async function cerrarPresentacion({ presentacionId, cantidad } = {}) {
+  const cant = normalizarEnteroPositivo(cantidad);
+  if (!presentacionId) return { error: true, msg: "Falta presentacionId" };
+  if (cant <= 0) return { error: true, msg: "Cantidad inválida" };
+
+  const presentacion = await prisma.presentaciones.findUnique({
+    where: { id: presentacionId },
+    include: {
+      producto: {
+        select: {
+          id: true,
+          stockSuelto: true,
+          presentaciones: { select: { id: true, esUnidadBase: true } },
+        },
+      },
+      stock: true,
+    },
+  });
+
+  if (!presentacion) return { error: true, msg: "Presentación no encontrada" };
+
+  const productoId = presentacion.productoId;
+  const base = presentacion.producto?.presentaciones?.find((p) => p.esUnidadBase);
+  if (!base) {
+    return {
+      error: true,
+      msg: "Este producto no tiene una presentación marcada como unidad base (esUnidadBase) para poder convertir.",
+    };
+  }
+
+  const agrupaciones = await prisma.agrupacionPresentaciones.findMany({
+    where: {
+      OR: [
+        { presentacionContenedora: { productoId } },
+        { presentacionContenida: { productoId } },
+      ],
+    },
+    select: {
+      presentacionContenedoraId: true,
+      presentacionContenidaId: true,
+      cantidad: true,
+    },
+  });
+
+  const factor = calcularFactorAUnidadBase({
+    desdePresentacionId: presentacionId,
+    hastaPresentacionBaseId: base.id,
+    agrupaciones,
+  });
+
+  if (!esNumeroValido(factor) || factor == null) {
+    return {
+      error: true,
+      msg: "No hay equivalencia definida para convertir esta presentación a unidad base. Configurá AgrupacionPresentaciones (caja→unidad).",
+    };
+  }
+
+  // Calcular cuántas unidades sueltas se necesitan para cerrar X cajas
+  const unidadesNecesarias = Math.round(cant * factor);
+  if (unidadesNecesarias <= 0) {
+    return {
+      error: true,
+      msg: "Equivalencia inválida (unidades requeridas <= 0).",
+    };
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Verificar stock suelto disponible
+      const producto = await tx.productos.findUnique({
+        where: { id: productoId },
+        select: { stockSuelto: true },
+      });
+
+      if (!producto || producto.stockSuelto < unidadesNecesarias) {
+        throw new Error(`Stock suelto insuficiente. Disponible: ${producto?.stockSuelto ?? 0}, Necesario: ${unidadesNecesarias}`);
+      }
+
+      // Decrementar stock suelto
+      const productoActualizado = await tx.productos.update({
+        where: { id: productoId },
+        data: { stockSuelto: { decrement: unidadesNecesarias } },
+        select: { id: true, stockSuelto: true },
+      });
+
+      // Incrementar stock cerrado de la presentación
+      const stock = await tx.stockPresentacion.findUnique({
+        where: { presentacionId },
+      });
+
+      const stockSeguro =
+        stock ??
+        (await tx.stockPresentacion.create({
+          data: { presentacionId, stockCerrado: 0 },
+        }));
+
+      const stockActualizado = await tx.stockPresentacion.update({
+        where: { presentacionId },
+        data: { stockCerrado: { increment: cant } },
+      });
+
+      return { stockActualizado, productoActualizado, unidadesUsadas: unidadesNecesarias, factor };
+    });
+
+    return {
+      error: false,
+      msg: "Caja cerrada",
+      data: result,
+    };
+  } catch (e) {
+    return { error: true, msg: e?.message || "Error cerrando caja" };
+  }
+}
+
 export async function conteoManualStockSuelto({ productoId, nuevoStockSuelto, motivo = "" } = {}) {
   const cant = normalizarEnteroPositivo(nuevoStockSuelto);
   if (!productoId) return { error: true, msg: "Falta productoId" };

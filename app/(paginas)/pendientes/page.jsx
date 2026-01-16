@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import FormContainer from '@/components/formComponents/FormContainer';
 import Button from '@/components/formComponents/Button';
 import Icon from '@/components/formComponents/Icon';
-import { aplicarPendienteAliasProveedor, aplicarPendienteFacturaItem, getPendientes } from '@/prisma/serverActions/pendientes';
+import { aplicarPendienteAliasProveedor, aplicarPendienteFacturaItem, configurarAliasPendiente, getPendientes } from '@/prisma/serverActions/pendientes';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
 import { getProductos } from '@/prisma/consultas/productos';
 import SelectOnClientByProps from '@/components/proveedores/SelectOnClientByProps';
+import { subscribePendientesUpdated, emitPendientesUpdated } from '@/lib/pendientesEvents';
 
 export default function PendientesPage() {
   const { showError, showSuccess } = useErrorNotification();
@@ -16,12 +17,14 @@ export default function PendientesPage() {
   const [estado, setEstado] = useState('ABIERTO');
 
   const [modalAplicar, setModalAplicar] = useState({ open: false, pendiente: null });
+  const [modalAlias, setModalAlias] = useState({ open: false, pendiente: null });
   const [productosOptions, setProductosOptions] = useState({ options: [] });
   const [aplicarProductoId, setAplicarProductoId] = useState('');
   const [aplicarPresentacionId, setAplicarPresentacionId] = useState('');
+  const [nombreEnProveedor, setNombreEnProveedor] = useState('');
   const [aplicando, setAplicando] = useState(false);
 
-  const cargar = async () => {
+  const cargar = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getPendientes({ estado });
@@ -38,12 +41,18 @@ export default function PendientesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [estado, showError]);
 
   useEffect(() => {
     cargar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [estado]);
+  }, [cargar]);
+
+  useEffect(() => {
+    const unsubscribe = subscribePendientesUpdated(() => {
+      cargar();
+    });
+    return unsubscribe;
+  }, [cargar]);
 
   const abrirModalAplicar = async (pendiente) => {
     setAplicarProductoId('');
@@ -64,6 +73,51 @@ export default function PendientesPage() {
   const cerrarModalAplicar = () => {
     if (aplicando) return;
     setModalAplicar({ open: false, pendiente: null });
+  };
+
+  // Modal para configurar solo el alias (cuando ya hay presentación asignada)
+  const abrirModalAlias = (pendiente) => {
+    setNombreEnProveedor('');
+    setModalAlias({ open: true, pendiente });
+  };
+
+  const cerrarModalAlias = () => {
+    if (aplicando) return;
+    setModalAlias({ open: false, pendiente: null });
+  };
+
+  const aplicarAlias = async () => {
+    const pid = modalAlias?.pendiente?.id;
+    if (!pid) return;
+    if (!nombreEnProveedor.trim()) {
+      showError('Ingresá el nombre/alias del proveedor');
+      return;
+    }
+
+    setAplicando(true);
+    try {
+      const res = await configurarAliasPendiente(pid, { nombreEnProveedor: nombreEnProveedor.trim() });
+      if (res?.success) {
+        showSuccess('Alias configurado correctamente', 2500);
+        cerrarModalAlias();
+        cargar();
+        emitPendientesUpdated();
+      } else {
+        showError(res?.msg || 'No se pudo configurar el alias');
+      }
+    } catch (e) {
+      console.error(e);
+      showError('Error configurando alias: ' + (e?.message || 'Error'));
+    } finally {
+      setAplicando(false);
+    }
+  };
+
+  // Determinar si un pendiente de alias ya tiene presentación (solo falta el alias)
+  const pendienteSoloNecesitaAlias = (pendiente) => {
+    return pendiente?.tipo === 'ALIAS_PRESENTACION_PROVEEDOR' && 
+           pendiente?.payload?.presentacionId && 
+           pendiente?.payload?.relacionId;
   };
 
   const productoSeleccionado = (productosOptions?.options || []).find((p) => p?.id === aplicarProductoId) || null;
@@ -88,6 +142,7 @@ export default function PendientesPage() {
         showSuccess(tipo === 'ALIAS_PRESENTACION_PROVEEDOR' ? 'Alias mapeado' : 'Pendiente aplicado (stock/precio actualizado)', 2500);
         cerrarModalAplicar();
         cargar();
+        emitPendientesUpdated();
       } else {
         showError(res?.msg || 'No se pudo aplicar el pendiente');
       }
@@ -171,7 +226,11 @@ export default function PendientesPage() {
                         <td className="px-6 py-4 text-right whitespace-nowrap">
                           {estado === 'ABIERTO' ? (
                             <div className="flex justify-end gap-2">
-                              {p.tipo === 'MAPEAR_ITEM_FACTURA' || p.tipo === 'ALIAS_PRESENTACION_PROVEEDOR' ? (
+                              {pendienteSoloNecesitaAlias(p) ? (
+                                <Button tipo="enviar" onClick={() => abrirModalAlias(p)}>
+                                  Configurar Alias
+                                </Button>
+                              ) : p.tipo === 'MAPEAR_ITEM_FACTURA' || p.tipo === 'ALIAS_PRESENTACION_PROVEEDOR' ? (
                                 <Button tipo="enviar" onClick={() => abrirModalAplicar(p)}>
                                   Asignar Producto
                                 </Button>
@@ -289,6 +348,71 @@ export default function PendientesPage() {
                 <Button tipo="neutro" onClick={cerrarModalAplicar} disabled={aplicando}>Cancelar</Button>
                 <Button tipo="enviar" onClick={aplicar} disabled={aplicando || !aplicarProductoId}>
                   {aplicando ? 'Aplicando...' : 'Aplicar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal para configurar solo el alias */}
+        {modalAlias.open && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cerrarModalAlias();
+          }}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Configurar Alias</h2>
+                  <p className="text-sm text-gray-600">
+                    Ingresá el nombre que usa el proveedor para este producto
+                  </p>
+                </div>
+                <button onClick={cerrarModalAlias} className="text-gray-400 hover:text-gray-600" disabled={aplicando}>
+                  <Icon icono="times" className="text-lg" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {/* Info del producto/presentación */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="text-blue-800 font-semibold text-sm mb-1">Producto:</div>
+                  <div className="text-blue-900 font-medium">
+                    {modalAlias?.pendiente?.payload?.productoNombre || 'Producto'}
+                    {modalAlias?.pendiente?.payload?.presentacionNombre && (
+                      <span className="text-blue-700 font-normal"> - {modalAlias.pendiente.payload.presentacionNombre}</span>
+                    )}
+                  </div>
+                  <div className="text-blue-700 text-sm mt-1">
+                    Proveedor: {modalAlias?.pendiente?.payload?.proveedorNombre || 'Proveedor'}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Nombre en el proveedor (alias)
+                  </label>
+                  <input
+                    type="text"
+                    value={nombreEnProveedor}
+                    onChange={(e) => setNombreEnProveedor(e.target.value)}
+                    placeholder="Ej: Leche Entera 1L, Arroz Gallo 500g..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && nombreEnProveedor.trim()) aplicarAlias();
+                      if (e.key === 'Escape') cerrarModalAlias();
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Este es el nombre con el que aparece el producto en las facturas del proveedor
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-gray-200 flex justify-end gap-2">
+                <Button tipo="neutro" onClick={cerrarModalAlias} disabled={aplicando}>Cancelar</Button>
+                <Button tipo="enviar" onClick={aplicarAlias} disabled={aplicando || !nombreEnProveedor.trim()}>
+                  {aplicando ? 'Guardando...' : 'Guardar Alias'}
                 </Button>
               </div>
             </div>

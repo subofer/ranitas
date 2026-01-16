@@ -284,6 +284,87 @@ export const aplicarPendienteFacturaItem = async (idPendiente, { idProducto, pre
   }
 };
 
+/**
+ * Configurar solo el alias (nombreEnProveedor) para un pendiente que ya tiene
+ * presentación asignada (viene de agregar producto al proveedor, no de factura)
+ */
+export const configurarAliasPendiente = async (idPendiente, { nombreEnProveedor } = {}) => {
+  const session = await getSession();
+  const userId = session?.user || "Sistema";
+
+  if (!idPendiente) return { success: false, msg: 'Falta idPendiente' };
+  if (!nombreEnProveedor?.trim()) return { success: false, msg: 'Falta nombreEnProveedor' };
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const pendiente = await tx.correccionPendiente.findUnique({ where: { id: idPendiente } });
+      if (!pendiente) throw new Error('Pendiente no encontrado');
+      if (pendiente.estado !== 'ABIERTO') throw new Error('El pendiente ya no está abierto');
+      if (pendiente.tipo !== 'ALIAS_PRESENTACION_PROVEEDOR') throw new Error('Este pendiente no es de tipo ALIAS_PRESENTACION_PROVEEDOR');
+
+      const payload = pendiente.payload || {};
+      const relacionId = payload?.relacionId;
+      if (!relacionId) throw new Error('Pendiente sin relacionId en payload');
+
+      // Actualizar el nombreEnProveedor en la relación
+      const relacion = await tx.proveedorSkuAlias.update({
+        where: { id: relacionId },
+        data: {
+          nombreEnProveedor: nombreEnProveedor.trim(),
+        },
+        select: { 
+          id: true, 
+          proveedorId: true, 
+          sku: true, 
+          nombreEnProveedor: true, 
+          presentacionId: true,
+          presentacion: {
+            select: {
+              nombre: true,
+              producto: { select: { nombre: true } },
+            },
+          },
+        },
+      });
+
+      const pendienteResuelto = await tx.correccionPendiente.update({
+        where: { id: idPendiente },
+        data: {
+          estado: 'RESUELTO',
+          resueltoAt: new Date(),
+          resueltoPor: userId,
+          notasResolucion: `Alias configurado: ${nombreEnProveedor.trim()}`,
+        },
+      });
+
+      return { pendiente: pendienteResuelto, relacion };
+    });
+
+    try {
+      await auditAction({
+        level: 'SUCCESS',
+        action: 'CONFIGURAR_ALIAS_PENDIENTE',
+        message: `Alias configurado desde pendiente: ${idPendiente}`,
+        category: 'DB',
+        metadata: {
+          pendienteId: idPendiente,
+          relacionId: result.relacion?.id,
+          nombreEnProveedor,
+        },
+        userId,
+      });
+    } catch (_) {
+      // No romper el flujo por auditoría
+    }
+
+    revalidate();
+    return { success: true, ...result };
+  } catch (e) {
+    console.error(e);
+    return { success: false, msg: e?.message || 'Error configurando alias' };
+  }
+};
+
 export const aplicarPendienteAliasProveedor = async (idPendiente, { idProducto, presentacionId } = {}) => {
   const session = await getSession();
   const userId = session?.user || "Sistema";

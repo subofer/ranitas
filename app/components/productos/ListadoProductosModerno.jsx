@@ -29,6 +29,7 @@ import useProductosTable from '@/app/hooks/useProductosTable';
 import ProductoFila from './ProductoFila';
 import { guardarPresentacion, eliminarPresentacion } from '@/prisma/serverActions/presentaciones';
 import { abrirPresentacion } from '@/prisma/serverActions/stock';
+import { confirmarEliminacion } from '@/lib/confirmDialog';
 
 let productosCache = null;
 let productosCacheAt = 0;
@@ -125,6 +126,7 @@ const ListadoProductosModerno = ({
   const { userName } = useCurrentUser();
   const router = useRouter();
   const searchParams = useSearchParams();
+
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [vistaTipo, setVistaTipo] = useState('lista');
@@ -557,8 +559,8 @@ const ListadoProductosModerno = ({
 
   const eliminarPresentacionInline = useCallback(async (presentacionId) => {
     if (!presentacionId) return;
-    const ok = window.confirm('¿Eliminar esta presentación?');
-    if (!ok) return;
+    const confirmado = await confirmarEliminacion('¿Eliminar esta presentación?');
+    if (!confirmado) return;
     try {
       const res = await eliminarPresentacion(presentacionId);
       if (res?.error) throw new Error(res?.msg || 'No se pudo eliminar la presentación');
@@ -578,6 +580,20 @@ const ListadoProductosModerno = ({
       await cargarProductos({ force: true });
     } catch (e) {
       addNotification({ type: 'error', message: `✗ ${e?.message || 'Error abriendo caja'}` });
+    }
+  }, [addNotification, cargarProductos]);
+
+  const cerrarCajaInline = useCallback(async (presentacionId) => {
+    if (!presentacionId) return;
+    try {
+      // Importación dinámica para evitar aumentar bundle inicial
+      const { cerrarPresentacion } = await import('@/prisma/serverActions/stock');
+      const res = await cerrarPresentacion({ presentacionId, cantidad: 1 });
+      if (res?.error) throw new Error(res?.msg || 'No se pudo cerrar la caja');
+      addNotification({ type: 'success', message: `✓ Caja cerrada` });
+      await cargarProductos({ force: true });
+    } catch (e) {
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error cerrando caja'}` });
     }
   }, [addNotification, cargarProductos]);
 
@@ -1036,6 +1052,7 @@ const ListadoProductosModerno = ({
                 onAgregarPresentacion={agregarPresentacionInline}
                 onEliminarPresentacion={eliminarPresentacionInline}
                 onAbrirCaja={abrirCajaInline}
+                onCerrarCaja={cerrarCajaInline}
                 onEliminarProducto={handleEliminarProducto}
                 onToggleSeleccion={toggleProductoSeleccionado}
                 esSeleccionado={productosSeleccionados.includes(producto.id)}

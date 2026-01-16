@@ -414,6 +414,10 @@ export const getAllProductosBasic = async () => {
       presentaciones: {
         select: {
           id: true,
+          nombre: true,
+          esUnidadBase: true,
+          cantidad: true,
+          unidadMedida: true,
           tipoPresentacion: {
             select: {
               nombre: true,

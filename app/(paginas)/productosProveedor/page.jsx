@@ -1,13 +1,67 @@
 "use client"
-import { Suspense, useEffect, useState } from 'react';
-import SelectProveedorClient from '@/components/proveedores/SelectProveedorClient';
-import ProductosProveedorPanel from '@/components/proveedores/ProductosProveedorPanel';
-import TodosProductosPanel from '@/components/proveedores/TodosProductosPanel';
+import { Suspense, useEffect, useState, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { getProveedoresSelect } from '@/prisma/consultas/proveedores';
+
+const SelectProveedorClient = dynamic(() => import('@/components/proveedores/SelectProveedorClient'), { ssr: false });
+const ProductosProveedorPanel = dynamic(() => import('@/components/proveedores/ProductosProveedorPanel'), { ssr: false });
+const TodosProductosPanel = dynamic(() => import('@/components/proveedores/TodosProductosPanel'), { ssr: false });
 
 export default function ClientPage() {
   const [proveedor, setProveedor] = useState(null);
+  const [proveedores, setProveedores] = useState([]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [activePanel, setActivePanel] = useState('productosProveedor'); // 'productosProveedor' o 'todosProductos'
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const handleProveedorSelection = ({ option }) => setProveedor(option)
+  // Callbacks para navegación entre paneles
+  const switchToRight = useCallback(() => setActivePanel('todosProductos'), []);
+  const switchToLeft = useCallback(() => setActivePanel('productosProveedor'), []);
+
+  // Cargar proveedores al montar el componente
+  useEffect(() => {
+    const cargarProveedores = async () => {
+      try {
+        const proveedoresData = await getProveedoresSelect();
+        setProveedores(proveedoresData || []);
+      } catch (error) {
+        console.error('Error cargando proveedores:', error);
+      }
+    };
+    cargarProveedores();
+  }, []);
+
+  // Leer proveedor de la URL al cargar
+  useEffect(() => {
+    const proveedorId = searchParams.get('proveedor');
+    if (proveedorId && proveedores.length > 0) {
+      const proveedorFromUrl = proveedores.find(p => p.id === proveedorId);
+      if (proveedorFromUrl) {
+        setProveedor(proveedorFromUrl);
+      } else {
+        // Si el proveedor de la URL no existe, limpiar la URL
+        router.replace('/productosProveedor');
+      }
+    }
+  }, [searchParams, proveedores, router]);
+
+  const handleProveedorSelection = ({ option }) => {
+    const nuevoProveedor = option || null;
+    setProveedor(nuevoProveedor);
+    
+    // Actualizar la URL
+    if (nuevoProveedor) {
+      router.push(`/productosProveedor?proveedor=${nuevoProveedor.id}`);
+    } else {
+      router.push('/productosProveedor');
+    }
+  };
+
+  const handleRefreshProductosProveedor = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
   return (
     <main className="min-h-screen bg-gray-50 py-8">
@@ -18,15 +72,32 @@ export default function ClientPage() {
         </div>
 
         <div className="mb-6">
-          <SelectProveedorClient onChange={handleProveedorSelection} />
+          <SelectProveedorClient 
+            value={proveedor} 
+            onChange={handleProveedorSelection} 
+          />
         </div>
 
-        {proveedor?.id && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <ProductosProveedorPanel proveedor={proveedor} />
-            <TodosProductosPanel proveedor={proveedor} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className={`transition-all duration-200 ${activePanel === 'productosProveedor' ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}`}>
+            <ProductosProveedorPanel 
+              proveedor={proveedor} 
+              refreshTrigger={refreshTrigger}
+              isActive={activePanel === 'productosProveedor'}
+              onSwitchRight={switchToRight}
+              onSwitchLeft={switchToLeft}
+            />
           </div>
-        )}
+          <div className={`transition-all duration-200 ${activePanel === 'todosProductos' ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}`}>
+            <TodosProductosPanel 
+              proveedor={proveedor} 
+              onProductoAgregado={handleRefreshProductosProveedor}
+              isActive={activePanel === 'todosProductos'}
+              onSwitchLeft={switchToLeft}
+              onSwitchRight={switchToRight}
+            />
+          </div>
+        </div>
       </div>
     </main>
   );

@@ -3,9 +3,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { obtenerProveedoresPorPresentacion, agregarProveedorAPresentacion, eliminarProveedorDePresentacion } from '@/prisma/serverActions/proveedores';
 import { getProveedoresSelect } from '@/prisma/consultas/proveedores';
 import { useNotification } from '@/context/NotificationContext';
+import { confirmarEliminacion } from '@/lib/confirmDialog';
 import Icon from '../formComponents/Icon';
 import FilterSelect from '../formComponents/FilterSelect';
 import Button from '../formComponents/Button';
+import { emitPendientesUpdated } from '@/lib/pendientesEvents';
 
 export default function ProveedoresPresentacionPanel({ presentaciones }) {
   const [proveedoresPorPresentacion, setProveedoresPorPresentacion] = useState({});
@@ -14,7 +16,6 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
   const [presentacionAgregando, setPresentacionAgregando] = useState(null);
   const [nuevoProveedor, setNuevoProveedor] = useState({
     proveedorId: '',
-    sku: '',
     nombreEnProveedor: '',
   });
   const { addNotification } = useNotification();
@@ -59,16 +60,15 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
       await agregarProveedorAPresentacion(
         nuevoProveedor.proveedorId,
         presentacionId,
-        nuevoProveedor.sku,
         nuevoProveedor.nombreEnProveedor
       );
       addNotification({
         type: 'success',
         message: 'Proveedor asignado a la presentación',
       });
+      emitPendientesUpdated();
       setNuevoProveedor({
         proveedorId: '',
-        sku: '',
         nombreEnProveedor: '',
       });
       setPresentacionAgregando(null);
@@ -85,7 +85,8 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
   };
 
   const handleEliminarProveedor = async (proveedorId, presentacionId) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este proveedor de la presentación?')) {
+    const confirmado = await confirmarEliminacion('¿Estás seguro de que quieres eliminar este proveedor de la presentación?');
+    if (!confirmado) {
       return;
     }
 
@@ -115,14 +116,12 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
       setPresentacionAgregando(null);
       setNuevoProveedor({
         proveedorId: '',
-        sku: '',
         nombreEnProveedor: '',
       });
     } else {
       setPresentacionAgregando(presentacionId);
       setNuevoProveedor({
         proveedorId: '',
-        sku: '',
         nombreEnProveedor: '',
       });
     }
@@ -171,12 +170,12 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">SKU/Alias</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Alias del proveedor</label>
                     <input
                       type="text"
-                      value={nuevoProveedor.sku}
-                      onChange={(e) => setNuevoProveedor(prev => ({ ...prev, sku: e.target.value }))}
-                      placeholder="SKU del proveedor"
+                      value={nuevoProveedor.nombreEnProveedor}
+                      onChange={(e) => setNuevoProveedor(prev => ({ ...prev, nombreEnProveedor: e.target.value }))}
+                      placeholder="Nombre/alias usado por el proveedor"
                       className="w-full px-2 py-1 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-0 focus:border-slate-400"
                     />
                   </div>
@@ -209,8 +208,7 @@ export default function ProveedoresPresentacionPanel({ presentaciones }) {
                       <div>
                         <p className="font-medium text-gray-900">{rel.proveedor.nombre}</p>
                         <p className="text-sm text-gray-600">
-                          SKU: {rel.sku || <span className="text-gray-400 italic">Sin SKU</span>}
-                          {rel.nombreEnProveedor && ` | Nombre: ${rel.nombreEnProveedor}`}
+                          Alias: {rel.nombreEnProveedor || <span className="text-gray-400 italic">Sin alias</span>}
                         </p>
                       </div>
                       <button

@@ -19,6 +19,7 @@ const ProductoFila = ({
   onAgregarPresentacion,
   onEliminarPresentacion,
   onAbrirCaja,
+  onCerrarCaja,
   activeRowId,
   onSetActiveRowId,
   onEliminarProducto,
@@ -684,6 +685,20 @@ const ProductoFila = ({
                     title="Abrir 1 caja (convierte a suelto)"
                   >
                     Abrir
+                  </button>
+                )}
+
+                {editable && !esNuevo && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCerrarCaja?.(pres.id);
+                    }}
+                    className="px-2 py-1 text-xs font-medium rounded border border-blue-300 bg-blue-50 text-blue-800 hover:bg-blue-100"
+                    title="Cerrar 1 caja (convierte de suelto a cerrado)"
+                  >
+                    Cerrar
                   </button>
                 )}
 

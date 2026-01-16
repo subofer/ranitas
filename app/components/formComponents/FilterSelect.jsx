@@ -181,17 +181,28 @@ ref
     return () => { if (form) form.removeEventListener('reset', resetInput)};
   }, [form, resetInput]);
 
+  // Referencia al timestamp de apertura para evitar cierre inmediato
+  const openedAt = useRef(0);
+
   useEffect(() => {
+    if (!isOpen) return;
+    
+    // Marcar momento de apertura
+    openedAt.current = Date.now();
+    
     const checkIfClickedOutside = (e) => {
-      setTimeout(() => {
-        if (isOpen && refPadre.current && !refPadre.current.contains(e.target)) {
-          open(false);
-        }
-      }, 0);
+      // Ignorar clicks dentro de los primeros 200ms después de abrir
+      if (Date.now() - openedAt.current < 200) return;
+      
+      if (refPadre.current && !refPadre.current.contains(e.target)) {
+        open(false);
+      }
     };
-    document.addEventListener("click", checkIfClickedOutside);
+    
+    // Usar click en vez de mousedown para dar tiempo a que el estado se estabilice
+    document.addEventListener("click", checkIfClickedOutside, true);
     return () => {
-      document.removeEventListener("click", checkIfClickedOutside);
+      document.removeEventListener("click", checkIfClickedOutside, true);
     };
   }, [isOpen, open]);
 
@@ -330,12 +341,15 @@ ref
         value={opcion ? opcion[valueField] : ((save ? inputRef.current?.value : undefined) || 0)}
       />
 
-      <div className="relative bg-white" onClick={() => {
-        if (!pending && !busy) {
-          setIsOpen(prev => !prev);
-          if (!isOpen) inputRef.current?.focus();
-        }
-      }}>
+      <div
+        className="relative bg-white"
+        onMouseDown={() => {
+          if (!pending && !busy && !isOpen) {
+            setIsOpen(true);
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }
+        }}
+      >
         <input
           name={`$ACTION_IGNORE_INPUT_JUST_FOR_LABEL_${props.name}`}
           ref={inputRef}

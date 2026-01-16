@@ -6,6 +6,7 @@ import Icon from '../formComponents/Icon';
 import ProductosPorProveedor from '../proveedores/ProductosPorProveedor';
 import EditarPedido from './EditarPedido';
 import { useErrorNotification } from '@/hooks/useErrorNotification';
+import { confirmarEliminacion } from '@/lib/confirmDialog';
 
 const PedidosPorProveedor = ({ pedidos, onUpdate }) => {
   const { showError } = useErrorNotification();
@@ -44,7 +45,8 @@ const PedidosPorProveedor = ({ pedidos, onUpdate }) => {
   };
 
   const handleEliminar = async (idPedido) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar este pedido?')) return;
+    const confirmado = await confirmarEliminacion('¿Estás seguro de que quieres eliminar este pedido?');
+    if (!confirmado) return;
 
     setCargandoAccion(idPedido);
     try {
