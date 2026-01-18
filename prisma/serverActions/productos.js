@@ -57,6 +57,11 @@ export async function guardarCambiosListadoProductos({ productos = [], presentac
       stockCerrado: p.stockCerrado !== undefined ? normalizarEnteroNoNeg(p.stockCerrado) : undefined,
       precio: p.precio !== undefined ? normalizarNumero(p.precio) : undefined,
       descuento: p.descuento !== undefined ? normalizarPorcentaje(p.descuento) : undefined,
+      tipoPresentacionId: p.tipoPresentacionId !== undefined ? (p.tipoPresentacionId ? String(p.tipoPresentacionId) : null) : undefined,
+      codigoBarra: p.codigoBarra !== undefined ? (p.codigoBarra?.toString().trim() || null) : undefined,
+      esUnidadBase: p.esUnidadBase !== undefined ? Boolean(p.esUnidadBase) : undefined,
+      cantidad: p.cantidad !== undefined ? normalizarNumero(p.cantidad) : undefined,
+      unidadMedida: p.unidadMedida !== undefined ? (p.unidadMedida?.toString() || '') : undefined,
     }))
     .filter((p) => p.presentacionId);
 
@@ -220,7 +225,12 @@ export async function guardarCambiosListadoProductos({ productos = [], presentac
         const quiereStock = s.stockCerrado !== undefined && s.stockCerrado != null;
         const quierePrecio = s.precio !== undefined;
         const quiereDescuento = s.descuento !== undefined;
-        if (!quiereStock && !quierePrecio && !quiereDescuento) continue;
+        const quiereTipo = s.tipoPresentacionId !== undefined;
+        const quiereCodigo = s.codigoBarra !== undefined;
+        const quiereBase = s.esUnidadBase !== undefined;
+        const quiereCantidad = s.cantidad !== undefined;
+        const quiereUnidad = s.unidadMedida !== undefined;
+        if (!quiereStock && !quierePrecio && !quiereDescuento && !quiereTipo && !quiereCodigo && !quiereBase && !quiereCantidad && !quiereUnidad) continue;
 
         const presentacion = await tx.presentaciones.findUnique({
           where: { id: s.presentacionId },
@@ -230,6 +240,11 @@ export async function guardarCambiosListadoProductos({ productos = [], presentac
             productoId: true,
             precio: true,
             descuento: true,
+            tipoPresentacionId: true,
+            codigoBarra: true,
+            esUnidadBase: true,
+            cantidad: true,
+            unidadMedida: true,
             producto: { select: { id: true, nombre: true, codigoBarra: true } },
           },
         });
@@ -272,7 +287,7 @@ export async function guardarCambiosListadoProductos({ productos = [], presentac
           }
         }
 
-        // Precio/Descuento
+        // Precio/Descuento y otros campos de presentación
         const updatesPres = {};
         if (quierePrecio) {
           if (s.precio != null && (!Number.isFinite(s.precio) || s.precio < 0)) {
@@ -285,6 +300,38 @@ export async function guardarCambiosListadoProductos({ productos = [], presentac
             throw new Error(`Descuento inválido para presentación ${s.presentacionId}`);
           }
           if (s.descuento !== presentacion.descuento) updatesPres.descuento = s.descuento;
+        }
+        if (quiereTipo && s.tipoPresentacionId !== presentacion.tipoPresentacionId) {
+          updatesPres.tipoPresentacionId = s.tipoPresentacionId;
+        }
+        if (quiereCodigo && s.codigoBarra !== presentacion.codigoBarra) {
+          updatesPres.codigoBarra = s.codigoBarra;
+        }
+        if (quiereBase && s.esUnidadBase !== presentacion.esUnidadBase) {
+          updatesPres.esUnidadBase = s.esUnidadBase;
+        }
+        if (quiereCantidad && s.cantidad !== presentacion.cantidad) {
+          updatesPres.cantidad = s.cantidad;
+        }
+        if (quiereUnidad && s.unidadMedida !== presentacion.unidadMedida) {
+          updatesPres.unidadMedida = s.unidadMedida;
+        }
+
+        // Auto-generar nombre cuando cambia tipo, cantidad o unidad
+        if (updatesPres.tipoPresentacionId !== undefined || updatesPres.cantidad !== undefined || updatesPres.unidadMedida !== undefined) {
+          const tipoIdFinal = updatesPres.tipoPresentacionId ?? presentacion.tipoPresentacionId;
+          if (tipoIdFinal) {
+            const tipoInfo = await tx.tiposPresentacion.findUnique({
+              where: { id: tipoIdFinal },
+              select: { nombre: true },
+            });
+            if (tipoInfo) {
+              const cantidadFinal = updatesPres.cantidad ?? presentacion.cantidad ?? 1;
+              const unidadFinal = updatesPres.unidadMedida ?? presentacion.unidadMedida ?? '';
+              const tamaño = [String(cantidadFinal).trim(), unidadFinal.trim()].filter(Boolean).join(' ');
+              updatesPres.nombre = [tipoInfo.nombre, tamaño].filter(Boolean).join(' ');
+            }
+          }
         }
 
         if (Object.keys(updatesPres).length > 0) {
@@ -463,21 +510,41 @@ export async function guardarProducto(formData) {
 
   // Manejar presentaciones sin borrarlas (preserva IDs y permite stock por presentación)
   const presentacionesInput = Array.isArray(formData.presentaciones) ? formData.presentaciones : [];
+  
+  console.log('[guardarProducto] Presentaciones recibidas:', JSON.stringify(presentacionesInput, null, 2));
+  
+  // Ya no requerimos nombre - se genera automáticamente
   const presentacionesNormalizadas = presentacionesInput
-    .filter((p) => p && p.nombre && p.tipoPresentacionId)
-    .map((p) => ({
-      id: p.id,
-      nombre: p.nombre,
-      codigoBarra: p.codigoBarra ? String(p.codigoBarra).trim() : null,
-      tipoPresentacionId: p.tipoPresentacionId,
-      cantidad: parseFloat(p.cantidad) || 1,
-      unidadMedida: p.unidadMedida,
-      contenidoPorUnidad: p.contenidoPorUnidad ? parseFloat(p.contenidoPorUnidad) : null,
-      unidadContenido: p.unidadContenido || null,
-      precio: normalizarNumeroNullable(p.precio),
-      descuento: normalizarPorcentaje(p.descuento),
-      esUnidadBase: Boolean(p.esUnidadBase),
-    }));
+    .filter((p) => p && p.tipoPresentacionId)
+    .map((p) => {
+      // Determinar equivalencia: puede venir de _equivalencia (editado) o de contenedoras (del servidor)
+      let equivalencia = p._equivalencia || null;
+      if (!equivalencia && p.contenedoras && p.contenedoras.length > 0) {
+        const contenedora = p.contenedoras[0];
+        equivalencia = {
+          contieneId: contenedora.presentacionContenidaId || contenedora.presentacionContenida?.id,
+          contieneCantidad: contenedora.cantidad || 1,
+        };
+      }
+
+      return {
+        id: p.id,
+        nombre: p.nombre || '', // Se generará después con el tipo
+        codigoBarra: p.codigoBarra ? String(p.codigoBarra).trim() : null,
+        tipoPresentacionId: p.tipoPresentacionId,
+        cantidad: parseFloat(p.cantidad) || 1,
+        unidadMedida: p.unidadMedida || '',
+        contenidoPorUnidad: p.contenidoPorUnidad ? parseFloat(p.contenidoPorUnidad) : null,
+        unidadContenido: p.unidadContenido || null,
+        precio: normalizarNumeroNullable(p.precio),
+        descuento: normalizarPorcentaje(p.descuento),
+        esUnidadBase: Boolean(p.esUnidadBase),
+        // Guardar equivalencia temporal para procesar después
+        _equivalencia: equivalencia,
+        // ID temporal para mapear después de crear
+        _tempId: p.id,
+      };
+    });
 
   const hayAlgunaBase = presentacionesNormalizadas.some((p) => p.esUnidadBase);
   const presentacionesConUnaBase = presentacionesNormalizadas.map((p, idx) => {
@@ -584,14 +651,41 @@ export async function guardarProducto(formData) {
       });
     }
 
+    // Obtener todos los tipos de presentación para generar nombres
+    const tiposIds = [...new Set(presentacionesConUnaBase.map((p) => p.tipoPresentacionId).filter(Boolean))];
+    const tiposPresentacion = tiposIds.length > 0
+      ? await prisma.tiposPresentacion.findMany({ where: { id: { in: tiposIds } } })
+      : [];
+    const tiposMap = new Map(tiposPresentacion.map((t) => [t.id, t.nombre]));
+
+    // Función para generar nombre automático
+    const generarNombre = (tipoPresentacionId, cantidad, unidadMedida) => {
+      const tipoNombre = tiposMap.get(tipoPresentacionId) || 'Presentación';
+      const partes = [tipoNombre];
+      if (cantidad && cantidad !== 1) partes.push(String(cantidad));
+      if (unidadMedida) partes.push(unidadMedida);
+      return partes.join(' ');
+    };
+
+    // Mapeo de ID temporal → ID real (para equivalencias)
+    const tempIdToRealId = new Map();
+
     for (const p of presentacionesConUnaBase) {
+      const nombreGenerado = generarNombre(p.tipoPresentacionId, p.cantidad, p.unidadMedida);
+      
+      // Determinar operaciones permitidas automáticamente
+      const tieneContenido = p._equivalencia && p._equivalencia.contieneId;
+      const puedeAbrir = Boolean(tieneContenido); // Si contiene algo, se puede abrir
+      const puedeCerrar = Boolean(!p.esUnidadBase); // Todo menos la base se puede cerrar/empacar
+      const puedeProducir = Boolean(p.esUnidadBase); // La base se puede producir
+
       if (esUuid(p.id)) {
+        // Actualizar existente - NO actualizar tipoPresentacionId (es relación inmutable)
         await prisma.presentaciones.update({
           where: { id: p.id },
           data: {
-            nombre: p.nombre,
+            nombre: nombreGenerado,
             codigoBarra: p.codigoBarra || null,
-            tipoPresentacionId: p.tipoPresentacionId,
             cantidad: p.cantidad,
             unidadMedida: p.unidadMedida,
             contenidoPorUnidad: p.contenidoPorUnidad,
@@ -599,19 +693,35 @@ export async function guardarProducto(formData) {
             precio: p.precio,
             descuento: p.descuento,
             esUnidadBase: Boolean(p.esUnidadBase),
+            puedeAbrir,
+            puedeCerrar,
+            puedeProducir,
           },
         });
+        tempIdToRealId.set(p._tempId, p.id);
 
-        await prisma.stockPresentacion.upsert({
-          where: { presentacionId: p.id },
-          update: {},
-          create: { presentacionId: p.id, stockCerrado: 0 },
-        });
+        // Actualizar stock si viene modificado desde el frontend
+        const stockCerrado = p.stock?.stockCerrado;
+        if (stockCerrado !== undefined && stockCerrado !== null) {
+          await prisma.stockPresentacion.upsert({
+            where: { presentacionId: p.id },
+            update: { stockCerrado: Number(stockCerrado) },
+            create: { presentacionId: p.id, stockCerrado: Number(stockCerrado) },
+          });
+        } else {
+          await prisma.stockPresentacion.upsert({
+            where: { presentacionId: p.id },
+            update: {},
+            create: { presentacionId: p.id, stockCerrado: 0 },
+          });
+        }
       } else {
+        // Crear nueva
+        const stockInicial = p.stock?.stockCerrado !== undefined ? Number(p.stock.stockCerrado) : 0;
         const creada = await prisma.presentaciones.create({
           data: {
             productoId,
-            nombre: p.nombre,
+            nombre: nombreGenerado,
             codigoBarra: p.codigoBarra || null,
             tipoPresentacionId: p.tipoPresentacionId,
             cantidad: p.cantidad,
@@ -621,12 +731,70 @@ export async function guardarProducto(formData) {
             precio: p.precio,
             descuento: p.descuento,
             esUnidadBase: Boolean(p.esUnidadBase),
+            puedeAbrir,
+            puedeCerrar,
+            puedeProducir,
           },
         });
+        tempIdToRealId.set(p._tempId, creada.id);
 
         await prisma.stockPresentacion.create({
-          data: { presentacionId: creada.id, stockCerrado: 0 },
+          data: { presentacionId: creada.id, stockCerrado: stockInicial },
         });
+      }
+    }
+
+    // Procesar equivalencias (AgrupacionPresentaciones)
+    // Primero, eliminar las agrupaciones existentes del producto para recrearlas
+    const presentacionesDelProducto = await prisma.presentaciones.findMany({
+      where: { productoId },
+      select: { id: true },
+    });
+    const presentacionesIdsDelProducto = presentacionesDelProducto.map((p) => p.id);
+
+    if (presentacionesIdsDelProducto.length > 0) {
+      // Borrar todas las agrupaciones donde estas presentaciones son contenedoras O contenidas
+      await prisma.agrupacionPresentaciones.deleteMany({
+        where: {
+          OR: [
+            { presentacionContenedoraId: { in: presentacionesIdsDelProducto } },
+            { presentacionContenidaId: { in: presentacionesIdsDelProducto } },
+          ],
+        },
+      });
+    }
+
+    // Crear nuevas agrupaciones basadas en _equivalencia
+    console.log('[guardarProducto] Procesando equivalencias. tempIdToRealId:', Object.fromEntries(tempIdToRealId));
+    for (const p of presentacionesConUnaBase) {
+      if (p._equivalencia && p._equivalencia.contieneId) {
+        const contenedoraId = tempIdToRealId.get(p._tempId);
+        // El contieneId puede ser un ID temporal o un UUID real
+        let contenidaId = tempIdToRealId.get(p._equivalencia.contieneId);
+        if (!contenidaId && esUuid(p._equivalencia.contieneId)) {
+          contenidaId = p._equivalencia.contieneId;
+        }
+
+        console.log('[guardarProducto] Equivalencia:', {
+          tempId: p._tempId,
+          contieneId: p._equivalencia.contieneId,
+          contenedoraId,
+          contenidaId,
+          cantidad: p._equivalencia.contieneCantidad
+        });
+
+        if (contenedoraId && contenidaId) {
+          await prisma.agrupacionPresentaciones.create({
+            data: {
+              presentacionContenedoraId: contenedoraId,
+              presentacionContenidaId: contenidaId,
+              cantidad: Number(p._equivalencia.contieneCantidad) || 1,
+            },
+          });
+          console.log('[guardarProducto] Agrupación creada:', { contenedoraId, contenidaId });
+        } else {
+          console.warn('[guardarProducto] No se pudo crear agrupación - IDs faltantes');
+        }
       }
     }
 
@@ -826,5 +994,150 @@ export async function eliminarProductoConPreciosPorId(idProducto, userIdParam = 
     return {error: true, code: e.code, msg}
   } finally {
     revalidarProductos();
+  }
+}
+
+// Operaciones de stock
+export async function abrirPresentacion(presentacionId) {
+  'use server'
+  try {
+    const presentacion = await prisma.presentaciones.findUnique({
+      where: { id: presentacionId },
+      include: {
+        stock: true,
+        contenedoras: true,
+        producto: true,
+      }
+    });
+
+    if (!presentacion || !presentacion.stock?.stockCerrado || presentacion.stock.stockCerrado <= 0) {
+      return { error: true, msg: 'No hay stock cerrado para abrir' };
+    }
+
+    const eq = presentacion.contenedoras?.[0];
+    if (!eq) {
+      return { error: true, msg: 'Esta presentación no tiene contenido definido' };
+    }
+
+    const contieneId = eq.presentacionContenidaId;
+    const cantidad = eq.cantidad || 1;
+
+    // Verificar si el contenido es la unidad base
+    const presentacionContenida = await prisma.presentaciones.findUnique({
+      where: { id: contieneId },
+      select: { esUnidadBase: true }
+    });
+
+    const operations = [
+      prisma.stockPresentacion.update({
+        where: { presentacionId },
+        data: { stockCerrado: { decrement: 1 } }
+      }),
+      prisma.stockPresentacion.upsert({
+        where: { presentacionId: contieneId },
+        update: { stockCerrado: { increment: cantidad } },
+        create: { presentacionId: contieneId, stockCerrado: cantidad }
+      })
+    ];
+
+    // Si es unidad base, también actualizar stockSuelto del producto
+    if (presentacionContenida?.esUnidadBase && presentacion.productoId) {
+      operations.push(
+        prisma.productos.update({
+          where: { id: presentacion.productoId },
+          data: { stockSuelto: { increment: cantidad } }
+        })
+      );
+    }
+
+    await prisma.$transaction(operations);
+
+    revalidarProductos();
+    return { error: false, msg: 'Presentación abierta exitosamente' };
+  } catch (e) {
+    console.error('Error al abrir presentación:', e);
+    return { error: true, msg: e.message };
+  }
+}
+
+export async function cerrarPresentacion(presentacionId) {
+  'use server'
+  try {
+    const presentacion = await prisma.presentaciones.findUnique({
+      where: { id: presentacionId },
+      include: { 
+        contenedoras: true,
+        producto: true,
+      }
+    });
+
+    const eq = presentacion?.contenedoras?.[0];
+    if (!eq) {
+      return { error: true, msg: 'Esta presentación no tiene contenido definido' };
+    }
+
+    const contieneId = eq.presentacionContenidaId;
+    const cantidad = eq.cantidad || 1;
+
+    const stockContenido = await prisma.stockPresentacion.findUnique({
+      where: { presentacionId: contieneId }
+    });
+
+    if (!stockContenido || stockContenido.stockCerrado < cantidad) {
+      return { error: true, msg: `No hay suficiente stock para cerrar (necesitas ${cantidad})` };
+    }
+
+    // Verificar si el contenido es la unidad base
+    const presentacionContenida = await prisma.presentaciones.findUnique({
+      where: { id: contieneId },
+      select: { esUnidadBase: true }
+    });
+
+    const operations = [
+      prisma.stockPresentacion.update({
+        where: { presentacionId: contieneId },
+        data: { stockCerrado: { decrement: cantidad } }
+      }),
+      prisma.stockPresentacion.upsert({
+        where: { presentacionId },
+        update: { stockCerrado: { increment: 1 } },
+        create: { presentacionId, stockCerrado: 1 }
+      })
+    ];
+
+    // Si es unidad base, también actualizar stockSuelto del producto
+    if (presentacionContenida?.esUnidadBase && presentacion?.productoId) {
+      operations.push(
+        prisma.productos.update({
+          where: { id: presentacion.productoId },
+          data: { stockSuelto: { decrement: cantidad } }
+        })
+      );
+    }
+
+    await prisma.$transaction(operations);
+
+    revalidarProductos();
+    return { error: false, msg: 'Presentación cerrada exitosamente' };
+  } catch (e) {
+    console.error('Error al cerrar presentación:', e);
+    return { error: true, msg: e.message };
+  }
+}
+
+export async function producirPresentacion(presentacionId, cantidad) {
+  'use server'
+  try {
+    await prisma.stockPresentacion.upsert({
+      where: { presentacionId },
+      update: { stockCerrado: { increment: cantidad } },
+      create: { presentacionId, stockCerrado: cantidad }
+    });
+
+    revalidarProductos();
+    return { error: false, msg: `Producidas ${cantidad} unidades exitosamente` };
+  } catch (e) {
+    console.error('Error al producir:', e);
+    return { error: true, msg: e.message };
   }
 }

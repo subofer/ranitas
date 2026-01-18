@@ -61,6 +61,10 @@ model Presentaciones {
   precio              Float?
   descuento           Float                   @default(0)
   esUnidadBase        Boolean                 @default(false)
+  // Operaciones permitidas sobre esta presentación
+  puedeAbrir          Boolean                 @default(false)  // Se puede abrir/desempacar
+  puedeCerrar         Boolean                 @default(false)  // Se puede cerrar/empacar
+  puedeProducir       Boolean                 @default(false)  // Se puede producir/elaborar
   producto            Productos               @relation(fields: [productoId], references: [id], onDelete: Cascade)
   tipoPresentacion    TiposPresentacion      @relation(fields: [tipoPresentacionId], references: [id])
   contenidas          AgrupacionPresentaciones[] @relation("PresentacionContenida")
@@ -85,8 +89,8 @@ model AgrupacionPresentaciones {
   presentacionContenidaId  String
   presentacionContenedoraId String
   cantidad                  Float
-  presentacionContenida    Presentaciones  @relation("PresentacionContenida", fields: [presentacionContenidaId], references: [id])
-  presentacionContenedora  Presentaciones  @relation("PresentacionContenedora", fields: [presentacionContenedoraId], references: [id])
+  presentacionContenida    Presentaciones  @relation("PresentacionContenida", fields: [presentacionContenidaId], references: [id], onDelete: Cascade)
+  presentacionContenedora  Presentaciones  @relation("PresentacionContenedora", fields: [presentacionContenedoraId], references: [id], onDelete: Cascade)
   
   @@unique([presentacionContenidaId, presentacionContenedoraId])
 }

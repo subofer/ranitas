@@ -14,19 +14,19 @@ export default menuList;
 
 export const menuListHorizontal = [
   { menu: "Home", href: "/", subMenu: [] },
-  { menu: "Listados", href: "/venta", subMenu: [
+  { menu: "Inventario", subMenu: [
     { menu: "Productos", href: "/listadoProductos" },
     { menu: "Productos x proveedor", href: "/productosProveedor" },
     { menu: "Busqueda", href: "/buscarEnGoogle" },
-  ] },
-  { menu: "Ventas", href: "/venta", subMenu: [
-    { menu: "Minorista", href: "/venta" },
-    { menu: "Mayorista", href: "/venta" },
   ] },
   { menu: "Compras", subMenu: [
     { menu: "Cargar Factura", href: "/compras" },
     { menu: "Facturas", href: "/facturas" },
     { menu: "Pedidos", href: "/pedidos" },
+  ] },
+  { menu: "Ventas", subMenu: [
+    { menu: "Minorista", href: "/venta" },
+    { menu: "Mayorista", href: "/venta" },
   ] },
   { menu: "ABM", subMenu: [
     { menu: "Productos", href: "/cargarProductos" },
@@ -34,8 +34,6 @@ export const menuListHorizontal = [
     { menu: "Contactos", href: "/contactos" },
   ] },
   { menu: "Ia", href: "/ia", subMenu: [] },
-  { menu: "Auditoria", subMenu: [
-    { menu: "Logs", href: "/audit" },
-  ] },
-  { menu: "Pendientes", href: "/pendientes" },
+  { menu: "Auditoria", href: "/audit", subMenu: []  },
+  { menu: "Pendientes", href: "/pendientes", subMenu: [] },
 ];

@@ -151,12 +151,10 @@ ref
     setOpenUp(shouldOpenUp);
 
     if (compact) {
-      // Calcular posición para el portal solo en compact
-      const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-      const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+      // Calcular posición para el portal solo en compact (position: fixed)
       setDropdownPosition({
-        top: shouldOpenUp ? rect.top + scrollTop - 4 : rect.bottom + scrollTop + 4,
-        left: rect.left + scrollLeft,
+        top: shouldOpenUp ? rect.top - 4 : rect.bottom + 4,
+        left: rect.left,
         width: rect.width,
       });
     }
@@ -414,12 +412,13 @@ ref
         createPortal(
           <div
             ref={dropdownRef}
-            className="bg-white border border-gray-300 rounded-md shadow-xl max-h-72 overflow-auto z-50"
+            className="bg-white border border-gray-300 rounded-md shadow-xl max-h-72 overflow-auto"
             style={{
-              position: 'absolute',
+              position: 'fixed',
               top: dropdownPosition.top,
               left: dropdownPosition.left,
               width: dropdownPosition.width,
+              zIndex: 9999,
             }}
           >
             {canCreate ? (

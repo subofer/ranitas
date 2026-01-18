@@ -15,11 +15,9 @@ import QrCodeScanner from "@/components/camara/Scanner"
 import { alertaLeerCodigoBarra } from '../alertas/alertaLeerCodigoBarra';
 import SelectCategoriaClient from '../categorias/SelectCategoriaClient';
 import GestionPresentaciones from '../productos/GestionPresentaciones';
-import SelectProveedorClient from '../proveedores/SelectProveedorClient';
 import SelectMarcaClient from '../marcas/SelectMarcaClient';
-import InputArrayListProveedores from '../proveedores/InputArrayListProveedores';
-import { textos } from '@/lib/manipularTextos';
 import InputArrayListCategorias from '../categorias/InputArrayListCategorias';
+import { textos } from '@/lib/manipularTextos';
 import { LineChart } from '../graficos/LineGraphClient';
 import Switch from '../formComponents/Switch';
 import { alertaCrearCodigoDeBarras } from '../alertas/alertaCrearCodigoDeBarras';
@@ -29,7 +27,7 @@ import useHotkey from '@/hooks/useHotkey';
 
 export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
   const { param: codigoBarraParam , deleteParam } = useMyParams('codigoBarra');
-  const { param: editParam, deleteParam: deleteEditParam } = useMyParams('edit');
+  const { param: editParam, setParam: setEditParam, deleteParam: deleteEditParam } = useMyParams('edit');
 
   const blankForm = useMemo(() => ({
     id:'',
@@ -41,7 +39,6 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
     marcaId: '',
     stockSuelto: 0,
     imagen: '',
-    proveedores: [],
     categorias: [],
     presentaciones: [],
   }), []);
@@ -75,13 +72,36 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
     setBuscando(false);
   },[]);
 
+  const recargarProductoPorId = useCallback(async (id) => {
+    setBuscando(true);
+    try {
+      const producto = await getProductoPorId(id);
+      if (!producto || producto?.error) return;
+
+      setLocal(true);
+      setFormData({
+        ...producto,
+        presentaciones: producto.presentaciones || [],
+      });
+      setImagenes([{ imagen: { src: producto.imagen, alt: "Imagen Guardada" } }]);
+    } catch (e) {
+      console.error('Error recargando producto por id:', e);
+    } finally {
+      setBuscando(false);
+    }
+  }, []);
+
   const handleGuardar = useCallback(async (data) => {
-    const { error } = await guardarProducto(data);
+    const { error, data: productoGuardado } = await guardarProducto(data);
     if (!error) {
-      await handleBuscar(data.codigoBarra);
+      // Recargar por ID para preservar las relaciones
+      if (productoGuardado?.id) {
+        await recargarProductoPorId(productoGuardado.id);
+        setEditParam(productoGuardado.id);
+      }
       onSaved?.();
     }
-  }, [handleBuscar, onSaved]);
+  }, [recargarProductoPorId, onSaved, setEditParam]);
 
   const handleSave = async (e) => {
     let dataToSave = formData;
@@ -97,25 +117,6 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
     setFormData(prev => ({ ...prev, [name]: value }));
   }
 
-  const handleProveedoresSelected = ({ selected }) => {
-    setFormData(prev => ({
-      ...prev,
-      proveedores: [...new Set([...prev.proveedores, {proveedorId: selected.id, proveedor:selected}])]
-    }));
-  };
-
-  const handleProveedorCreate = async (txt) => {
-    await crearPendiente({
-      tipo: "PROVEEDOR_NO_ENCONTRADO",
-      titulo: `Proveedor "${txt}" no encontrado`,
-      descripcion: `Al cargar producto ${formData.nombre || formData.codigoBarra || 'sin nombre'}, se intentó seleccionar proveedor "${txt}" que no existe.`,
-      entidadTipo: "PRODUCTO",
-      entidadId: formData.id || null,
-      contexto: "CARGA_PRODUCTO",
-      payload: { proveedorNombre: txt, productoData: formData }
-    });
-  };
-
   const handleMarcaSelected = ({ selected }) => {
     setFormData((prev) => ({
       ...prev,
@@ -129,12 +130,6 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
       { ...prev, categorias: [...new Map([...categorias, selected].map(item => [item.id, item])).values()] }
     ))
   );
-
-  const deleteProveedorById = (id) => {
-    setFormData(({proveedores, ...prev}) => (
-      {...prev, proveedores: proveedores.filter(proveedor => proveedor.proveedorId !== id)}
-    ));
-  };
 
   const deleteCategoriaById = (id) => (
     setFormData(({categorias, ...prev}) => (
@@ -199,14 +194,12 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
         setImagenes([{ imagen: { src: producto.imagen, alt: "Imagen Guardada" } }]);
       } catch (e) {
         console.error('Error cargando producto por id:', e);
-      } finally {
-        // limpiar para evitar re-disparos raros al editar/guardar
-        deleteEditParam('edit');
       }
+      // No borrar el parámetro para que sobreviva entre refrescos
     };
 
     cargarPorId();
-  }, [editParam, deleteEditParam]);
+  }, [editParam]);
 
   useEffect(() => {
     console.log("formData", formData)
@@ -330,25 +323,12 @@ export const CargaProductoBuscadorClient = ({ onSaved } = {}) => {
             />
           </div>
 
-          <div className="col-span-full lg:col-span-3">
-            <SelectProveedorClient onChange={handleProveedoresSelected} allowCreate={true} onCreate={handleProveedorCreate} />
-          </div>
-          <div className="col-span-full lg:col-span-9">
-            <InputArrayListProveedores
-              name="Provedores"
-              label="Proveedores"
-              placeholder="Agregue proveedores"
-              dataList={formData.proveedores?.map(p => p.proveedor)}
-              dataFilterKey={"id"}
-              onRemove={deleteProveedorById}
-              tabIndex={-1}
-            />
-          </div>
-
           <div className="col-span-full">
             <GestionPresentaciones
               presentaciones={formData.presentaciones}
               onChange={handlePresentacionesChange}
+              sizeProducto={formData.size}
+              unidadProducto={formData.unidad}
             />
           </div>
           </div>

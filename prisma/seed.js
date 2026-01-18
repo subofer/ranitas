@@ -624,25 +624,29 @@ const seedMockData = async () => {
 
     // Crear algunos documentos de prueba (facturas)
     const proveedores = await prisma.contactos.findMany({ where: { esProveedor: true } });
+    const empresa = proveedores.find(p => p.cuit === '27269425496');
 
-    for (let i = 0; i < 5; i++) {
-      const fecha = new Date();
-      fecha.setDate(fecha.getDate() - i * 7); // Documentos de las últimas 5 semanas
+    if (proveedores.length > 0 && empresa) {
+      for (let i = 0; i < 5; i++) {
+        const fecha = new Date();
+        fecha.setDate(fecha.getDate() - i * 7); // Documentos de las últimas 5 semanas
 
-      await prisma.documentos.create({
-        data: {
-          numeroDocumento: `F001-${i + 1}`,
-          fecha,
-          tipoDocumento: 'FACTURA_A',
-          tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA', // Alternar entre compras y ventas
-          total: Math.floor(Math.random() * 10000) + 5000,
-          idContacto: proveedores[i % proveedores.length]?.id,
-          idDestinatario: proveedores.find(p => p.cuit === '27269425496')?.id, // Receptor es la empresa interna
-          estadoDocumento: {
-            connect: { codigo: 'IMPAGA' }
+        await prisma.documentos.create({
+          data: {
+            numeroDocumento: `F001-${i + 1}`,
+            fecha,
+            tipoDocumento: 'FACTURA_A',
+            tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA', // Alternar entre compras y ventas
+            total: Math.floor(Math.random() * 10000) + 5000,
+            idContacto: proveedores[i % proveedores.length]?.id,
+            idDestinatario: empresa.id,
+            idEmisor: proveedores[i % proveedores.length]?.id,
+            estadoDocumento: {
+              connect: { codigo: 'IMPAGA' }
+            }
           }
-        }
-      });
+        });
+      }
     }
 
     console.log('✅ Datos de prueba creados exitosamente');

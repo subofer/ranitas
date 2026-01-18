@@ -29,6 +29,8 @@ export async function guardarPresentacion(formData) {
     unidadContenido: formData.unidadContenido || null,
     precio: normalizarNumero(formData.precio),
     descuento: normalizarPorcentaje(formData.descuento),
+    codigoBarra: formData.codigoBarra?.toString().trim() || null,
+    esUnidadBase: Boolean(formData.esUnidadBase),
   };
 
   try {

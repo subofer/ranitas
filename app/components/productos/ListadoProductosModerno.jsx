@@ -30,6 +30,7 @@ import ProductoFila from './ProductoFila';
 import { guardarPresentacion, eliminarPresentacion } from '@/prisma/serverActions/presentaciones';
 import { abrirPresentacion } from '@/prisma/serverActions/stock';
 import { confirmarEliminacion } from '@/lib/confirmDialog';
+import { guardarAgrupacionPresentaciones, eliminarAgrupacionPresentaciones } from '@/prisma/serverActions/agrupacionPresentaciones';
 
 let productosCache = null;
 let productosCacheAt = 0;
@@ -167,6 +168,15 @@ const ListadoProductosModerno = ({
   const { data: categoriasOptions = [] } = useSelect(getCategorias, 'categorias');
   const { data: tiposPresentacionOptions = [] } = useSelect(getTiposPresentacion, 'tiposPresentacion');
 
+  const limpiarEdicionPresentacion = useCallback((presentacionId) => {
+    if (!presentacionId) return;
+    setPresentacionEdit((prev) => {
+      const next = { ...(prev || {}) };
+      if (next[presentacionId]) delete next[presentacionId];
+      return next;
+    });
+  }, [setPresentacionEdit]);
+
   const [presentacionSeleccionadaPorProducto, setPresentacionSeleccionadaPorProducto] = useState({});
   const [filaEditandoId, setFilaEditandoId] = useState(null);
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
@@ -224,6 +234,7 @@ const ListadoProductosModerno = ({
 
       const { productos: productosData = [] } = await getProductos({ take: 10000 }) || {};
       const lista = Array.isArray(productosData) ? productosData : [];
+      
       setProductos(lista);
       productosCache = lista;
       productosCacheAt = Date.now();
@@ -247,6 +258,16 @@ const ListadoProductosModerno = ({
       const presentacionesPayload = Object.entries(editsPresentaciones || {})
         .filter(([presentacionId]) => presentacionId && !String(presentacionId).startsWith('__new__'))
         .map(([presentacionId, edit]) => ({ presentacionId, ...(edit || {}) }));
+
+      const equivalenciasPayload = Object.entries(editsPresentaciones || {})
+        .filter(([presentacionId]) => presentacionId && !String(presentacionId).startsWith('__new__'))
+        .map(([presentacionId, edit]) => ({
+          presentacionId,
+          equivalenciaContenidaId: edit?.equivalenciaContenidaId,
+          equivalenciaCantidad: edit?.equivalenciaCantidad,
+          equivalenciaRelacionId: edit?.equivalenciaRelacionId,
+        }))
+        .filter((e) => e.equivalenciaContenidaId !== undefined || e.equivalenciaCantidad !== undefined || e.equivalenciaRelacionId !== undefined);
 
       const nuevos = entries
         .filter(([id]) => String(id).startsWith('__new__'))
@@ -304,6 +325,29 @@ const ListadoProductosModerno = ({
           motivo: 'edicion_listado',
         });
         if (res?.error) throw new Error(res.msg || 'No se pudieron guardar los cambios');
+      }
+
+      // 3) Guardar equivalencias entre presentaciones
+      if (equivalenciasPayload.length > 0) {
+        for (const eq of equivalenciasPayload) {
+          const contenidaId = (eq.equivalenciaContenidaId || '').toString().trim();
+          const cantidad = Number(eq.equivalenciaCantidad);
+          const relacionId = eq.equivalenciaRelacionId || null;
+
+          if (!contenidaId || !Number.isFinite(cantidad) || cantidad <= 0) {
+            if (relacionId) {
+              await eliminarAgrupacionPresentaciones(relacionId);
+            }
+            continue;
+          }
+
+          const resEq = await guardarAgrupacionPresentaciones({
+            presentacionContenidaId: contenidaId,
+            presentacionContenedoraId: eq.presentacionId,
+            cantidad,
+          });
+          if (resEq?.error) throw new Error(resEq?.msg || 'Error guardando equivalencia');
+        }
       }
 
       addNotification({ type: 'success', message: `✓ Cambios guardados` });
@@ -536,26 +580,55 @@ const ListadoProductosModerno = ({
     }));
   }, [setModoEdicionManual, setProductoEdit, setProductoFocused]);
 
-  const agregarPresentacionInline = useCallback(async ({ productoId, nombre, tipoPresentacionId, cantidad, unidadMedida }) => {
+  const agregarPresentacionInline = useCallback(async ({
+    productoId,
+    nombre,
+    tipoPresentacionId,
+    cantidad,
+    unidadMedida,
+    esUnidadBase = false,
+    equivalenciaContenidaId,
+    equivalenciaCantidad,
+    precio,
+    descuento,
+    codigoBarra,
+  }) => {
     if (!productoId) return;
     try {
+      const tipoNombre = (tiposPresentacionOptions || []).find((t) => t.id === tipoPresentacionId)?.nombre || 'Presentación';
+      const tamaño = [String(cantidad ?? '').trim(), String(unidadMedida ?? '').trim()].filter(Boolean).join(' ');
+      const nombreAuto = [tipoNombre, tamaño].filter(Boolean).join(' ');
       const res = await guardarPresentacion({
         id: '',
         productoId,
-        nombre: (nombre ?? '').toString().trim(),
+        nombre: (nombre ?? nombreAuto ?? '').toString().trim(),
         tipoPresentacionId: String(tipoPresentacionId || ''),
         cantidad: Number(cantidad) || 1,
         unidadMedida: (unidadMedida ?? '').toString().trim(),
         contenidoPorUnidad: null,
         unidadContenido: null,
+        esUnidadBase: Boolean(esUnidadBase),
+        precio: precio != null && precio !== '' ? Number(precio) : null,
+        descuento: descuento != null && descuento !== '' ? Number(descuento) : 0,
+        codigoBarra: (codigoBarra ?? '').toString().trim() || null,
       });
       if (res?.error) throw new Error(res?.msg || 'No se pudo crear la presentación');
+
+      const presentacionCreadaId = res?.data?.id;
+      if (!esUnidadBase && presentacionCreadaId && equivalenciaContenidaId && equivalenciaCantidad) {
+        const resEq = await guardarAgrupacionPresentaciones({
+          presentacionContenidaId: equivalenciaContenidaId,
+          presentacionContenedoraId: presentacionCreadaId,
+          cantidad: equivalenciaCantidad,
+        });
+        if (resEq?.error) throw new Error(resEq?.msg || 'No se pudo crear equivalencia');
+      }
       addNotification({ type: 'success', message: '✓ Presentación agregada' });
       await cargarProductos({ force: true });
     } catch (e) {
       addNotification({ type: 'error', message: `✗ ${e?.message || 'Error agregando presentación'}` });
     }
-  }, [addNotification, cargarProductos]);
+  }, [addNotification, cargarProductos, tiposPresentacionOptions]);
 
   const eliminarPresentacionInline = useCallback(async (presentacionId) => {
     if (!presentacionId) return;
@@ -574,28 +647,142 @@ const ListadoProductosModerno = ({
   const abrirCajaInline = useCallback(async (presentacionId) => {
     if (!presentacionId) return;
     try {
-      const res = await abrirPresentacion({ presentacionId, cantidad: 1 });
+      const { abrirPresentacion } = await import('@/prisma/serverActions/productos');
+      const res = await abrirPresentacion(presentacionId);
       if (res?.error) throw new Error(res?.msg || 'No se pudo abrir la caja');
       addNotification({ type: 'success', message: `✓ Caja abierta` });
-      await cargarProductos({ force: true });
+      limpiarEdicionPresentacion(presentacionId);
+      
+      // Actualización optimista del estado local
+      setProductos(prevProductos => prevProductos.map(prod => {
+        const presActualizada = prod.presentaciones?.find(p => p.id === presentacionId);
+        if (!presActualizada) return prod;
+        
+        const eq = presActualizada.contenedoras?.[0];
+        const contieneId = eq?.presentacionContenidaId;
+        const cantidad = eq?.cantidad || 1;
+        const presContenida = prod.presentaciones?.find(p => p.id === contieneId);
+        const esBase = presContenida?.esUnidadBase;
+        
+        return {
+          ...prod,
+          stockSuelto: esBase ? (prod.stockSuelto || 0) + cantidad : prod.stockSuelto,
+          presentaciones: prod.presentaciones.map(p => {
+            if (p.id === presentacionId) {
+              return {
+                ...p,
+                stock: {
+                  ...p.stock,
+                  stockCerrado: Math.max(0, (p.stock?.stockCerrado || 0) - 1)
+                }
+              };
+            }
+            if (p.id === contieneId) {
+              return {
+                ...p,
+                stock: {
+                  ...p.stock,
+                  stockCerrado: (p.stock?.stockCerrado || 0) + cantidad
+                }
+              };
+            }
+            return p;
+          })
+        };
+      }));
     } catch (e) {
       addNotification({ type: 'error', message: `✗ ${e?.message || 'Error abriendo caja'}` });
+      await cargarProductos({ force: true }); // Solo recargar en caso de error
     }
-  }, [addNotification, cargarProductos]);
+  }, [addNotification, limpiarEdicionPresentacion, setProductos, cargarProductos]);
 
   const cerrarCajaInline = useCallback(async (presentacionId) => {
     if (!presentacionId) return;
     try {
-      // Importación dinámica para evitar aumentar bundle inicial
-      const { cerrarPresentacion } = await import('@/prisma/serverActions/stock');
-      const res = await cerrarPresentacion({ presentacionId, cantidad: 1 });
+      const { cerrarPresentacion } = await import('@/prisma/serverActions/productos');
+      const res = await cerrarPresentacion(presentacionId);
       if (res?.error) throw new Error(res?.msg || 'No se pudo cerrar la caja');
       addNotification({ type: 'success', message: `✓ Caja cerrada` });
-      await cargarProductos({ force: true });
+      limpiarEdicionPresentacion(presentacionId);
+      
+      // Actualización optimista del estado local
+      setProductos(prevProductos => prevProductos.map(prod => {
+        const presActualizada = prod.presentaciones?.find(p => p.id === presentacionId);
+        if (!presActualizada) return prod;
+        
+        const eq = presActualizada.contenedoras?.[0];
+        if (!eq) return prod;
+        
+        const contieneId = eq.presentacionContenidaId;
+        const cantidad = eq.cantidad || 1;
+        const presContenida = prod.presentaciones?.find(p => p.id === contieneId);
+        const esBase = presContenida?.esUnidadBase;
+        
+        return {
+          ...prod,
+          stockSuelto: esBase ? Math.max(0, (prod.stockSuelto || 0) - cantidad) : prod.stockSuelto,
+          presentaciones: prod.presentaciones.map(p => {
+            if (p.id === presentacionId) {
+              return {
+                ...p,
+                stock: {
+                  ...p.stock,
+                  stockCerrado: (p.stock?.stockCerrado || 0) + 1
+                }
+              };
+            }
+            if (p.id === contieneId) {
+              return {
+                ...p,
+                stock: {
+                  ...p.stock,
+                  stockCerrado: Math.max(0, (p.stock?.stockCerrado || 0) - cantidad)
+                }
+              };
+            }
+            return p;
+          })
+        };
+      }));
     } catch (e) {
       addNotification({ type: 'error', message: `✗ ${e?.message || 'Error cerrando caja'}` });
+      await cargarProductos({ force: true }); // Solo recargar en caso de error
     }
-  }, [addNotification, cargarProductos]);
+  }, [addNotification, limpiarEdicionPresentacion, setProductos, cargarProductos]);
+
+  const producirPresentacionInline = useCallback(async (presentacionId) => {
+    if (!presentacionId) return;
+    const cantidadStr = prompt('¿Cuántas unidades deseas producir?', '1');
+    if (!cantidadStr || isNaN(cantidadStr) || Number(cantidadStr) <= 0) return;
+    
+    const cantidad = Number(cantidadStr);
+    try {
+      const { producirPresentacion } = await import('@/prisma/serverActions/productos');
+      const res = await producirPresentacion(presentacionId, cantidad);
+      if (res?.error) throw new Error(res?.msg || 'No se pudo producir');
+      addNotification({ type: 'success', message: `✓ ${cantidad} unidades producidas` });
+      limpiarEdicionPresentacion(presentacionId);
+      
+      // Actualización optimista del estado local
+      setProductos(prevProductos => prevProductos.map(prod => ({
+        ...prod,
+        presentaciones: prod.presentaciones?.map(p => 
+          p.id === presentacionId
+            ? {
+                ...p,
+                stock: {
+                  ...p.stock,
+                  stockCerrado: (p.stock?.stockCerrado || 0) + cantidad
+                }
+              }
+            : p
+        )
+      })));
+    } catch (e) {
+      addNotification({ type: 'error', message: `✗ ${e?.message || 'Error produciendo'}` });
+      await cargarProductos({ force: true }); // Solo recargar en caso de error
+    }
+  }, [addNotification, limpiarEdicionPresentacion, setProductos, cargarProductos]);
 
   const cancelarEdicion = useCallback(() => {
     setModoEdicionManual(false);
@@ -1053,6 +1240,7 @@ const ListadoProductosModerno = ({
                 onEliminarPresentacion={eliminarPresentacionInline}
                 onAbrirCaja={abrirCajaInline}
                 onCerrarCaja={cerrarCajaInline}
+                onProducir={producirPresentacionInline}
                 onEliminarProducto={handleEliminarProducto}
                 onToggleSeleccion={toggleProductoSeleccionado}
                 esSeleccionado={productosSeleccionados.includes(producto.id)}
@@ -1061,6 +1249,7 @@ const ListadoProductosModerno = ({
                 filaProductoRef={filaProductoRef}
                 onKeyDown={handleProductoKeyDown}
                 calcularStockEquivalente={calcularStockEquivalente}
+                calcularFactorAUnidadBase={calcularFactorAUnidadBase}
                 presentacionSeleccionadaPorProducto={presentacionSeleccionadaPorProducto}
                 onSetPresentacionSeleccionada={(id, presentacionId) => {
                   setPresentacionSeleccionadaPorProducto((prev) => ({ ...prev, [id]: presentacionId }));
