@@ -28,6 +28,10 @@ export const useKeyboard = ({
   filaProductoRef,
   tablaRef,
   onCopySelected,
+  // Nuevo: callback para togglear selección de presentaciones (por id)
+  onTogglePresentacion,
+  // Nuevo: callback para seleccionar (varios) presentaciones por rango
+  onSelectPresentacionesRange,
   scopeRef,
 }) => {
   const [productoFocused, setProductoFocused] = useState(null);
@@ -90,16 +94,24 @@ export const useKeyboard = ({
       const a = clamp(from, 0, Math.max(0, list.length - 1));
       const b = clamp(to, 0, Math.max(0, list.length - 1));
       const [start, end] = a <= b ? [a, b] : [b, a];
-      const ids = [];
+      const productIds = [];
+      const presentacionIds = [];
       for (let i = start; i <= end; i += 1) {
-        const rowId = list[i]?.id;
-        if (!rowId) continue;
-        const selectId = selectIdByRowId.get(rowId) || rowId;
-        ids.push(selectId);
+        const row = list[i];
+        if (!row) continue;
+        if (row.tipo === 'producto') {
+          const selectId = row.selectId || row.id;
+          if (selectId) productIds.push(selectId);
+        } else if (row.tipo === 'presentacion') {
+          if (row.presentacionId) presentacionIds.push(row.presentacionId);
+        }
       }
-      setProductosSeleccionados((prev) => union(prev, ids));
+      if (productIds.length > 0) setProductosSeleccionados((prev) => union(prev, productIds));
+      if (presentacionIds.length > 0 && typeof onSelectPresentacionesRange === 'function') {
+        onSelectPresentacionesRange(presentacionIds);
+      }
     },
-    [itemsOrdenados, selectIdByRowId]
+    [itemsOrdenados, selectIdByRowId, onSelectPresentacionesRange]
   );
 
   const moveFocus = useCallback(
@@ -217,7 +229,7 @@ export const useKeyboard = ({
           !!active && typeof active.closest === 'function' && !!active.closest('input, textarea');
         if (activeEsEditable) return;
 
-        if (typeof onCopySelected === 'function' && productosSeleccionados.length > 0) {
+        if (typeof onCopySelected === 'function') {
           e.preventDefault();
           onCopySelected({ selectedIds: productosSeleccionados, focusedId: productoFocused });
         }
@@ -278,6 +290,16 @@ export const useKeyboard = ({
             }
             break;
           }
+
+          // Si el elemento enfocado es una presentación, delegar toggle a onTogglePresentacion
+          const focusedItem = (itemsOrdenados || []).find((it) => it?.id === productoFocused);
+          if (focusedItem?.tipo === 'presentacion') {
+            if (typeof onTogglePresentacion === 'function') {
+              onTogglePresentacion(focusedItem.presentacionId);
+              break;
+            }
+          }
+
           const selectId = selectIdByRowId.get(productoFocused) || productoFocused;
           toggleProductoSeleccionado(selectId);
           break;
@@ -333,7 +355,7 @@ export const useKeyboard = ({
       const keyLower = typeof e.key === 'string' ? e.key.toLowerCase() : e.key;
       const esCopia = (e.ctrlKey || e.metaKey) && keyLower === 'c';
       if (esCopia) {
-        if (typeof onCopySelected === 'function' && productosSeleccionados.length > 0) {
+        if (typeof onCopySelected === 'function') {
           e.preventDefault();
           onCopySelected({ selectedIds: productosSeleccionados, focusedId: productoFocused });
         }
@@ -382,6 +404,13 @@ export const useKeyboard = ({
           break;
         case ' ': {
           e.preventDefault();
+          const focusedItem = (itemsOrdenados || []).find((it) => it?.id === productoFocused);
+          if (focusedItem?.tipo === 'presentacion') {
+            if (typeof onTogglePresentacion === 'function') {
+              onTogglePresentacion(focusedItem.presentacionId);
+              break;
+            }
+          }
           const selectId = selectIdByRowId.get(productoFocused) || productoFocused;
           toggleProductoSeleccionado(selectId);
           break;

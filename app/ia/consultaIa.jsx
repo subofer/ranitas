@@ -1,33 +1,18 @@
 "use server"
-import { CohereClient } from "cohere-ai";
 
 export const consultarAHere = async (object, prompt) => {
-
-  const cohere = new CohereClient({
-    token: process.env.HERE_KEY,
-  });
-    const prediction = await cohere.generate({
-      prompt: `given a text and a object,
-      analize the object and the text and make corection to the data,
-      use the provided object structure.
-      get the product caracterist composed in a json object
-      the json must have,
-      family of product as categoria,
-      stringbrand as marca,
-      string name as nombre,
-      float list of found prices as precios,
-      array composition of all ingredients as ingredientes,
-      float size as tamaño
-      stringunit of measure as unidad,
-      nothing else more than the json, no explanation or any more
-      if there no info, return the empty object with null values, i only want an object as response.
-      object:${object}, text:${prompt}
-      `,
-      maxTokens: 1500,
-      temperature: 0.8,
-    });
-    console.log("Received prediction", prediction.generations[0].text);
-    const json = prediction.generations[0].text.split("```json")[1]
-    console.log("LO CONSOLO", json)
-  //return {json, text: prediction.generations[0].text}
-  };
+  // Reemplazo de Cohere: ahora usamos el endpoint local de Ollama (/api/ollama/chat)
+  const combinedPrompt = `given a text and an object, analyze the object and the text and return a JSON following the provided object structure. If no info, return empty object with nulls.\n\nobject:${JSON.stringify(object)}\n\ntext:${prompt}`
+  try {
+    const res = await fetch('/api/ollama/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: process.env.OLLAMA_DEFAULT || 'default', prompt: combinedPrompt })
+    })
+    const data = await res.json()
+    if (data?.ok) return { text: data.text }
+    return { error: data?.error || 'No response from Ollama' }
+  } catch (e) {
+    return { error: e.message }
+  }
+}

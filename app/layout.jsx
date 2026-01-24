@@ -1,4 +1,5 @@
 import './globals.css'
+import AiProviderClient from '@/components/ai/AiProviderClient'
 
 export const metadata = {
   title: 'Sistema de Gestión - Las Ranitas',
@@ -12,7 +13,9 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css" />
       </head>
       <body>
-        {children}
+        <AiProviderClient>
+          {children}
+        </AiProviderClient>
       </body>
     </html>
   )

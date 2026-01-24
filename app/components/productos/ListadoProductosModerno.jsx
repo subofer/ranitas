@@ -178,6 +178,18 @@ const ListadoProductosModerno = ({
   }, [setPresentacionEdit]);
 
   const [presentacionSeleccionadaPorProducto, setPresentacionSeleccionadaPorProducto] = useState({});
+  // Selección independiente por presentación (map presentacionId -> true)
+  const [presentacionesSeleccionadasMap, setPresentacionesSeleccionadasMap] = useState({});
+
+  const togglePresentacionSeleccionada = useCallback((presentacionId) => {
+    if (!presentacionId) return;
+    setPresentacionesSeleccionadasMap((prev) => {
+      const next = { ...(prev || {}) };
+      if (next[presentacionId]) delete next[presentacionId];
+      else next[presentacionId] = true;
+      return next;
+    });
+  }, []);
   const [filaEditandoId, setFilaEditandoId] = useState(null);
   const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -187,6 +199,7 @@ const ListadoProductosModerno = ({
     categoria: true,
     tamano: true,
     precio: true,
+    descuento: true,
     stock: true,
   }));
 
@@ -197,6 +210,7 @@ const ListadoProductosModerno = ({
     categoria: false,
     tamano: false,
     unidad: false,
+    stock: false, // incluir stock como opción de copia
     descripcion: false,
   });
 
@@ -452,32 +466,92 @@ const ListadoProductosModerno = ({
   const formatearLineaCopiado = (prod) => {
     if (!prod) return '';
 
+    // Orden de columnas: Nombre, Código, Categoría, Tamaño, Unidad, Precio, Stock, Descripción
     const partes = [];
     if (searchFields_local.nombre) partes.push(prod.nombre);
     if (searchFields_local.codigoBarra) partes.push(prod.codigoBarra ? `(${prod.codigoBarra})` : '');
+    if (searchFields_local.categoria) partes.push(prod.categorias?.[0]?.nombre);
+    if (searchFields_local.tamano) partes.push((prod.size ?? 0).toString());
+    if (searchFields_local.unidad) partes.push(prod.unidad);
     if (searchFields_local.precio) {
       const precio = prod.precios?.[0]?.precio;
       partes.push(typeof precio === 'number' ? `$${precio.toLocaleString()}` : '');
     }
-    if (searchFields_local.categoria) partes.push(prod.categorias?.[0]?.nombre);
-    if (searchFields_local.tamano) partes.push((prod.size ?? 0).toString());
-    if (searchFields_local.unidad) partes.push(prod.unidad);
+    if (searchFields_local.stock) {
+      const { totalEquivalente } = calcularStockEquivalente(prod);
+      partes.push(typeof totalEquivalente === 'number' ? String(totalEquivalente) : '0');
+    }
     if (searchFields_local.descripcion) partes.push(prod.descripcion);
 
+    // Unir con tabulaciones para formato de "tablita"
     return partes
       .map((p) => (p ?? '').toString().trim())
       .filter(Boolean)
-      .join(' ');
+      .join('\t');
+  };
+
+  const formatearLineaCopiadoPresentacion = (prod, pres) => {
+    if (!prod || !pres) return '';
+    const base = formatearLineaCopiado(prod);
+    const partesPres = [];
+    if (pres?.tipoPresentacion?.nombre) partesPres.push(pres.tipoPresentacion.nombre);
+    if (pres?.cantidad != null) partesPres.push(String(pres.cantidad));
+    if (pres?.unidadMedida) partesPres.push(pres.unidadMedida);
+    // Nota: La inclusión del stock de la presentación depende del checkbox 'stock'
+    if (searchFields_local.stock) {
+      const stockPres = pres?.stock?.stockCerrado ?? 0;
+      partesPres.push(`stock:${stockPres}`);
+    }
+    const presStr = partesPres.filter(Boolean).join(' ');
+
+    // Construir la línea tabulada con partes condicionales
+    const partesLinea = [];
+    if (base) partesLinea.push(base);
+    if (presStr) partesLinea.push(presStr);
+    if (!base && !presStr && !searchFields_local.stock) return ''; // nada que copiar
+    // Si se desea incluir stock y aún no fue añadido a presStr (caso sin campos adicionales), añadirlo
+    if (searchFields_local.stock && !presStr.includes('stock:')) {
+      partesLinea.push(`stock:${pres?.stock?.stockCerrado ?? 0}`);
+    }
+
+    return partesLinea.join('\t');
   };
 
   const copiarSeleccionados = () => {
-    const datos = productosSeleccionados
-      .map((id) => formatearLineaCopiado(productos.find((p) => p.id === id)))
-      .filter(Boolean)
-      .join('\n');
+    const lineas = [];
+
+    // Construir las líneas en el orden visual de la tabla a partir de filasEnPagina
+    for (const row of filasEnPagina || []) {
+      if (!row) continue;
+      if (row.tipo === 'producto') {
+        if ((productosSeleccionados || []).includes(row.selectId)) {
+          const prod = productos.find((p) => p.id === row.selectId);
+          const linea = formatearLineaCopiado(prod);
+          if (linea) lineas.push(linea);
+        }
+      } else if (row.tipo === 'presentacion') {
+        const presId = row.presentacionId;
+        const estaSeleccionada = Boolean(presentacionesSeleccionadasMap?.[presId]) || presentacionSeleccionadaPorProducto?.[row.productoId] === presId;
+        if (estaSeleccionada) {
+          const prod = productos.find((p) => p.id === row.productoId);
+          if (!prod) continue;
+          const pres = (prod.presentaciones || []).find((pr) => pr.id === presId);
+          const linea = formatearLineaCopiadoPresentacion(prod, pres);
+          if (linea) lineas.push(linea);
+        }
+      }
+    }
+
+    if (lineas.length === 0) {
+      showError('No hay elementos seleccionados para copiar');
+      return;
+    }
+
+    const datos = lineas.join('\n');
+
     navigator.clipboard.writeText(datos)
       .then(() => {
-        showError('Productos copiados al portapapeles');
+        addNotification({ type: 'success', message: 'Copiado al portapapeles' });
       })
       .catch(() => {
         showError('No se pudo copiar al portapapeles');
@@ -528,6 +602,21 @@ const ListadoProductosModerno = ({
     tablaRef,
     onCopySelected: () => {
       copiarSeleccionados();
+    },
+    // Pasar handler para togglear presentación con espacio
+    onTogglePresentacion: (presentacionId) => {
+      togglePresentacionSeleccionada(presentacionId);
+    },
+    // Seleccionar por rango múltiples presentaciones (Shift + flechas)
+    onSelectPresentacionesRange: (presentacionIds) => {
+      if (!Array.isArray(presentacionIds) || presentacionIds.length === 0) return;
+      setPresentacionesSeleccionadasMap((prev) => {
+        const next = { ...(prev || {}) };
+        for (const id of presentacionIds) {
+          if (id) next[id] = true;
+        }
+        return next;
+      });
     },
     scopeRef,
   });
@@ -1042,10 +1131,11 @@ const ListadoProductosModerno = ({
                         {[
                           { key: 'nombre', label: 'Nombre' },
                           { key: 'codigoBarra', label: 'Código de barras' },
-                          { key: 'precio', label: 'Precio' },
                           { key: 'categoria', label: 'Categoría' },
                           { key: 'tamano', label: 'Tamaño' },
                           { key: 'unidad', label: 'Unidad' },
+                          { key: 'precio', label: 'Precio' },
+                          { key: 'stock', label: 'Stock' },
                           { key: 'descripcion', label: 'Descripción' },
                         ].map(({ key, label }) => (
                           <label key={key} className="flex items-center gap-2 text-sm text-gray-700 px-1 select-none">
@@ -1099,6 +1189,7 @@ const ListadoProductosModerno = ({
                       { key: 'categoria', label: 'Categoría' },
                       { key: 'tamano', label: 'Tamaño' },
                       { key: 'precio', label: 'Precio' },
+                      { key: 'descuento', label: 'Descuento' },
                       { key: 'stock', label: 'Stock' },
                     ]
                   ).map((c) => {
@@ -1208,6 +1299,11 @@ const ListadoProductosModerno = ({
                   <span className="w-32">Precio</span>
                 </HeaderColumna>
               )}
+              {columnasVisibles.descuento && (
+                <HeaderColumna columna="descuento">
+                  <span className="w-28 text-center">Desc %</span>
+                </HeaderColumna>
+              )}
               {columnasVisibles.stock && (
                 <HeaderColumna columna="stock">
                   <span className="w-24 text-center">Stock</span>
@@ -1254,6 +1350,9 @@ const ListadoProductosModerno = ({
                 onSetPresentacionSeleccionada={(id, presentacionId) => {
                   setPresentacionSeleccionadaPorProducto((prev) => ({ ...prev, [id]: presentacionId }));
                 }}
+                // Selección por-presentación independiente
+                presentacionesSeleccionadasMap={presentacionesSeleccionadasMap}
+                onTogglePresentacion={togglePresentacionSeleccionada}
               />
             ))}
           </tbody>

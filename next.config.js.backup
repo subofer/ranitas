@@ -7,13 +7,11 @@ const nextConfig = {
   // Esta es la línea que soluciona el warning del workspace
   outputFileTracingRoot: path.join(__dirname),
 
-  experimental: {
+  experimental: { 
     serverActions: { 
       bodySizeLimit: '4mb' 
-    }
-  },
-
-  turbopack: {}
+    } 
+  }
 };
 
 module.exports = nextConfig;

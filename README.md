@@ -29,7 +29,7 @@ Sistema completo de gestión de productos e inventario desarrollado con **Next.j
 - ✅ Búsqueda de productos en Google por código de barras
 - ✅ Lectura de códigos QR/códigos de barras con cámara
 - ✅ Exportación a Excel
-- ✅ Consultas a IA (Cohere)
+- ✅ Consultas a IA (Ollama/local)
 - ✅ Cotización del dólar automática
 - ✅ Dashboard con gráficos
 
@@ -41,7 +41,7 @@ Sistema completo de gestión de productos e inventario desarrollado con **Next.j
 - **Autenticación**: JWT con scrypt hashing
 - **Testing**: Cypress (E2E), Jest (Unit)
 - **UI/UX**: FontAwesome icons, SweetAlert2, Toast notifications
-- **Integraciones**: Puppeteer, Cheerio, Cohere AI
+- **Integraciones**: Puppeteer, Cheerio, Ollama (local)
 
 ## 📋 Prerrequisitos
 

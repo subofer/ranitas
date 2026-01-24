@@ -164,7 +164,11 @@ export async function getExecutiveSummary() {
     const [currentSales, lastMonthSales] = await Promise.all([
       prisma.documentos.aggregate({
         where: {
-          tipoDocumento: 'FACTURA',
+          tipoDocumento: {
+            codigo: {
+              in: ['FACTURA_A', 'FACTURA_B', 'FACTURA_C']
+            }
+          },
           fecha: { gte: currentMonth },
           tipoMovimiento: 'SALIDA'
         },
@@ -172,7 +176,11 @@ export async function getExecutiveSummary() {
       }),
       prisma.documentos.aggregate({
         where: {
-          tipoDocumento: 'FACTURA',
+          tipoDocumento: {
+            codigo: {
+              in: ['FACTURA_A', 'FACTURA_B', 'FACTURA_C']
+            }
+          },
           fecha: { gte: lastMonth, lt: currentMonth },
           tipoMovimiento: 'SALIDA'
         },
@@ -188,7 +196,11 @@ export async function getExecutiveSummary() {
     // Compras del mes
     const purchases = await prisma.documentos.aggregate({
       where: {
-        tipoDocumento: 'FACTURA',
+        tipoDocumento: {
+          codigo: {
+            in: ['FACTURA_A', 'FACTURA_B', 'FACTURA_C']
+          }
+        },
         fecha: { gte: currentMonth },
         tipoMovimiento: 'ENTRADA'
       },

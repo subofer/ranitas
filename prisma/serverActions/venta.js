@@ -74,18 +74,36 @@ export async function guardarVentaConStock(venta = {}) {
   }
   const consumidorId = await getContactoConsumidorFinal();
 
-  const tipoDocumento = "FACTURA_A";
+  const tipoDocumentoCodigo = "FACTURA_A";
   const tipoMovimiento = "SALIDA";
   const fecha = new Date();
   const tieneImpuestos = false;
 
   try {
     const documento = await prisma.$transaction(async (tx) => {
+      // Buscar el ID del tipo de documento
+      const tipoDocumentoRecord = await tx.tiposDocumento.findFirst({
+        where: { codigo: tipoDocumentoCodigo }
+      });
+      
+      if (!tipoDocumentoRecord) {
+        throw new Error(`Tipo de documento '${tipoDocumentoCodigo}' no encontrado`);
+      }
+
+      // Buscar el ID del estado de documento por defecto
+      const estadoDocumentoRecord = await tx.estadosDocumento.findFirst({
+        where: { codigo: 'PAGADA' }
+      });
+      
+      if (!estadoDocumentoRecord) {
+        throw new Error(`Estado de documento 'PAGADA' no encontrado`);
+      }
+
       // Numeración correlativa por emisor + tipo
       const last = await tx.documentos.findFirst({
         where: {
           tipoMovimiento,
-          tipoDocumento,
+          idTipoDocumento: tipoDocumentoRecord.id,
           idContacto: emisorId,
         },
         orderBy: { createdAt: "desc" },
@@ -141,7 +159,8 @@ export async function guardarVentaConStock(venta = {}) {
           numeroDocumento: nextNumero,
           fecha,
           tieneImpuestos,
-          tipoDocumento,
+          idTipoDocumento: tipoDocumentoRecord.id,
+          idEstadoDocumento: estadoDocumentoRecord.id,
           tipoMovimiento,
           total,
           detalle: {

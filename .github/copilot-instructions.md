@@ -57,7 +57,7 @@ afectando el stock.
 - Cada producto puede tener múltiples categorías asignadas.
 - Cada producto debe tener su su margen de ganancia definido por presentación.
 - El sistema debe permitir definir descuentos por presentación.
-- El producto puede ser una receta que produce otras presentaciones.
+- El producto puede ser una receta que produce otras presentaciones y puede consumir distintos productos.
 - Las recetas deben definir los insumos necesarios por presentación producida.
 
 
