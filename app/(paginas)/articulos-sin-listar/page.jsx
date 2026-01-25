@@ -1,5 +1,5 @@
 "use client"
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { obtenerArticulosSinMapear, obtenerProveedoresConPendientes } from '@/prisma/serverActions/articulosSinMapear'
 import { mapearAliasAProducto } from '@/prisma/serverActions/buscarAliases'
 import { ModalMapeoAlias } from '@/components/ia/components/ModalMapeoAlias'
@@ -19,13 +19,7 @@ export default function ArticulosSinListarPage() {
   // Modal de mapeo
   const [modalMapeo, setModalMapeo] = useState({ open: false, alias: null })
 
-  useEffect(() => {
-    cargarDatos()
-    cargarProveedores()
-    cargarProductos()
-  }, [proveedorFiltro])
-
-  const cargarDatos = async () => {
+  const cargarDatos = useCallback(async () => {
     setLoading(true)
     try {
       const datos = await obtenerArticulosSinMapear({
@@ -34,11 +28,18 @@ export default function ArticulosSinListarPage() {
       setArticulos(vistaAgrupada ? datos.agrupados : datos.detalles)
       setTotal(datos.total)
     } catch (error) {
-      console.error('Error cargando datos:', error)
+      toast.error('Error al cargar datos: ' + error.message)
     } finally {
       setLoading(false)
     }
-  }
+  }, [proveedorFiltro, vistaAgrupada])
+
+  useEffect(() => {
+    cargarDatos()
+    cargarProveedores()
+    cargarProductos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const cargarProveedores = async () => {
     try {

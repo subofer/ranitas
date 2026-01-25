@@ -64,20 +64,6 @@ export default function IaImage({ model }) {
       aplicarTransformaciones()
     }
   }, [ajustes, mostrarControles, aplicarTransformaciones])
-  const [pedidosRelacionados, setPedidosRelacionados] = useState([])
-  const [facturaDuplicada, setFacturaDuplicada] = useState(null)
-  const [buscandoDatos, setBuscandoDatos] = useState(false)
-  
-  const [mostrarControles, setMostrarControles] = useState(false)
-  const [ajustes, setAjustes] = useState(DEFAULT_ADJUSTMENTS)
-  
-  // Refs
-  const canvasRef = useRef(null)
-  const imgOriginalRef = useRef(null)
-  
-  // Hooks personalizados
-  const autoEnfocar = useImageAutoFocus()
-  const aplicarTransformaciones = useImageTransformations(preview, imgOriginalRef, canvasRef, ajustes)
   
   // Efectos
   useEffect(() => {

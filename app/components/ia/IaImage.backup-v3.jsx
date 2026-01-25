@@ -20,7 +20,7 @@ import { useImageAutoFocus, useImageTransformations } from '@/lib/ia/hooks'
 import {
   CampoEditable,
   RangeControl,
-  ImageControlsOverlay,
+  ImageControlsOverlay as ImageControlsOverlayComponent,
   AlertaFacturaDuplicada,
   ResultadoBusquedaProveedor,
   PedidosRelacionados,
@@ -32,7 +32,7 @@ import {
 } from './components'
 
 
-// Controles de imagen overlay
+// Controles de imagen overlay - Redefinido localmente
 function ImageControlsOverlay({ ajustes, setAjustes, onApply, onReset, onCancel }) {
   return (
     <div className="absolute inset-0 bg-black/50 rounded-lg flex items-end p-4 pointer-events-none">
@@ -132,8 +132,8 @@ function ImageControlsOverlay({ ajustes, setAjustes, onApply, onReset, onCancel 
   )
 }
 
-// Alerta de factura duplicada
-function AlertaFacturaDuplicada({ factura }) {
+// Alerta de factura duplicada - Redefinido localmente
+function AlertaFacturaDuplicadaLocal({ factura }) {
   if (!factura) return null
   
   return (
@@ -155,8 +155,8 @@ function AlertaFacturaDuplicada({ factura }) {
   )
 }
 
-// Resultado búsqueda proveedor
-function ResultadoBusquedaProveedor({ proveedorEncontrado }) {
+// Resultado búsqueda proveedor - Redefinido localmente
+function ResultadoBusquedaProveedorLocal({ proveedorEncontrado }) {
   if (!proveedorEncontrado) return null
 
   const bgColor = proveedorEncontrado.confianza === 'alta' ? 'bg-green-50 border-green-400' :
@@ -937,8 +937,8 @@ export default function IaImage({ model }) {
                   </div>
                 )}
                 
-                <AlertaFacturaDuplicada factura={facturaDuplicada} />
-                <ResultadoBusquedaProveedor proveedorEncontrado={proveedorEncontrado} />
+                <AlertaFacturaDuplicadaLocal factura={facturaDuplicada} />
+                <ResultadoBusquedaProveedorLocal proveedorEncontrado={proveedorEncontrado} />
                 <PedidosRelacionados pedidos={pedidosRelacionados} />
                 
                 <EncabezadoFactura 
