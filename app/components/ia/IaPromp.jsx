@@ -4,7 +4,7 @@ import IaChat from "./IaChat"
 import IaImage from "./IaImage"
 import FilterSelect from "../formComponents/FilterSelect"
 import { useAiContext } from "@/context/AiContext"
-import { useOllamaStatus } from "@/hooks/useOllamaStatus"
+import ModelStatusIndicator from "./ModelStatusIndicator"
 
 // ========== CONSTANTES ==========
 const VISION_KEYWORDS = ['vision', 'llava', 'bakllava', 'minicpm-v', 'cogvlm', 'qwen-vl', 'yi-vl']
@@ -21,33 +21,6 @@ const hasVision = (modelName) => {
 }
 
 // ========== COMPONENTES ==========
-
-// Estado del modelo en VRAM
-function ModelStatus({ status, onPreload, preloading }) {
-  if (status === 'loaded') {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
-        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-        <span className="font-medium">En VRAM</span>
-      </div>
-    )
-  }
-  
-  if (status === 'unloaded') {
-    return (
-      <button 
-        onClick={onPreload} 
-        disabled={preloading}
-        className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium shadow-sm hover:shadow-md"
-        title="Cargar modelo en VRAM"
-      >
-        {preloading ? '⏳ Cargando...' : '⚡ Precargar'}
-      </button>
-    )
-  }
-  
-  return null
-}
 
 // Selector de pestañas
 function TabSelector({ activeTab, onChange }) {
@@ -169,7 +142,6 @@ function ControlHeader({
   setModel,
   modelsLoading,
   refreshModels,
-  modelStatus,
   preloadModel,
   preloading,
   tab,
@@ -186,8 +158,8 @@ function ControlHeader({
             modelsLoading={modelsLoading}
             onRefresh={refreshModels}
           />
-          <ModelStatus
-            status={model ? modelStatus : null}
+          <ModelStatusIndicator
+            modelName={model}
             onPreload={preloadModel}
             preloading={preloading}
           />
@@ -204,7 +176,6 @@ function ControlHeader({
 // ========== COMPONENTE PRINCIPAL ==========
 const IaPrompt = () => {
   const { models, model, setModel, refreshModels, modelsLoading } = useAiContext()
-  const { modelStatus, refresh } = useOllamaStatus({ selectedModel: model })
   const [tab, setTab] = useState('chat')
   const [preloading, setPreloading] = useState(false)
 
@@ -227,10 +198,8 @@ const IaPrompt = () => {
         })
       })
 
-      // Refrescar estado después de un momento
-      setTimeout(() => {
-        refresh()
-      }, 1000)
+      // El estado se actualizará automáticamente por el contexto
+      await new Promise(resolve => setTimeout(resolve, 1000))
     } catch (error) {
       console.error('Error al precargar modelo:', error)
     } finally {
@@ -246,7 +215,6 @@ const IaPrompt = () => {
         setModel={setModel}
         modelsLoading={modelsLoading}
         refreshModels={refreshModels}
-        modelStatus={modelStatus}
         preloadModel={preloadModel}
         preloading={preloading}
         tab={tab}

@@ -1,6 +1,15 @@
 "use client"
 import { useEffect, useState, useRef, useCallback } from 'react'
 
+/**
+ * @deprecated Este hook está obsoleto.
+ * Usa OllamaStatusProvider y useOllamaStatusContext en su lugar.
+ * Ver /context/OllamaStatusContext.jsx
+ * 
+ * Este hook causa re-renders innecesarios porque el polling se ejecuta
+ * dentro del componente que lo usa. El nuevo contexto global aísla
+ * el polling y evita que los inputs flickeen durante la edición.
+ */
 export function useOllamaStatus({ selectedModel, autoRefresh = true }) {
   const [loadedModels, setLoadedModels] = useState([])
   const [loading, setLoading] = useState(false)
