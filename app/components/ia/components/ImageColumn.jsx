@@ -1,5 +1,5 @@
 "use client"
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 
 /**
  * Componente de columna de imagen
@@ -29,16 +29,28 @@ export function ImageColumn({
 }) {
   const containerRef = useRef(null)
   
-  // Manejar zoom con Ctrl + rueda
-  const handleWheel = (e) => {
-    if (e.ctrlKey) {
-      e.preventDefault()
-      e.stopPropagation()
-      const delta = e.deltaY * -0.001
-      const newZoom = Math.min(Math.max(0.5, zoom + delta), 5)
-      setZoom(newZoom)
+  // Agregar event listener nativo para prevenir zoom del navegador
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    
+    const handleWheelNative = (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        const delta = e.deltaY * -0.001
+        const newZoom = Math.min(Math.max(0.5, zoom + delta), 5)
+        setZoom(newZoom)
+      }
     }
-  }
+    
+    // Usar addEventListener nativo con passive: false
+    container.addEventListener('wheel', handleWheelNative, { passive: false })
+    
+    return () => {
+      container.removeEventListener('wheel', handleWheelNative)
+    }
+  }, [zoom, setZoom])
   
   // Manejar inicio de pan con Ctrl + click
   const handleMouseDown = (e) => {
@@ -117,7 +129,6 @@ export function ImageColumn({
         ref={containerRef}
         className="relative overflow-hidden rounded-lg border-2 border-gray-300"
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
