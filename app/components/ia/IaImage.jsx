@@ -9,6 +9,7 @@ import {
   verificarFacturaDuplicada, 
   guardarAuditoriaEdicion 
 } from '@/prisma/serverActions/facturaActions'
+import { buscarAliasesPorItems } from '@/prisma/serverActions/buscarAliases'
 
 // Importar utilidades compartidas
 import { DEFAULT_ADJUSTMENTS, MODES } from '@/lib/ia/constants'
@@ -48,6 +49,7 @@ export default function IaImage({ model }) {
   const [productosBuscados, setProductosBuscados] = useState({})
   const [pedidosRelacionados, setPedidosRelacionados] = useState([])
   const [facturaDuplicada, setFacturaDuplicada] = useState(null)
+  const [aliasesPorItem, setAliasesPorItem] = useState([])
   const [buscandoDatos, setBuscandoDatos] = useState(false)
   
   const [mostrarControles, setMostrarControles] = useState(false)
@@ -241,50 +243,30 @@ export default function IaImage({ model }) {
       
       if (factura.items && factura.items.length > 0) {
         const busquedas = {}
-        const procesamiento = {}
         const proveedorId = provResult?.proveedor?.id || null
         console.log(`🔍 Buscando ${factura.items.length} productos...`, proveedorId ? `con proveedorId: ${proveedorId}` : 'sin proveedor')
         
+        // Buscar aliases existentes (sin crear nada)
+        let aliases = []
+        if (proveedorId) {
+          console.log(`🔍 Buscando aliases existentes para proveedor...`)
+          aliases = await buscarAliasesPorItems({ proveedorId, items: factura.items })
+          setAliasesPorItem(aliases)
+          console.log(`✅ ${aliases.filter(a => a.tieneAlias).length} aliases encontrados de ${factura.items.length} items`)
+        }
+        
+        // Buscar productos por nombre (para sugerencias)
         for (const item of factura.items) {
           const nombreProducto = item.descripcion || item.detalle || item.producto || item.articulo
           if (nombreProducto && nombreProducto.trim()) {
             console.log(`  🔎 Buscando producto: "${nombreProducto}"...`)
-            
-            // Buscar productos existentes
             const productos = await buscarProducto(nombreProducto, proveedorId)
             busquedas[nombreProducto] = productos
             console.log(`    ✅ ${productos.length} resultados para "${nombreProducto}"`)
-            
-            // Si hay proveedor, procesar el item para crear alias si es necesario
-            if (proveedorId) {
-              console.log(`  📦 Procesando alias para: "${nombreProducto}"...`)
-              const resultado = await procesarItemFactura({
-                item: {
-                  descripcion: nombreProducto,
-                  codigo_producto: item.codigo,
-                  cantidad: item.cantidad,
-                  precio_unitario: item.precio_unitario
-                },
-                proveedorId
-              })
-              procesamiento[nombreProducto] = resultado
-              
-              if (resultado.success && !resultado.mapeado) {
-                console.log(`    📋 Alias creado/encontrado sin mapear - Tarea pendiente: ${resultado.tieneTareaPendiente ? 'SÍ' : 'NO'}`)
-              } else if (resultado.success && resultado.mapeado) {
-                console.log(`    ✅ Producto ya mapeado`)
-              }
-            }
           }
         }
         setProductosBuscados(busquedas)
-        console.log('✅ Búsqueda y procesamiento de productos completado')
-        
-        // Mostrar resumen si hay items sin mapear
-        const sinMapear = Object.values(procesamiento).filter(p => p.success && !p.mapeado)
-        if (sinMapear.length > 0) {
-          console.log(`📋 Resumen: ${sinMapear.length} producto(s) sin mapear con tareas pendientes creadas`)
-        }
+        console.log('✅ Búsqueda de productos completado (sin crear aliases)')
       }
     } catch (error) {
       console.error('Error buscando datos relacionados:', error)
@@ -419,6 +401,8 @@ export default function IaImage({ model }) {
                   productosBuscados={productosBuscados}
                   buscandoDatos={buscandoDatos}
                   CampoEditable={CampoEditableWrapper}
+                  aliasesPorItem={aliasesPorItem}
+                  proveedorId={proveedorEncontrado?.proveedor?.id}
                 />
                 
                 <details className="mt-4">
