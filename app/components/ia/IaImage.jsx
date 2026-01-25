@@ -66,6 +66,12 @@ export default function IaImage({ model }) {
   const [mostrarControles, setMostrarControles] = useState(false)
   const [ajustes, setAjustes] = useState(DEFAULT_ADJUSTMENTS)
   
+  // Estados para zoom y pan
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+  
   // Estados para permitir deshacer auto-enfoque
   const [imagenOriginal, setImagenOriginal] = useState(null)
   const [previewOriginal, setPreviewOriginal] = useState(null)
@@ -98,6 +104,8 @@ export default function IaImage({ model }) {
     setPreview(url)
     setResult(null)
     setAutoEnfoqueAplicado(false)
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
     setMetadata({
       fileName: f.name,
       fileSize: f.size,
@@ -531,6 +539,14 @@ export default function IaImage({ model }) {
             resetearAjustes={resetearAjustes}
             ImageControlsOverlay={ImageControlsOverlay}
             OptimizedImage={OptimizedImage}
+            zoom={zoom}
+            setZoom={setZoom}
+            pan={pan}
+            setPan={setPan}
+            isPanning={isPanning}
+            setIsPanning={setIsPanning}
+            panStart={panStart}
+            setPanStart={setPanStart}
           />
 
           {/* Columna derecha: Resultados */}
