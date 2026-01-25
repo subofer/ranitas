@@ -5,6 +5,7 @@ import { getInvoices } from '@/prisma/consultas/dashboard';
 import { cambiarEstadoDocumento } from '@/prisma/serverActions/documentos';
 import { getEstadoDocumentoOptions } from '@/prisma/consultas/opcionesDocumento';
 import { CONTROL_PANEL } from '@/lib/controlPanelConfig';
+import { formatCurrency, formatDate } from '@/lib/formatters';
 import FormCard from '@/components/formComponents/FormCard';
 import FormContainer from '@/components/formComponents/FormContainer';
 import Button from '@/components/formComponents/Button';
@@ -56,17 +57,6 @@ export default function FacturasPage() {
       console.error('Error cambiando estado:', error);
       alert('Error al cambiar el estado del documento');
     }
-  };
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-AR', {
-      style: 'currency',
-      currency: 'ARS'
-    }).format(amount);
-  };
-
-  const formatDate = (date) => {
-    return new Intl.DateTimeFormat('es-AR').format(new Date(date));
   };
 
   const getStatusBadge = (estadoDocumento) => {

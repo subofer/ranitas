@@ -24,10 +24,7 @@ import {
   EncabezadoFactura,
   TotalesFactura,
   ListaProductos,
-  LoadingSkeletons,
-  OptimizedImage,
-  ImageColumn,
-  AdvancedImageActions
+  LoadingSkeletons
 } from './components'
 
 // ========== COMPONENTE PRINCIPAL ==========
@@ -53,10 +50,26 @@ export default function IaImage({ model }) {
   const [mostrarControles, setMostrarControles] = useState(false)
   const [ajustes, setAjustes] = useState(DEFAULT_ADJUSTMENTS)
   
-  // Estados para permitir deshacer auto-enfoque
-  const [imagenOriginal, setImagenOriginal] = useState(null)
-  const [previewOriginal, setPreviewOriginal] = useState(null)
-  const [autoEnfoqueAplicado, setAutoEnfoqueAplicado] = useState(false)
+  // Refs
+  const canvasRef = useRef(null)
+  const imgOriginalRef = useRef(null)
+  
+  // Hooks personalizados
+  const autoEnfocar = useImageAutoFocus()
+  const aplicarTransformaciones = useImageTransformations(preview, imgOriginalRef, canvasRef, ajustes)
+  
+  // Efectos
+  useEffect(() => {
+    if (mostrarControles) {
+      aplicarTransformaciones()
+    }
+  }, [ajustes, mostrarControles, aplicarTransformaciones])
+  const [pedidosRelacionados, setPedidosRelacionados] = useState([])
+  const [facturaDuplicada, setFacturaDuplicada] = useState(null)
+  const [buscandoDatos, setBuscandoDatos] = useState(false)
+  
+  const [mostrarControles, setMostrarControles] = useState(false)
+  const [ajustes, setAjustes] = useState(DEFAULT_ADJUSTMENTS)
   
   // Refs
   const canvasRef = useRef(null)
@@ -77,25 +90,16 @@ export default function IaImage({ model }) {
   const onFile = (f) => {
     if (!f) return
     const url = URL.createObjectURL(f)
-    
-    // Guardar imagen original
-    setImagenOriginal(f)
-    setPreviewOriginal(url)
     setFile(f)
     setPreview(url)
     setResult(null)
-    setAutoEnfoqueAplicado(false)
     setMetadata({
       fileName: f.name,
       fileSize: f.size,
       fileType: f.type
     })
     
-    // Auto-enfocar después de un momento
-    setTimeout(() => {
-      autoEnfocar(f, url, setFile, setPreview, preview)
-      setAutoEnfoqueAplicado(true)
-    }, 100)
+    setTimeout(() => autoEnfocar(f, url, setFile, setPreview, preview), 100)
   }
   
   const aplicarAjustes = async () => {
@@ -120,22 +124,6 @@ export default function IaImage({ model }) {
   
   const resetearAjustes = () => {
     setAjustes(DEFAULT_ADJUSTMENTS)
-  }
-  
-  const deshacerAutoEnfoque = () => {
-    if (imagenOriginal && previewOriginal) {
-      // Liberar URL actual si existe
-      if (preview && preview !== previewOriginal) {
-        URL.revokeObjectURL(preview)
-      }
-      
-      setFile(imagenOriginal)
-      setPreview(previewOriginal)
-      setAutoEnfoqueAplicado(false)
-      setMostrarControles(false) // Cerrar controles si están abiertos
-      
-      console.log('↩️ Auto-enfoque deshecho, imagen original restaurada')
-    }
   }
   
   const abrirCropper = () => {
@@ -241,7 +229,6 @@ export default function IaImage({ model }) {
       
       if (factura.items && factura.items.length > 0) {
         const busquedas = {}
-        const procesamiento = {}
         const proveedorId = provResult?.proveedor?.id || null
         console.log(`🔍 Buscando ${factura.items.length} productos...`, proveedorId ? `con proveedorId: ${proveedorId}` : 'sin proveedor')
         
@@ -249,42 +236,13 @@ export default function IaImage({ model }) {
           const nombreProducto = item.descripcion || item.detalle || item.producto || item.articulo
           if (nombreProducto && nombreProducto.trim()) {
             console.log(`  🔎 Buscando producto: "${nombreProducto}"...`)
-            
-            // Buscar productos existentes
             const productos = await buscarProducto(nombreProducto, proveedorId)
             busquedas[nombreProducto] = productos
             console.log(`    ✅ ${productos.length} resultados para "${nombreProducto}"`)
-            
-            // Si hay proveedor, procesar el item para crear alias si es necesario
-            if (proveedorId) {
-              console.log(`  📦 Procesando alias para: "${nombreProducto}"...`)
-              const resultado = await procesarItemFactura({
-                item: {
-                  descripcion: nombreProducto,
-                  codigo_producto: item.codigo,
-                  cantidad: item.cantidad,
-                  precio_unitario: item.precio_unitario
-                },
-                proveedorId
-              })
-              procesamiento[nombreProducto] = resultado
-              
-              if (resultado.success && !resultado.mapeado) {
-                console.log(`    📋 Alias creado/encontrado sin mapear - Tarea pendiente: ${resultado.tieneTareaPendiente ? 'SÍ' : 'NO'}`)
-              } else if (resultado.success && resultado.mapeado) {
-                console.log(`    ✅ Producto ya mapeado`)
-              }
-            }
           }
         }
         setProductosBuscados(busquedas)
-        console.log('✅ Búsqueda y procesamiento de productos completado')
-        
-        // Mostrar resumen si hay items sin mapear
-        const sinMapear = Object.values(procesamiento).filter(p => p.success && !p.mapeado)
-        if (sinMapear.length > 0) {
-          console.log(`📋 Resumen: ${sinMapear.length} producto(s) sin mapear con tareas pendientes creadas`)
-        }
+        console.log('✅ Búsqueda de productos completada')
       }
     } catch (error) {
       console.error('Error buscando datos relacionados:', error)
@@ -345,20 +303,67 @@ export default function IaImage({ model }) {
       {preview && mode === 'factura' && (
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Columna izquierda: Imagen */}
-          <ImageColumn
-            preview={preview}
-            mostrarControles={mostrarControles}
-            setMostrarControles={setMostrarControles}
-            clear={clear}
-            imgOriginalRef={imgOriginalRef}
-            canvasRef={canvasRef}
-            ajustes={ajustes}
-            setAjustes={setAjustes}
-            aplicarAjustes={aplicarAjustes}
-            resetearAjustes={resetearAjustes}
-            ImageControlsOverlay={ImageControlsOverlay}
-            OptimizedImage={OptimizedImage}
-          />
+          <div className="bg-gray-50 border-2 border-gray-300 rounded-xl p-4 sticky top-4 h-fit">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900">📄 Imagen original</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMostrarControles(!mostrarControles)}
+                  className={`px-3 py-1.5 rounded-lg transition-colors text-sm font-medium ${
+                    mostrarControles 
+                      ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                      : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                  }`}
+                  title="Ajustar contraste, brillo, zoom"
+                >
+                  🎨 Ajustes
+                </button>
+                <button 
+                  onClick={clear}
+                  className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                >
+                  ✖ Cerrar
+                </button>
+              </div>
+            </div>
+            
+            <div className="relative">
+              {!mostrarControles && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img 
+                  src={preview} 
+                  alt="Factura" 
+                  className="w-full rounded-lg shadow-lg border-2 border-gray-300" 
+                />
+              )}
+              
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                ref={imgOriginalRef}
+                src={preview} 
+                alt="Original" 
+                className="hidden" 
+                crossOrigin="anonymous"
+              />
+              
+              {mostrarControles && (
+                <canvas 
+                  ref={canvasRef}
+                  className="w-full rounded-lg shadow-lg border-2 border-blue-400"
+                />
+              )}
+              
+              {mostrarControles && (
+                <ImageControlsOverlay
+                  ajustes={ajustes}
+                  setAjustes={setAjustes}
+                  onApply={aplicarAjustes}
+                  onReset={resetearAjustes}
+                  onCancel={() => setMostrarControles(false)}
+                />
+              )}
+            </div>
+          </div>
 
           {/* Columna derecha: Resultados */}
           <div className={`border-2 rounded-xl shadow-xl p-4 ${parsedData ? 'bg-white border-green-500' : 'bg-gray-50 border-gray-300'}`}>
@@ -458,20 +463,28 @@ export default function IaImage({ model }) {
                   </div>
                 )}
                 
-                <AdvancedImageActions
-                  loading={loading}
-                  autoEnfoqueAplicado={autoEnfoqueAplicado}
-                  deshacerAutoEnfoque={deshacerAutoEnfoque}
-                  imagenOriginal={imagenOriginal}
-                  autoEnfocar={autoEnfocar}
-                  file={file}
-                  preview={preview}
-                  previewOriginal={previewOriginal}
-                  setFile={setFile}
-                  setPreview={setPreview}
-                  setAutoEnfoqueAplicado={setAutoEnfoqueAplicado}
-                  abrirCropper={abrirCropper}
-                />
+                <details className="text-sm" open={!loading}>
+                  <summary className="cursor-pointer text-gray-600 hover:text-gray-900 font-medium">⚙️ Opciones avanzadas</summary>
+                  <div className="mt-3 space-y-2">
+                    <button
+                      onClick={() => autoEnfocar(file, preview, setFile, setPreview, preview)}
+                      disabled={loading || !file}
+                      className="w-full px-4 py-2 bg-purple-50 text-purple-700 rounded-lg hover:bg-purple-100 border border-purple-200 font-medium text-sm disabled:opacity-50"
+                    >
+                      🎯 Re-enfocar automáticamente
+                    </button>
+                    <button
+                      onClick={abrirCropper}
+                      disabled={loading}
+                      className="w-full px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium text-sm disabled:opacity-50"
+                    >
+                      ✂️ Recortar manualmente
+                    </button>
+                    <div className="text-xs text-gray-500 mt-2">
+                      💡 El auto-enfoque detecta y recorta el documento automáticamente.
+                    </div>
+                  </div>
+                </details>
                 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-gray-700">
                   <div className="font-medium mb-2">💡 Consejos:</div>

@@ -1,5 +1,6 @@
 import { Suspense } from 'react'
 import PageCargarProveedor from './PageCargarProveedor'
+import ListadoContactos from '@/app/components/contactos/ListadoContactos'
 
 export default async function Page() {
   return (

@@ -4,26 +4,35 @@ const OLLAMA_HOST = 'http://localhost:11434'
 
 // Prompts optimizados para obtener JSON estructurado
 const PROMPTS = {
-  factura: `Analiza esta FACTURA o COMPROBANTE LEGAL argentino.
+  factura: `Analiza esta FACTURA/COMPROBANTE argentino y extrae datos en JSON.
 
-            REGLAS IMPORTANTES:
-            1. Los números usan formato argentino: PUNTO para miles, COMA para decimales (ej: 1.234,50)
-            2. Convierte TODOS los números a formato numérico con PUNTO decimal (ej: 1234.50)
-            3. El número de comprobante es CRUCIAL - incluye TODO (ej: "00005-00016947")
-            4. Extrae CADA producto/item de la tabla de conceptos
-
-            Identifica:
-            - EMISOR: Nombre y CUIT del proveedor/vendedor
-            - DOCUMENTO: Tipo (Factura A/B/C, Remito), Número COMPLETO y Fecha
-            - ITEMS: Cada producto con descripción, cantidad, precio unitario y subtotal
-            - TOTALES: Subtotal/Neto, IVA y Total final
-
-            Responde ÚNICAMENTE con este JSON (números con punto decimal):
+            NÚMEROS ARGENTINOS:
+            - PUNTO (.) = separador de miles
+            - COMA (,) = separador decimal
+            - $38.600,00 → 38600.00 en JSON
+            - $1.234,50 → 1234.50 en JSON
+            
+            EXTRAER:
+            - DOCUMENTO: Tipo (Factura A/B/C, Remito, Presupuesto), Número COMPLETO (ej: 00005-00016947), Fecha (DD/MM/AAAA)
+            - EMISOR: Nombre completo y CUIT (si no hay CUIT marca revisar:true)
+            - ITEMS: Cada producto con descripción EXACTA, cantidad, precio_unitario, descuento, impuestos (si aplica), subtotal
+            - TOTALES: Neto (subtotal), IVA, Total
+            - TOTALES_CALCULADOS: Calcula: suma(subtotales) = neto, neto * alicuota_iva = iva, neto + iva = total
+            
+            VALIDACIÓN:
+            - Si totales ≠ totales_calculados → marca revisar:true en totales
+            - Presupuestos: sin CUIT ni impuestos (iva=0)
+            - Si dato ilegible/dudoso → revisar:true
+            
+            Responde ÚNICAMENTE con JSON válido:
             {
-              "emisor": { "nombre": "", "cuit": "" },
-              "documento": { "tipo": "", "numero": "", "fecha": "" },
-              "items": [{ "descripcion": "", "cantidad": 0, "precio_unitario": 0, "subtotal": 0 }],
-              "totales": { "neto": 0, "iva": 0, "total": 0 }
+              "items": [{"descripcion": "texto EXACTO", "cantidad": 0, "precio_unitario": 0, "descuento": 0, "impuestos": 0, "subtotal": 0, "revisar": false}],
+              "documento": {"tipo": "FACTURA A/B/C | REMITO | PRESUPUESTO", "numero": "00000-00000000", "fecha": "DD/MM/AAAA", "revisar": false},
+              "emisor": {"nombre": "", "cuit": "XX-XXXXXXXX-X", "revisar": false},
+              "receptor": {"nombre": "", "cuit": "", "revisar": false},
+              "totales": {"neto": 0, "iva": 0, "total": 0},
+              "totales_calculados": {"neto": 0, "iva": 0, "total": 0},
+              "revisar": false
             }`,
 
   producto: `Analiza este producto y extrae la información en formato JSON:
@@ -104,10 +113,21 @@ export async function POST(req) {
       }, { status: 500 })
     }
 
-    const data = await response.json()
-    console.log('✅ Respuesta recibida de Ollama')
+    let data
+    try {
+      data = await response.json()
+      console.log('✅ Respuesta recibida de Ollama')
+    } catch (jsonError) {
+      const errorText = await response.text()
+      console.error('❌ Error parseando respuesta JSON:', jsonError.message)
+      return NextResponse.json({ 
+        ok: false, 
+        error: `Error parseando respuesta: ${errorText.substring(0, 200)}` 
+      }, { status: 500 })
+    }
     
     let responseText = data.response || ''
+    console.log('📝 Respuesta texto (primeros 500 chars):', responseText.substring(0, 500))
     
     // Para facturas y productos, intentar parsear JSON
     let parsedData = null
@@ -118,6 +138,86 @@ export async function POST(req) {
         if (jsonMatch) {
           parsedData = JSON.parse(jsonMatch[0])
           console.log('✅ JSON parseado exitosamente')
+          console.log('📊 Estructura JSON:', Object.keys(parsedData))
+          
+          // POST-PROCESAMIENTO: Corregir números argentinos mal interpretados
+          if (mode === 'factura' && parsedData) {
+            // Normalizar: productos → items, itens → items
+            if (parsedData.productos && !parsedData.items) {
+              parsedData.items = parsedData.productos
+              delete parsedData.productos
+              console.log('✅ Normalizado: productos → items')
+            }
+            if (parsedData.itens && !parsedData.items) {
+              parsedData.items = parsedData.itens
+              delete parsedData.itens
+              console.log('✅ Normalizado: itens → items')
+            }
+            
+            // Normalizar número del documento
+            if (parsedData.documento) {
+              if (parsedData.documento.número_completo && !parsedData.documento.numero) {
+                parsedData.documento.numero = parsedData.documento.número_completo
+              }
+            }
+            
+            // Corregir totales
+            if (parsedData.totales) {
+              parsedData.totales.neto = fixArgentineNumber(parsedData.totales.neto)
+              parsedData.totales.iva = fixArgentineNumber(parsedData.totales.iva)
+              parsedData.totales.total = fixArgentineNumber(parsedData.totales.total)
+              console.log('💰 Totales normalizados:', parsedData.totales)
+            }
+            
+            // Corregir totales_calculados si existen
+            if (parsedData.totales_calculados) {
+              parsedData.totales_calculados.neto = fixArgentineNumber(parsedData.totales_calculados.neto)
+              parsedData.totales_calculados.iva = fixArgentineNumber(parsedData.totales_calculados.iva)
+              parsedData.totales_calculados.total = fixArgentineNumber(parsedData.totales_calculados.total)
+              console.log('🧮 Totales calculados normalizados:', parsedData.totales_calculados)
+            }
+            
+            // Corregir items
+            if (parsedData.items && Array.isArray(parsedData.items)) {
+              console.log(`📦 Items encontrados: ${parsedData.items.length}`)
+              console.log('📋 Primer item RAW:', JSON.stringify(parsedData.items[0], null, 2))
+              
+              parsedData.items = parsedData.items.map((item, idx) => {
+                // Normalizar campos con diferentes nombres
+                const descripcion = item.descripcion || item.nombre || item.detalle || item.producto || item.articulo || ''
+                const precio_unitario = item.precio_unitario || item.precio || 0
+                const subtotal = item.subtotal || item.importe || item.total || 0
+                
+                const normalized = {
+                  ...item,
+                  descripcion,
+                  cantidad: fixArgentineNumber(item.cantidad),
+                  precio_unitario: fixArgentineNumber(precio_unitario),
+                  subtotal: fixArgentineNumber(subtotal),
+                  descuento: fixArgentineNumber(item.descuento || 0),
+                  impuestos: fixArgentineNumber(item.impuestos || 0)
+                }
+                
+                // Eliminar campo 'nombre' si existe para evitar confusión
+                if (normalized.nombre && normalized.descripcion) {
+                  delete normalized.nombre
+                }
+                
+                if (idx === 0) {
+                  console.log('🔄 Primer item NORMALIZADO:', JSON.stringify(normalized, null, 2))
+                }
+                
+                return normalized
+              })
+              
+              console.log(`✅ Items normalizados: ${parsedData.items.length}`)
+            } else {
+              console.warn('⚠️ No se encontraron items en parsedData')
+            }
+            
+            console.log('✅ Números corregidos:', JSON.stringify(parsedData.totales))
+            console.log('📦 Items finales:', parsedData.items ? parsedData.items.length : 0)
+          }
         }
       } catch (e) {
         console.warn('⚠️ No se pudo parsear JSON, retornando texto plano')
@@ -145,4 +245,29 @@ export async function POST(req) {
       details: error.stack 
     }, { status: 500 })
   }
+}
+
+/**
+ * Corrige números argentinos mal interpretados
+ * Si el número es < 1000 y tiene decimales (ej: 38.6), probablemente sea un error
+ * de interpretación del punto como decimal en lugar de miles
+ */
+function fixArgentineNumber(value) {
+  if (typeof value !== 'number') return value
+  
+  // Si el número es pequeño pero tiene decimales, probablemente el punto era separador de miles
+  // Ejemplo: 38.6 debería ser 38600 (del original 38.600,00)
+  if (value < 1000 && value % 1 !== 0) {
+    const strValue = value.toString()
+    const parts = strValue.split('.')
+    if (parts.length === 2 && parts[1].length <= 3) {
+      // 38.6 -> 38600 (multiplica por 100)
+      // 38.60 -> 38600 (multiplica por 10)  
+      const decimals = parts[1].length
+      const multiplier = decimals === 1 ? 100 : (decimals === 2 ? 10 : 1)
+      return parseFloat(parts[0] + parts[1]) * multiplier
+    }
+  }
+  
+  return value
 }

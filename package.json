@@ -7,6 +7,7 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "docker compose up -d postgres && next dev --turbo",
+    "devv": "sudo fuser -k 3000/tcp || npm run dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",

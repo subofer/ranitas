@@ -138,6 +138,21 @@ const seedProveedores = async () => {
       esInterno: true,
       esProveedor: true,
     },
+    {
+      cuit: '27299066180',
+      nombre: 'Ribada Fastuca Cecilia Carolina',
+      telefono: '',
+      emails: ['darlineza@gmail.com'],
+      direcciones: [{
+        idProvincia: '02',
+        idLocalidad: '0208401002',
+        idCalle: '0209101009000',
+        numeroCalle: 2777,
+        idLocalidadCensal: '02000010',
+      }],
+      esInterno: true,
+      esProveedor: false,
+    },
   ];
 
   for (const proveedor of proveedores) {
