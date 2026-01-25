@@ -33,6 +33,7 @@ export function ImageColumn({
   const handleWheel = (e) => {
     if (e.ctrlKey) {
       e.preventDefault()
+      e.stopPropagation()
       const delta = e.deltaY * -0.001
       const newZoom = Math.min(Math.max(0.5, zoom + delta), 5)
       setZoom(newZoom)
@@ -43,6 +44,7 @@ export function ImageColumn({
   const handleMouseDown = (e) => {
     if (e.ctrlKey) {
       e.preventDefault()
+      e.stopPropagation()
       setIsPanning(true)
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
     }
@@ -52,6 +54,7 @@ export function ImageColumn({
   const handleMouseMove = (e) => {
     if (isPanning && e.ctrlKey) {
       e.preventDefault()
+      e.stopPropagation()
       setPan({
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y
