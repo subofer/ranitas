@@ -70,6 +70,19 @@ html{
   display: none; /* for Chrome, Safari, and Opera */
 }
 
+/* Estilos para modo oscuro */
+.dark {
+  --bg-primary: #1f2937;
+  --bg-secondary: #111827;
+  --bg-card: #1f2937;
+  --bg-input: #374151;
+  --text-primary: #f9fafb;
+  --text-secondary: #d1d5db;
+  --border-color: #374151;
+  --accent-color: #3b82f6;
+  --hover-bg: #374151;
+}
+
 @media print {
   body * {
     visibility: hidden; /* Oculta todo en el body durante la impresión */

@@ -129,3 +129,74 @@ export const upsertContacto = async (data) => {
     return result;
   }
 }
+
+/**
+ * Busca contactos similares por nombre y/o CUIT
+ * Útil para asociar proveedores detectados en facturas
+ */
+export async function buscarContactosSimilares({ nombre, cuit, esProveedor = false }) {
+  try {
+    const contactos = await prisma.contactos.findMany({
+      where: esProveedor ? { esProveedor: true } : undefined,
+      ...incluirTodo
+    })
+
+    // Función para calcular similitud de strings
+    const calcularSimilitud = (str1, str2) => {
+      if (!str1 || !str2) return 0
+      const s1 = str1.toLowerCase().trim()
+      const s2 = str2.toLowerCase().trim()
+      
+      // Coincidencia exacta
+      if (s1 === s2) return 1.0
+      
+      // Incluye uno al otro
+      if (s1.includes(s2) || s2.includes(s1)) return 0.8
+      
+      // Distancia de Levenshtein simplificada
+      const words1 = s1.split(/\s+/)
+      const words2 = s2.split(/\s+/)
+      
+      let coincidencias = 0
+      for (const w1 of words1) {
+        for (const w2 of words2) {
+          if (w1 === w2 || w1.includes(w2) || w2.includes(w1)) {
+            coincidencias++
+            break
+          }
+        }
+      }
+      
+      return coincidencias / Math.max(words1.length, words2.length)
+    }
+
+    // Calcular similitud para cada contacto
+    const contactosConSimilitud = contactos.map(contacto => {
+      let similitud = 0
+      
+      // Si hay CUIT y coincide exactamente
+      if (cuit && contacto.cuit && contacto.cuit === cuit) {
+        similitud = 1.0
+      } else if (nombre) {
+        // Calcular similitud por nombre
+        similitud = calcularSimilitud(nombre, contacto.nombre)
+      }
+      
+      return {
+        ...contacto,
+        similitud
+      }
+    })
+
+    // Filtrar solo los que tienen al menos 30% de similitud y ordenar
+    const similares = contactosConSimilitud
+      .filter(c => c.similitud >= 0.3)
+      .sort((a, b) => b.similitud - a.similitud)
+      .slice(0, 10) // Máximo 10 resultados
+
+    return similares
+  } catch (error) {
+    console.error("Error buscando contactos similares:", error)
+    return []
+  }
+}

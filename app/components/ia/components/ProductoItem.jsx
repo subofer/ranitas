@@ -77,6 +77,12 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   }
   
   const handleNuevoProducto = () => {
+    // Verificar si hay proveedor
+    if (!proveedorId) {
+      alert('⚠️ Primero debes asociar el proveedor de la factura.\n\nVe a la sección superior y selecciona un contacto existente o crea uno nuevo.')
+      return
+    }
+    
     // Preparar datos para pre-cargar
     const params = new URLSearchParams()
     params.set('nuevo', 'true')
@@ -84,9 +90,10 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
     if (producto.codigo) params.set('codigo', producto.codigo)
     if (producto.cantidad) params.set('cantidad', producto.cantidad.toString())
     if (producto.precio_unitario) params.set('precio', producto.precio_unitario.toString())
+    if (proveedorId) params.set('proveedorId', proveedorId)
     
     // Redirigir a la página de productos
-    window.location.href = `/productos?${params.toString()}`
+    window.location.href = `/cargarProductos?${params.toString()}`
   }
   
   const handleBuscarWeb = async () => {

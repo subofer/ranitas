@@ -32,6 +32,7 @@ import {
   AdvancedImageActions,
   ModalMapeoAlias
 } from './components'
+import SelectorProveedorSimilar from './SelectorProveedorSimilar'
 
 // ========== COMPONENTE PRINCIPAL ==========
 export default function IaImage({ model }) {
@@ -53,6 +54,9 @@ export default function IaImage({ model }) {
   const [facturaDuplicada, setFacturaDuplicada] = useState(null)
   const [aliasesPorItem, setAliasesPorItem] = useState([])
   const [buscandoDatos, setBuscandoDatos] = useState(false)
+  
+  // Modal de selector de proveedor
+  const [modalProveedor, setModalProveedor] = useState(false)
   
   // Modal de mapeo
   const [modalMapeo, setModalMapeo] = useState({ open: false, alias: null, itemIndex: null })
@@ -229,6 +233,12 @@ export default function IaImage({ model }) {
         setProveedorEncontrado(provResult)
         console.log('✅ Proveedor encontrado:', provResult)
         
+        // Si no se encontró proveedor, mostrar modal para asociar
+        if (!provResult?.proveedor) {
+          console.log('⚠️ Proveedor no encontrado - mostrando selector')
+          setModalProveedor(true)
+        }
+        
         if (provResult?.proveedor && factura.documento?.numero) {
           console.log('🔍 Verificando factura duplicada...')
           const duplicada = await verificarFacturaDuplicada(factura.documento.numero, provResult.proveedor.id)
@@ -326,6 +336,22 @@ export default function IaImage({ model }) {
     // Recargar búsqueda de productos si es necesario
     if (parsedData) {
       buscarDatosRelacionados(parsedData)
+    }
+  }
+  
+  // Handler para asociar proveedor
+  const handleAsociarProveedor = async (contacto) => {
+    console.log('✅ Proveedor asociado:', contacto)
+    setProveedorEncontrado({ 
+      proveedor: contacto,
+      confianza: 1.0,
+      mensaje: 'Proveedor asociado manualmente'
+    })
+    setModalProveedor(false)
+    
+    // Recargar datos relacionados con el nuevo proveedor
+    if (parsedData) {
+      await buscarDatosRelacionados(parsedData)
     }
   }
   
@@ -686,6 +712,16 @@ export default function IaImage({ model }) {
         productosOptions={productosParaMapeo}
         onSuccess={handleMapeoExitoso}
       />
+      
+      {/* Modal de selector de proveedor */}
+      {parsedData?.emisor && (
+        <SelectorProveedorSimilar
+          proveedorDetectado={parsedData.emisor}
+          onSeleccionar={handleAsociarProveedor}
+          onCancelar={() => setModalProveedor(false)}
+          isOpen={modalProveedor}
+        />
+      )}
     </div>
   )
 }

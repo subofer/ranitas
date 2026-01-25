@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { textos } from '@/lib/manipularTextos';
 import pantallaCompleta from '@/lib/pantallaCompleta';
 import useFullScreen from '@/lib/pantallaCompleta';
+import ThemeToggle from "./ThemeToggle";
 
 
 const UserMenu = () => {
@@ -45,6 +46,7 @@ const UserMenu = () => {
         <span className='min-w-20'>{textos.mayusculas.primeras(userName)}</span>
         <Icon className='min-h-fit' regular icono={"user"}/>
         <Icon onClick={toggleFullScreen} className='min-h-fit' icono={`${isFullScreen ? "minimize":"maximize"}`}/>
+        <ThemeToggle />
       </div>
       <ul className={`${isOpen?"":"hidden"} absolute right-2 mt-2 bg-gray-500`} style={{ zIndex: zIndexNavBar + 2 }}>
         <li className={`bg-gray-600 px-4 py-2 mb-0.5 cursor-pointer`} style={{ zIndex: zIndexNavBar + 2 }}>
