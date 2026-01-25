@@ -1,9 +1,6 @@
 {
   "extends": "next/core-web-vitals",
   "ignorePatterns": [
-    "**/*.backup.jsx",
-    "**/*.backup-*.jsx",
-    "**/*-old.jsx",
-    "**/*.old.jsx"
+    "cementerio/**"
   ]
 }
