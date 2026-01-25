@@ -40,6 +40,7 @@ export function AiProvider({ children }) {
   useEffect(() => { 
     console.log('🔄 AiProvider montado, cargando modelos...')
     loadModels() 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

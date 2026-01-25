@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 
 export function useOllamaStatus({ selectedModel, autoRefresh = true }) {
   const [loadedModels, setLoadedModels] = useState([])
@@ -7,7 +7,7 @@ export function useOllamaStatus({ selectedModel, autoRefresh = true }) {
   const [modelStatus, setModelStatus] = useState(null) // 'loaded' | 'loading' | 'unloaded'
   const previousLoadedRef = useRef([])
 
-  const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
     try {
       const res = await fetch('/api/ai/status')
       const data = await res.json()
@@ -37,7 +37,7 @@ export function useOllamaStatus({ selectedModel, autoRefresh = true }) {
       console.error('Error verificando estado:', error)
       setLoadedModels([])
     }
-  }
+  }, [selectedModel])
 
   useEffect(() => {
     checkStatus()
@@ -46,7 +46,7 @@ export function useOllamaStatus({ selectedModel, autoRefresh = true }) {
       const interval = setInterval(checkStatus, 2000) // Cada 2 segundos
       return () => clearInterval(interval)
     }
-  }, [selectedModel, autoRefresh])
+  }, [selectedModel, autoRefresh, checkStatus])
 
   return {
     loadedModels,

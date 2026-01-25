@@ -111,7 +111,7 @@ export const useKeyboard = ({
         onSelectPresentacionesRange(presentacionIds);
       }
     },
-    [itemsOrdenados, selectIdByRowId, onSelectPresentacionesRange]
+    [itemsOrdenados, onSelectPresentacionesRange]
   );
 
   const moveFocus = useCallback(
@@ -320,6 +320,7 @@ export const useKeyboard = ({
       itemsOrdenados,
       moveFocus,
       onCopySelected,
+      onTogglePresentacion,
       pagina,
       productoFocused,
       productosSeleccionados,
@@ -433,6 +434,7 @@ export const useKeyboard = ({
     itemsOrdenados,
     moveFocus,
     onCopySelected,
+    onTogglePresentacion,
     pagina,
     productoFocused,
     productosSeleccionados,
