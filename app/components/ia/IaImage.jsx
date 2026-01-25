@@ -374,7 +374,8 @@ export default function IaImage({ model }) {
       mensaje += `\n⚠️ Advertencia:\n`
       if (itemsSinMapear > 0) mensaje += `- ${itemsSinMapear} item(s) con alias sin mapear\n`
       if (itemsSinAlias > 0) mensaje += `- ${itemsSinAlias} item(s) sin alias\n`
-      mensaje += `\nEstos productos se guardarán como pendientes de mapeo.`
+      mensaje += `\n✅ Se guardará la factura de todos modos.\n`
+      mensaje += `Podrás crear los productos faltantes después.`
     }
     
     if (!confirm(mensaje)) return
@@ -409,20 +410,45 @@ export default function IaImage({ model }) {
       
       console.log('📝 Guardando factura:', datosFactura)
       
-      // Guardar
-      await guardarFacturaCompra(datosFactura)
+      // Guardar factura
+      const resultado = await guardarFacturaCompra(datosFactura)
       
       // Mostrar resultado
       const mapeados = detalles.filter(d => d.idProducto).length
       const pendientes = detalles.filter(d => !d.idProducto).length
       
-      alert(
-        `✅ Factura guardada exitosamente\n\n` +
-        `📊 Resumen:\n` +
-        `- ${mapeados} producto(s) con stock actualizado\n` +
-        `- ${pendientes} producto(s) pendientes de mapeo\n\n` +
-        `La factura se guardó correctamente en el sistema.`
-      )
+      if (pendientes > 0) {
+        const confirmarCrear = confirm(
+          `✅ Factura guardada exitosamente\n\n` +
+          `📊 Resumen:\n` +
+          `- ${mapeados} producto(s) con stock actualizado\n` +
+          `- ${pendientes} producto(s) pendientes\n\n` +
+          `¿Deseas crear los productos pendientes ahora?`
+        )
+        
+        if (confirmarCrear) {
+          // Crear productos pendientes uno por uno
+          const itemsPendientes = parsedData.items.filter((item, idx) => !detalles[idx].idProducto)
+          for (const item of itemsPendientes) {
+            const params = new URLSearchParams()
+            params.set('nuevo', 'true')
+            params.set('nombre', item.descripcion || item.detalle || item.producto || '')
+            if (item.codigo) params.set('codigo', item.codigo)
+            if (item.cantidad) params.set('cantidad', item.cantidad.toString())
+            if (item.precio_unitario || item.precio) params.set('precio', (item.precio_unitario || item.precio).toString())
+            params.set('proveedorId', proveedorEncontrado.proveedor.id)
+            
+            window.open(`/cargarProductos?${params.toString()}`, '_blank')
+          }
+          return // No limpiar la interfaz para poder seguir trabajando
+        }
+      } else {
+        alert(
+          `✅ Factura guardada exitosamente\n\n` +
+          `📊 Todos los productos (${mapeados}) fueron procesados con éxito.\n\n` +
+          `Stock actualizado correctamente.`
+        )
+      }
       
       // Limpiar interfaz
       setFile(null)

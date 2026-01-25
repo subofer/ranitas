@@ -76,11 +76,28 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
     alert(`Agregar ${producto.cantidad} de "${producto.descripcion}"\nFuncionalidad en desarrollo`)
   }
   
-  const handleNuevoProducto = () => {
+  const handleNuevoProducto = async () => {
     // Verificar si hay proveedor
     if (!proveedorId) {
       alert('⚠️ Primero debes asociar el proveedor de la factura.\n\nVe a la sección superior y selecciona un contacto existente o crea uno nuevo.')
       return
+    }
+    
+    // Crear alias automáticamente antes de ir a crear producto
+    if (!tieneAlias) {
+      try {
+        const resultado = await crearAliasSimple({
+          proveedorId,
+          sku: producto.codigo || producto.descripcion,
+          nombreEnProveedor: producto.descripcion
+        })
+        
+        if (resultado.success) {
+          console.log('✅ Alias creado automáticamente:', resultado.alias)
+        }
+      } catch (error) {
+        console.error('Error creando alias automático:', error)
+      }
     }
     
     // Preparar datos para pre-cargar
@@ -89,11 +106,11 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
     params.set('nombre', producto.descripcion || '')
     if (producto.codigo) params.set('codigo', producto.codigo)
     if (producto.cantidad) params.set('cantidad', producto.cantidad.toString())
-    if (producto.precio_unitario) params.set('precio', producto.precio_unitario.toString())
+    if (producto.precio_unitario || producto.precio) params.set('precio', (producto.precio_unitario || producto.precio).toString())
     if (proveedorId) params.set('proveedorId', proveedorId)
     
-    // Redirigir a la página de productos
-    window.location.href = `/cargarProductos?${params.toString()}`
+    // Abrir en nueva pestaña para no perder el contexto de la factura
+    window.open(`/cargarProductos?${params.toString()}`, '_blank')
   }
   
   const handleBuscarWeb = async () => {
