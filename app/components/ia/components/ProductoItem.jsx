@@ -6,7 +6,7 @@ import { crearAliasSimple } from '@/prisma/serverActions/buscarAliases'
 /**
  * Item individual de producto en factura
  */
-export function ProductoItem({ producto, index, productosBuscados, buscandoDatos, CampoEditable, aliasInfo, proveedorId }) {
+export function ProductoItem({ producto, index, productosBuscados, buscandoDatos, CampoEditable, aliasInfo, proveedorId, onAbrirModalMapeo }) {
   const [creandoAlias, setCreandoAlias] = useState(false)
   const [aliasCreado, setAliasCreado] = useState(null)
   
@@ -64,8 +64,11 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   }
   
   const handleMapearProducto = () => {
-    alert('Modal de mapeo en desarrollo')
-    // TODO: Abrir modal de mapeo
+    if (alias && onAbrirModalMapeo) {
+      onAbrirModalMapeo(alias)
+    } else {
+      alert('No se puede abrir el modal de mapeo')
+    }
   }
   
   const handleAgregarStock = () => {
@@ -74,14 +77,16 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   }
   
   const handleNuevoProducto = () => {
-    // TODO: Redirigir a /productos con datos precargados
-    const datosProducto = {
-      nombre: producto.descripcion,
-      // Extraer unidad y cantidad si es posible
-      descripcion: `Producto del proveedor: ${producto.codigo || 'sin código'}`
-    }
-    console.log('Crear producto con datos:', datosProducto)
-    alert(`Redirigir a crear producto: "${producto.descripcion}"\nFuncionalidad en desarrollo`)
+    // Preparar datos para pre-cargar
+    const params = new URLSearchParams()
+    params.set('nuevo', 'true')
+    params.set('nombre', producto.descripcion || '')
+    if (producto.codigo) params.set('codigo', producto.codigo)
+    if (producto.cantidad) params.set('cantidad', producto.cantidad.toString())
+    if (producto.precio_unitario) params.set('precio', producto.precio_unitario.toString())
+    
+    // Redirigir a la página de productos
+    window.location.href = `/productos?${params.toString()}`
   }
   
   const handleBuscarWeb = async () => {

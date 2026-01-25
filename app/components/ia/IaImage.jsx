@@ -10,6 +10,7 @@ import {
   guardarAuditoriaEdicion 
 } from '@/prisma/serverActions/facturaActions'
 import { buscarAliasesPorItems } from '@/prisma/serverActions/buscarAliases'
+import { guardarFacturaCompra } from '@/prisma/serverActions/documentos'
 
 // Importar utilidades compartidas
 import { DEFAULT_ADJUSTMENTS, MODES } from '@/lib/ia/constants'
@@ -28,7 +29,8 @@ import {
   LoadingSkeletons,
   OptimizedImage,
   ImageColumn,
-  AdvancedImageActions
+  AdvancedImageActions,
+  ModalMapeoAlias
 } from './components'
 
 // ========== COMPONENTE PRINCIPAL ==========
@@ -51,6 +53,11 @@ export default function IaImage({ model }) {
   const [facturaDuplicada, setFacturaDuplicada] = useState(null)
   const [aliasesPorItem, setAliasesPorItem] = useState([])
   const [buscandoDatos, setBuscandoDatos] = useState(false)
+  
+  // Modal de mapeo
+  const [modalMapeo, setModalMapeo] = useState({ open: false, alias: null, itemIndex: null })
+  const [productosParaMapeo, setProductosParaMapeo] = useState([])
+  const [guardandoFactura, setGuardandoFactura] = useState(false)
   
   const [mostrarControles, setMostrarControles] = useState(false)
   const [ajustes, setAjustes] = useState(DEFAULT_ADJUSTMENTS)
@@ -275,6 +282,138 @@ export default function IaImage({ model }) {
     }
   }
   
+  // Cargar productos para el modal de mapeo
+  useEffect(() => {
+    const cargarProductos = async () => {
+      try {
+        const response = await fetch('/api/productos/list')
+        if (response.ok) {
+          const data = await response.json()
+          setProductosParaMapeo(data.productos || [])
+        }
+      } catch (error) {
+        console.error('Error cargando productos:', error)
+      }
+    }
+    cargarProductos()
+  }, [])
+  
+  // Handlers para modal de mapeo
+  const abrirModalMapeo = (alias, itemIndex) => {
+    setModalMapeo({ open: true, alias, itemIndex })
+  }
+  
+  const cerrarModalMapeo = () => {
+    setModalMapeo({ open: false, alias: null, itemIndex: null })
+  }
+  
+  const handleMapeoExitoso = (aliasActualizado) => {
+    // Actualizar el estado de aliases
+    setAliasesPorItem(prevAliases => {
+      const nuevosAliases = [...prevAliases]
+      if (modalMapeo.itemIndex !== null && nuevosAliases[modalMapeo.itemIndex]) {
+        nuevosAliases[modalMapeo.itemIndex] = {
+          ...nuevosAliases[modalMapeo.itemIndex],
+          alias: aliasActualizado,
+          mapeado: true,
+          producto: aliasActualizado.producto,
+          presentacion: aliasActualizado.presentacion
+        }
+      }
+      return nuevosAliases
+    })
+    
+    // Recargar búsqueda de productos si es necesario
+    if (parsedData) {
+      buscarDatosRelacionados(parsedData)
+    }
+  }
+  
+  const handleGuardarFactura = async () => {
+    if (!parsedData || !proveedorEncontrado?.proveedor) {
+      alert('❌ Faltan datos: Asegúrate de tener proveedor y datos de factura')
+      return
+    }
+    
+    // Confirmar con el usuario
+    const itemsSinMapear = aliasesPorItem?.filter(a => a.tieneAlias && !a.mapeado).length || 0
+    const itemsSinAlias = parsedData.items.length - (aliasesPorItem?.filter(a => a.tieneAlias).length || 0)
+    
+    let mensaje = `¿Guardar factura?\n\n`
+    mensaje += `Proveedor: ${proveedorEncontrado.proveedor.nombre}\n`
+    mensaje += `Número: ${parsedData.documento?.numero || 'Sin número'}\n`
+    mensaje += `Total items: ${parsedData.items.length}\n`
+    
+    if (itemsSinMapear > 0 || itemsSinAlias > 0) {
+      mensaje += `\n⚠️ Advertencia:\n`
+      if (itemsSinMapear > 0) mensaje += `- ${itemsSinMapear} item(s) con alias sin mapear\n`
+      if (itemsSinAlias > 0) mensaje += `- ${itemsSinAlias} item(s) sin alias\n`
+      mensaje += `\nEstos productos se guardarán como pendientes de mapeo.`
+    }
+    
+    if (!confirm(mensaje)) return
+    
+    setGuardandoFactura(true)
+    try {
+      // Preparar detalles
+      const detalles = parsedData.items.map((item, index) => {
+        const aliasInfo = aliasesPorItem[index]
+        
+        return {
+          aliasId: aliasInfo?.alias?.id || null,
+          idProducto: aliasInfo?.mapeado ? aliasInfo.producto?.id : null,
+          presentacionId: aliasInfo?.mapeado ? aliasInfo.presentacion?.id : null,
+          descripcionPendiente: !aliasInfo?.mapeado ? (item.descripcion || item.detalle || item.producto) : null,
+          cantidad: parseFloat(item.cantidad) || 1,
+          precioUnitario: parseFloat(item.precio_unitario || item.precio) || 0,
+          descuento: parseFloat(item.descuento) || 0
+        }
+      })
+      
+      // Preparar datos de factura
+      const datosFactura = {
+        idProveedor: proveedorEncontrado.proveedor.id,
+        numeroDocumento: parsedData.documento?.numero || '',
+        fecha: parsedData.documento?.fecha || new Date().toISOString().split('T')[0],
+        tipoDocumento: parsedData.documento?.tipo || 'FACTURA_A',
+        estado: 'IMPAGA',
+        tieneImpuestos: true,
+        detalles
+      }
+      
+      console.log('📝 Guardando factura:', datosFactura)
+      
+      // Guardar
+      await guardarFacturaCompra(datosFactura)
+      
+      // Mostrar resultado
+      const mapeados = detalles.filter(d => d.idProducto).length
+      const pendientes = detalles.filter(d => !d.idProducto).length
+      
+      alert(
+        `✅ Factura guardada exitosamente\n\n` +
+        `📊 Resumen:\n` +
+        `- ${mapeados} producto(s) con stock actualizado\n` +
+        `- ${pendientes} producto(s) pendientes de mapeo\n\n` +
+        `La factura se guardó correctamente en el sistema.`
+      )
+      
+      // Limpiar interfaz
+      setFile(null)
+      setPreview(null)
+      setParsedData(null)
+      setProveedorEncontrado(null)
+      setAliasesPorItem([])
+      setProductosBuscados({})
+      
+    } catch (error) {
+      console.error('Error guardando factura:', error)
+      alert('❌ Error guardando factura: ' + error.message)
+    } finally {
+      setGuardandoFactura(false)
+    }
+  }
+  
   const actualizarCampo = async (path, valorNuevo, valorAnterior) => {
     const newData = JSON.parse(JSON.stringify(parsedData))
     
@@ -403,6 +542,8 @@ export default function IaImage({ model }) {
                   CampoEditable={CampoEditableWrapper}
                   aliasesPorItem={aliasesPorItem}
                   proveedorId={proveedorEncontrado?.proveedor?.id}
+                  onAbrirModalMapeo={abrirModalMapeo}
+                  onGuardarFactura={guardandoFactura ? null : handleGuardarFactura}
                 />
                 
                 <details className="mt-4">
@@ -536,6 +677,15 @@ export default function IaImage({ model }) {
           </ul>
         </div>
       )}
+      
+      {/* Modal de mapeo de alias */}
+      <ModalMapeoAlias
+        isOpen={modalMapeo.open}
+        onClose={cerrarModalMapeo}
+        alias={modalMapeo.alias}
+        productosOptions={productosParaMapeo}
+        onSuccess={handleMapeoExitoso}
+      />
     </div>
   )
 }
