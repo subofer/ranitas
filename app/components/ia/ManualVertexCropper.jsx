@@ -94,6 +94,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const canvasRef = useRef(null)
   const previewCanvasRef = useRef(null)
   const imgRef = useRef(null)
+  const detectControllerRef = useRef(null)
   const [points, setPoints] = useState([]) // up to 4 [{x,y}]
   const [dragIndex, setDragIndex] = useState(null)
   const [hoveredIndex, setHoveredIndex] = useState(null)
@@ -101,8 +102,6 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const [detectando, setDetectando] = useState(false)
   const [errorDeteccion, setErrorDeteccion] = useState(null)
-  const detectCancelRef = useRef(false)
-  const detectControllerRef = useRef(null)
   const [debugImage, setDebugImage] = useState(null)
   const [debugInfo, setDebugInfo] = useState(null)
   const [debugDims, setDebugDims] = useState({ w: 300, h: 200 })
@@ -134,6 +133,11 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       window.removeEventListener('scroll', computeTop, true)
       document.body.style.overflow = prevOverflow
     }
+  }, [])
+
+  // Abort any pending detection when the component unmounts
+  useEffect(() => {
+    return () => { try { detectControllerRef.current?.abort() } catch(e){} }
   }, [])
 
   const draw = useCallback(() => {
@@ -404,7 +408,6 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
 
 
   const detectarAutomaticamente = async () => {
-    console.log('🎯 Iniciando detección automática (LLM)...')
     setDetectando(true)
     setErrorDeteccion(null)
 
@@ -412,81 +415,52 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       const canvas = canvasRef.current
       if (!canvas) throw new Error('Canvas no disponible')
 
-      // Prepare abort controller for fetch
+      // Abort controller for fetch
       detectControllerRef.current = new AbortController()
       const signal = detectControllerRef.current.signal
 
-      // Fetch image blob from src (src is an objectURL/file URL)
+      // Fetch image blob from src
       const imgResp = await fetch(src)
-      if (!imgResp.ok) throw new Error('No se pudo descargar la imagen para enviar al modelo')
+      if (!imgResp.ok) throw new Error('No se pudo descargar la imagen')
       const blob = await imgResp.blob()
 
       const fd = new FormData()
       fd.append('image', blob, 'upload.jpg')
-      fd.append('model', 'qwen2.5-vl')
 
       const timeoutMs = 20000
-      const timeout = setTimeout(() => {
-        try { detectControllerRef.current?.abort() } catch (e) {}
-      }, timeoutMs)
+      const timeout = setTimeout(() => { try { detectControllerRef.current?.abort() } catch(e){} }, timeoutMs)
 
-      const res = await fetch('/api/ai/detect-corners', { method: 'POST', body: fd, signal })
+      // Call local YOLO service
+      const res = await fetch('/api/yolo/detect-corners', { method: 'POST', body: fd, signal })
       clearTimeout(timeout)
 
       if (!res.ok) {
-        // Try to parse JSON error, fallback to text
         let err = { error: 'Unknown error' }
-        try {
-          err = await res.json()
-        } catch (parseErr) {
-          try {
-            const txt = await res.text()
-            err = { error: txt || 'Unknown error' }
-          } catch (e) {
-            err = { error: 'Unknown error' }
-          }
-        }
-        setErrorDeteccion(err.error || 'Error en detección LLM')
-        console.warn('LLM detection failed', err)
+        try { err = await res.json() } catch { err = { error: await res.text().catch(()=>'') } }
+        setErrorDeteccion(err.reason || err.error || String(err))
         return
       }
 
-      let data = null
-      try {
-        data = await res.json()
-      } catch (parseErr) {
-        const text = await res.text().catch(() => '')
-        setErrorDeteccion(`Respuesta inválida del servidor: ${text ? text.slice(0,200) : 'no body'}`)
-        console.warn('Invalid JSON from /api/ai/detect-corners:', parseErr, text)
-        return
-      }
-
+      const data = await res.json()
       if (!data.ok) {
-        setErrorDeteccion(data.error || 'Detección con LLM no devolvió resultado')
-        console.warn('LLM responded with error:', data)
+        setErrorDeteccion(data.reason || data.error || 'No se detectó un documento')
+        if (data.debug_image_base64) setDebugImage('data:image/png;base64,'+data.debug_image_base64)
         return
       }
 
-      // data.points are absolute coords in original image. Map to canvas coords (canvas may be scaled)
+      // data.points are absolute pixels
       const scale = canvas.dataset.scale ? Number(canvas.dataset.scale) : 1
       const mapped = (data.points || []).map(p => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) }))
       if (mapped.length === 4) {
         setPoints(mapped)
-        setDebugDims({ w: data.optimized?.width || 300, h: data.optimized?.height || 200 })
-        if (data.debug) setDebugImage('data:image/png;base64,' + data.debug)
+        if (data.debug_image_base64) setDebugImage('data:image/png;base64,' + data.debug_image_base64)
         setErrorDeteccion(null)
-        console.log('✅ Detección LLM exitosa', mapped)
       } else {
-        setErrorDeteccion('LLM no devolvió 4 puntos válidos')
-        console.warn('LLM no devolvió 4 puntos válidos', data)
+        setErrorDeteccion('Respuesta inválida del servicio YOLO')
       }
     } catch (err) {
-      if (err.name === 'AbortError') {
-        setErrorDeteccion('Detección cancelada')
-      } else {
-        console.error('❌ Error en detección con LLM:', err)
-        setErrorDeteccion(`Error: ${err.message}`)
-      }
+      if (err.name === 'AbortError') setErrorDeteccion('Detección cancelada')
+      else { console.error('Error detectando:', err); setErrorDeteccion(String(err)) }
     } finally {
       setDetectando(false)
       if (detectControllerRef.current) detectControllerRef.current = null
@@ -614,21 +588,13 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
             )}
           </div>
           <div className="flex gap-2">
-            {!detectando ? (
-              <button 
+              <button
                 onClick={detectarAutomaticamente}
-                disabled={points.length === 4}
-                className={`px-4 py-2 rounded-lg border transition-all duration-300 ${
-                  points.length === 4
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'
-                }`}
+                disabled={detectando}
+                className={`px-4 py-2 rounded-lg border transition-all duration-300 ${detectando ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'}`}
               >
-                🤖 Detectar automáticamente
+                {detectando ? '⏳ Detectando...' : '🤖 Detectar automáticamente'}
               </button>
-            ) : (
-              <button onClick={() => { detectCancelRef.current = true; setDetectando(false); setErrorDeteccion('Detección cancelada por usuario'); if (detectControllerRef.current) try { detectControllerRef.current.abort() } catch (e) {} }} className="px-4 py-2 rounded-lg border bg-red-100 text-red-700">✖ Cancelar detección</button>
-            )}
             {points.length === 4 && (
               <button 
                 onClick={toggleCompare} 
