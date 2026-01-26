@@ -494,16 +494,9 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (fastErr && fastErr.message && fastErr.message.includes('cancel')) {
           console.warn('Detección rápida cancelada por usuario')
         } else {
-          console.warn('Intento rápido con worker falló, fallback a main thread:', fastErr.message)
-          try {
-            const mres = await Promise.race([
-              detectDocumentEdges(fastCanvas),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 4000))
-            ])
-            resultado = mres
-          } catch (e) {
-            console.warn('Intento rápido main-thread falló:', e.message)
-          }
+          console.warn('Intento rápido con worker falló (no se ejecutará fallback en main-thread para evitar bloquear la UI):', fastErr.message)
+          // Para evitar colgar la UI, no intentamos la detección main-thread aquí
+          resultado = null
         }
       } finally {
         // Clean up fast abort controller
@@ -548,16 +541,8 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (e && e.message && e.message.includes('cancel')) {
           console.warn('Detección completa cancelada por usuario')
         } else {
-          console.warn('Worker detection (full) failed, falling back to main thread', e.message)
-          try {
-            resultado = await Promise.race([
-              detectDocumentEdges(tempCanvas),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
-            ])
-          } catch (ff) {
-            console.warn('Full detect failed on main thread too:', ff.message)
-            resultado = null
-          }
+          console.warn('Worker detection (full) failed (no fallback main-thread to avoid blocking the UI):', e.message)
+          resultado = null
         }
       } finally {
         // Clean up full abort controller
