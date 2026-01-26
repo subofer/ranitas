@@ -1,6 +1,7 @@
 "use client"
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { detectDocumentEdges } from '@/lib/opencvDocumentDetection'
+import { detectDocumentEdgesWorker } from '@/lib/opencvWorkerClient'
 
 // Helper: solve 8x8 linear system via Gaussian elimination
 function solveLinearSystem(A, b) {
@@ -430,7 +431,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         return
       }
 
-      // Intento rápido (baja resolución)
+      // Intento rápido (baja resolución) - worker preferente
       const MAX_DIM_FAST = 512
       const origW = canvas.width
       const origH = canvas.height
@@ -441,13 +442,19 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       fastCanvas.getContext('2d').drawImage(canvas, 0, 0, fastCanvas.width, fastCanvas.height)
 
       let resultado = null
+      // Primero intentar con Worker (más seguro para no bloquear UI)
       try {
-        resultado = await Promise.race([
-          detectDocumentEdges(fastCanvas),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 5000))
-        ])
+        resultado = await detectDocumentEdgesWorker(fastCanvas, 5000)
       } catch (fastErr) {
-        console.warn('Intento rápido falló:', fastErr.message)
+        console.warn('Intento rápido con worker falló, fallback a main thread:', fastErr.message)
+        try {
+          resultado = await Promise.race([
+            detectDocumentEdges(fastCanvas),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 4000))
+          ])
+        } catch (e) {
+          console.warn('Intento rápido main-thread falló:', e.message)
+        }
       }
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
@@ -460,7 +467,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         return
       }
 
-      // Intento completo (resolución moderada)
+      // Intento completo (resolución moderada) - worker preferente
       const MAX_DIM = 900
       const scaleFactor = Math.min(1, MAX_DIM / Math.max(origW, origH))
       const tempCanvas = document.createElement('canvas')
@@ -469,10 +476,20 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       tempCanvas.getContext('2d').drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
 
       const timeoutMs = 10000
-      resultado = await Promise.race([
-        detectDocumentEdges(tempCanvas),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
-      ])
+      try {
+        resultado = await detectDocumentEdgesWorker(tempCanvas, timeoutMs)
+      } catch (e) {
+        console.warn('Worker detection (full) failed, falling back to main thread', e.message)
+        try {
+          resultado = await Promise.race([
+            detectDocumentEdges(tempCanvas),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
+          ])
+        } catch (ff) {
+          console.warn('Full detect failed on main thread too:', ff.message)
+          resultado = null
+        }
+      }
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
 
