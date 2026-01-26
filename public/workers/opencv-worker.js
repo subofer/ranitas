@@ -1,8 +1,8 @@
 // Worker para ejecutar detección de documentos usando OpenCV.js
-// Trata de usar primero el CDN (más fiable), y solo comprueba la versión local si hace falta
+// Usar exclusivamente la versión local en /public/opencv/opencv.js (sin CDN)
+// Esto evita dependencias externas y cumple con la política de instalación local
 
 const sources = [
-  'https://docs.opencv.org/4.x/opencv.js',
   '/opencv/opencv.js'
 ]
 
