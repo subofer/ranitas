@@ -14,10 +14,25 @@ function DnsSettingsBlock({ config, onSaved }) {
     setUrl(config?.dns?.url || '')
   }, [config])
 
+  const sanitizeHost = (h) => {
+    try {
+      if (!h) return h
+      if (h.startsWith('http://') || h.startsWith('https://')) {
+        return new URL(h).hostname
+      }
+      // strip trailing slashes or paths
+      if (h.includes('/')) return h.split('/')[0]
+      return h
+    } catch (e) {
+      return h
+    }
+  }
+
   const save = async () => {
     setSaving(true)
     try {
-      await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'dns.host', value: host }), headers: { 'Content-Type': 'application/json' } })
+      const hostToSave = sanitizeHost(host)
+      await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'dns.host', value: hostToSave }), headers: { 'Content-Type': 'application/json' } })
       await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'dns.url', value: url }), headers: { 'Content-Type': 'application/json' } })
       alert('DNS guardado')
       setEditing(false)
@@ -40,6 +55,9 @@ function DnsSettingsBlock({ config, onSaved }) {
         <div className="mb-3">
           <label className="text-xs">Host</label>
           <input className="block w-full p-2 border rounded mt-1 text-sm" value={host} onChange={(e) => setHost(e.target.value)} />
+          {host && (host.startsWith('http://') || host.startsWith('https://')) && (
+            <div className="text-xs text-yellow-600 mt-1">Se detectó un esquema (http/https). Se guardará solo el hostname.</div>
+          )}
           <label className="text-xs mt-2">URL (completa)</label>
           <input className="block w-full p-2 border rounded mt-1 text-sm" value={url} onChange={(e) => setUrl(e.target.value)} />
           <div className="mt-2 flex gap-2">
