@@ -232,6 +232,10 @@ REGLAS TÉCNICAS:
 - STOCK/MANUSCRITO: Texto a mano manda. Tachado = Cantidad 0. Notas de pago/deuda a "anotaciones_marginales".
 - DEVOLUCIONES: Si dice "Devolución" o similar (puede tener typos), marca "es_devolucion": true y entrega el valor como negativo en el subtotal (ej: -123.45) y también agrega la suma absoluta en "totales.devoluciones_total".
 - PACKAGING: Mapear "Caja 15x 200g" -> {tipo: "CAJA", unidades: 15, base: "200g"}.
+- NOMBRES_PRODUCTOS: Es importante que extraigas todo lo que puedas del nombre, intentando mantener la coherencia, sin abreviaturas raras.
+- ANOTACIONES: Captura todo lo que puedas del texto manuscrito, analizando su contexto (ej: "PAGADO", "ANULADO", "PARCIAL", "DEBE", "ENTREGUÉ $XXX", restas inferidas, etc) y guárdalo en "extras.texto_mano" o en "documento.anotaciones_marginales" según corresponda.
+- CUENTA_CORRIENTE: Extrae cualquier saldo o estado de cuenta mencionado (ACTIVA, DEBE, A FAVOR) y pagos parciales/excedentes.
+
 JSON SCHEMA (IMPORTANTE - devuelve SOLO JSON):
 {
   "documento": { "tipo": "", "numero": "", "fecha": "DD/MM/AAAA", "estado_pago": "", "monto_pagado": 0, "cuenta_corriente": { "estado": "", "monto": 0 }, "anotaciones_marginales": "" },
