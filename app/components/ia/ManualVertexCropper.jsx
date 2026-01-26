@@ -101,6 +101,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const [detectando, setDetectando] = useState(false)
   const [errorDeteccion, setErrorDeteccion] = useState(null)
+  const detectCancelRef = useRef(false)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -369,10 +370,51 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   }
 
   // Nueva función: Detección automática con OpenCV
+  // Heurística rápida (JS) para detectar si la imagen tiene bordes suficientes
+  const quickEdgeHeuristic = (canvas, smallDim = 256) => {
+    try {
+      const w = canvas.width
+      const h = canvas.height
+      const scale = Math.min(1, smallDim / Math.max(w, h))
+      const c = document.createElement('canvas')
+      c.width = Math.max(1, Math.round(w * scale))
+      c.height = Math.max(1, Math.round(h * scale))
+      const ctx = c.getContext('2d')
+      ctx.drawImage(canvas, 0, 0, c.width, c.height)
+      const img = ctx.getImageData(0, 0, c.width, c.height)
+      const data = img.data
+      let edgeCount = 0
+      const threshold = 20 // simple intensity diff threshold
+
+      for (let y = 0; y < c.height - 1; y++) {
+        for (let x = 0; x < c.width - 1; x++) {
+          const i = (y * c.width + x) * 4
+          const r = data[i], g = data[i+1], b = data[i+2]
+          const v = (r + g + b) / 3
+          const iR = (y * c.width + (x+1)) * 4
+          const r2 = data[iR], g2 = data[iR+1], b2 = data[iR+2]
+          const v2 = (r2 + g2 + b2) / 3
+          const diff = Math.abs(v - v2)
+          if (diff > threshold) edgeCount++
+        }
+      }
+
+      const total = (c.width - 1) * (c.height - 1)
+      const ratio = edgeCount / total
+      // Si menos de 0.3% de pixeles muestran bordes, asumimos que no hay suficientes bordes
+      return ratio > 0.003
+    } catch (e) {
+      return true
+    }
+  }
+
   const detectarAutomaticamente = async () => {
     console.log('🎯 Iniciando detección automática...')
     setDetectando(true)
     setErrorDeteccion(null)
+
+    // Cancellation flag
+    detectCancelRef.current = false
 
     try {
       const canvas = canvasRef.current
@@ -380,42 +422,76 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         throw new Error('Canvas no disponible')
       }
 
-      // Escalar la imagen para evitar procesamiento excesivo en imágenes muy grandes
-      const MAX_DIM = 1200
-      const originalW = canvas.width
-      const originalH = canvas.height
-      const scaleFactor = Math.min(1, MAX_DIM / Math.max(originalW, originalH))
+      // Primera heurística rápida
+      const hasEdges = quickEdgeHeuristic(canvas, 256)
+      if (!hasEdges) {
+        setErrorDeteccion('La imagen no tiene suficientes bordes para una detección automática confiable. Usa el modo manual.')
+        console.warn('⚠️ Heurística rápida falló: pocos bordes detectados')
+        return
+      }
 
-      const tempCanvas = document.createElement('canvas')
-      tempCanvas.width = Math.max(1, Math.round(originalW * scaleFactor))
-      tempCanvas.height = Math.max(1, Math.round(originalH * scaleFactor))
-      const tctx = tempCanvas.getContext('2d')
-      tctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
+      // Intento rápido (baja resolución)
+      const MAX_DIM_FAST = 512
+      const origW = canvas.width
+      const origH = canvas.height
+      const scaleFast = Math.min(1, MAX_DIM_FAST / Math.max(origW, origH))
+      const fastCanvas = document.createElement('canvas')
+      fastCanvas.width = Math.max(1, Math.round(origW * scaleFast))
+      fastCanvas.height = Math.max(1, Math.round(origH * scaleFast))
+      fastCanvas.getContext('2d').drawImage(canvas, 0, 0, fastCanvas.width, fastCanvas.height)
 
-      // Ejecutar detección con timeout (guard) para evitar bloqueos aparentes
-      const detectPromise = detectDocumentEdges(tempCanvas)
-      const timeoutMs = 12000
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
+      let resultado = null
+      try {
+        resultado = await Promise.race([
+          detectDocumentEdges(fastCanvas),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 5000))
+        ])
+      } catch (fastErr) {
+        console.warn('Intento rápido falló:', fastErr.message)
+      }
 
-      const resultado = await Promise.race([detectPromise, timeoutPromise])
+      if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
 
       if (resultado && resultado.points && resultado.points.length === 4) {
-        // Mapear puntos detectados (en coords de tempCanvas) de vuelta a coords del canvas de visualización
-        const puntosEscalados = resultado.points.map(p => ({
-          x: Math.round(p.x / (scaleFactor || 1)),
-          y: Math.round(p.y / (scaleFactor || 1))
-        }))
+        const pointsMapped = resultado.points.map(p => ({ x: Math.round(p.x / (scaleFast || 1)), y: Math.round(p.y / (scaleFast || 1)) }))
+        setPoints(pointsMapped)
+        setErrorDeteccion(null)
+        console.log('✅ Detección rápida exitosa', pointsMapped)
+        return
+      }
 
+      // Intento completo (resolución moderada)
+      const MAX_DIM = 900
+      const scaleFactor = Math.min(1, MAX_DIM / Math.max(origW, origH))
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = Math.max(1, Math.round(origW * scaleFactor))
+      tempCanvas.height = Math.max(1, Math.round(origH * scaleFactor))
+      tempCanvas.getContext('2d').drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
+
+      const timeoutMs = 10000
+      resultado = await Promise.race([
+        detectDocumentEdges(tempCanvas),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
+      ])
+
+      if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
+
+      if (resultado && resultado.points && resultado.points.length === 4) {
+        const puntosEscalados = resultado.points.map(p => ({ x: Math.round(p.x / (scaleFactor || 1)), y: Math.round(p.y / (scaleFactor || 1)) }))
         setPoints(puntosEscalados)
         setErrorDeteccion(null)
         console.log('✅ Detección exitosa:', puntosEscalados)
       } else {
-        setErrorDeteccion('No se pudo detectar el documento automáticamente. Usa el modo manual.')
+        setErrorDeteccion('No se pudo detectar el documento automáticamente. Usa el modo manual o prueba con otra foto.')
         console.warn('⚠️ No se detectaron 4 esquinas')
       }
     } catch (error) {
-      console.error('❌ Error en detección automática:', error)
-      setErrorDeteccion(`Error: ${error.message}. Usa el modo manual.`)
+      if (error.message && error.message.includes('cancelada')) {
+        setErrorDeteccion('Detección cancelada')
+      } else {
+        console.error('❌ Error en detección automática:', error)
+        setErrorDeteccion(`Error: ${error.message}. Usa el modo manual.`)
+      }
     } finally {
       setDetectando(false)
     }
@@ -542,19 +618,21 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
             )}
           </div>
           <div className="flex gap-2">
-            <button 
-              onClick={detectarAutomaticamente}
-              disabled={detectando || points.length === 4}
-              className={`px-4 py-2 rounded-lg border transition-all duration-300 ${
-                detectando
-                  ? 'bg-gray-300 text-gray-500 cursor-wait'
-                  : points.length === 4
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'
-              }`}
-            >
-              {detectando ? '🔄 Detectando...' : '🤖 Detectar automáticamente'}
-            </button>
+            {!detectando ? (
+              <button 
+                onClick={detectarAutomaticamente}
+                disabled={points.length === 4}
+                className={`px-4 py-2 rounded-lg border transition-all duration-300 ${
+                  points.length === 4
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'
+                }`}
+              >
+                🤖 Detectar automáticamente
+              </button>
+            ) : (
+              <button onClick={() => { detectCancelRef.current = true; setDetectando(false); setErrorDeteccion('Detección cancelada por usuario') }} className="px-4 py-2 rounded-lg border bg-red-100 text-red-700">✖ Cancelar detección</button>
+            )}
             {points.length === 4 && (
               <button 
                 onClick={toggleCompare} 
