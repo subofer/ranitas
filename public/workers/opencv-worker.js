@@ -114,18 +114,102 @@ async function detectOnImageData(imageBitmap) {
   }
 
   let detectedPoints = null
+  const diagnostics = { contoursFound: contours.size(), candidates: [] }
+
+  // Gather diagnostics for top contours
+  const contourInfo = []
+  for (let i = 0; i < contours.size(); i++) {
+    const c = contours.get(i)
+    const area = cv.contourArea(c)
+    const perimeter = cv.arcLength(c, true)
+    const approx = new cv.Mat()
+    cv.approxPolyDP(c, approx, 0.02 * perimeter, true)
+    // gather approx points (if small)
+    const approxPoints = []
+    for (let p = 0; p < approx.rows && p < 20; p++) {
+      approxPoints.push({ x: approx.data32S[p*2], y: approx.data32S[p*2 + 1] })
+    }
+    contourInfo.push({ index: i, area, approxRows: approx.rows, perimeter, approxPoints })
+    approx.delete()
+    c.delete()
+  }
+  contourInfo.sort((a,b) => b.area - a.area)
+
+  // Save top 5 for diagnostics
+  diagnostics.candidates = contourInfo.slice(0,5)
+
   if (bestApprox && maxArea > 0) {
     const points = []
     for (let i = 0; i < bestApprox.rows; i++) {
       points.push({ x: bestApprox.data32S[i*2], y: bestApprox.data32S[i*2 + 1] })
     }
     detectedPoints = orderPoints(points)
+  } else {
+    // Fallbacks: try decreasing area threshold and relax approx epsilon
+    let fallbackFound = false
+    for (const eps of [0.04, 0.08, 0.12]) {
+      let fallbackIdx = -1
+      let fallbackArea = 0
+      for (let i = 0; i < contours.size(); i++) {
+        const contour = contours.get(i)
+        const area = cv.contourArea(contour)
+        if (area < (src.cols * src.rows) * 0.01) { contour.delete(); continue }
+        const approx = new cv.Mat()
+        const perimeter = cv.arcLength(contour, true)
+        cv.approxPolyDP(contour, approx, eps * perimeter, true)
+        if (approx.rows >= 4 && area > fallbackArea) {
+          fallbackArea = area
+          fallbackIdx = i
+          if (bestApprox) bestApprox.delete()
+          bestApprox = approx.clone()
+          fallbackFound = true
+        }
+        approx.delete()
+        contour.delete()
+      }
+      if (fallbackFound) break
+    }
+    if (fallbackFound && bestApprox) {
+      const pts = []
+      for (let i = 0; i < bestApprox.rows; i++) {
+        pts.push({ x: bestApprox.data32S[i*2], y: bestApprox.data32S[i*2 + 1] })
+      }
+      detectedPoints = orderPoints(pts)
+    }
   }
 
-  // Cleanup
+  // Create debug canvas (draw contours and bestApprox if exists)
+  const debugCanvas = new OffscreenCanvas(src.cols, src.rows)
+  const dctx = debugCanvas.getContext('2d')
+  // draw original image
+  dctx.drawImage(imageBitmap, 0, 0)
+  dctx.strokeStyle = 'lime'
+  dctx.lineWidth = 4
+
+  // draw top candidate contours (approx if available)
+  dctx.fillStyle = 'rgba(255,0,0,0.25)'
+  for (let cIdx = 0; cIdx < Math.min(5, contourInfo.length); cIdx++) {
+    const ci = contourInfo[cIdx]
+    if (ci.approxPoints && ci.approxPoints.length >= 2) {
+      dctx.beginPath()
+      ci.approxPoints.forEach((pt, idx) => {
+        if (idx === 0) dctx.moveTo(pt.x, pt.y)
+        else dctx.lineTo(pt.x, pt.y)
+      })
+      dctx.closePath()
+      dctx.stroke()
+    }
+    dctx.fillStyle = 'rgba(0,255,0,0.6)'
+    detectedPoints.forEach((pt, idx) => {
+      dctx.beginPath(); dctx.arc(pt.x, pt.y, 12, 0, Math.PI*2); dctx.fill();
+      dctx.fillStyle = 'white'; dctx.fillText(String(idx+1), pt.x+6, pt.y+6); dctx.fillStyle = 'rgba(0,255,0,0.6)'
+    })
+  }
+
+  // Cleanup mats
   src.delete(); gray.delete(); blurred.delete(); edges.delete(); dilated.delete(); kernel.delete(); contours.delete(); hierarchy.delete(); if (bestApprox) bestApprox.delete()
 
-  return detectedPoints
+  return { points: detectedPoints, debugCanvas, diagnostics }
 }
 
 self.onmessage = async (ev) => {
@@ -136,7 +220,16 @@ self.onmessage = async (ev) => {
       const bmp = msg.imageBitmap
       const points = await detectOnImageData(bmp)
       // Transfer result
-      self.postMessage({ ok: true, points })
+      try {
+        if (debugCanvas) {
+          const debugBitmap = await createImageBitmap(debugCanvas)
+          self.postMessage({ ok: true, points: detectedPoints, debugCanvas: debugBitmap, diagnostics })
+        } else {
+          self.postMessage({ ok: true, points: detectedPoints, diagnostics })
+        }
+      } catch (e) {
+        self.postMessage({ ok: true, points: detectedPoints, diagnostics })
+      }
     } catch (e) {
       self.postMessage({ ok: false, error: e.message })
     }

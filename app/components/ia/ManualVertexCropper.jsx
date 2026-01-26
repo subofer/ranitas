@@ -103,6 +103,9 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [detectando, setDetectando] = useState(false)
   const [errorDeteccion, setErrorDeteccion] = useState(null)
   const detectCancelRef = useRef(false)
+  const [debugImage, setDebugImage] = useState(null)
+  const [debugInfo, setDebugInfo] = useState(null)
+  const tempDetectWidthRef = useRef(null)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -440,18 +443,28 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       fastCanvas.width = Math.max(1, Math.round(origW * scaleFast))
       fastCanvas.height = Math.max(1, Math.round(origH * scaleFast))
       fastCanvas.getContext('2d').drawImage(canvas, 0, 0, fastCanvas.width, fastCanvas.height)
+      tempDetectWidthRef.current = fastCanvas.width
 
       let resultado = null
       // Primero intentar con Worker (más seguro para no bloquear UI)
       try {
-        resultado = await detectDocumentEdgesWorker(fastCanvas, 5000)
+        const workerResultFast = await detectDocumentEdgesWorker(fastCanvas, 5000)
+        if (workerResultFast) {
+          if (workerResultFast.debug) {
+            const blob = await workerResultFast.debug.convertToBlob()
+            setDebugImage(URL.createObjectURL(blob))
+            setDebugInfo(workerResultFast.diagnostics)
+          }
+          resultado = workerResultFast.points
+        }
       } catch (fastErr) {
         console.warn('Intento rápido con worker falló, fallback a main thread:', fastErr.message)
         try {
-          resultado = await Promise.race([
+          const mres = await Promise.race([
             detectDocumentEdges(fastCanvas),
             new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 4000))
           ])
+          resultado = mres
         } catch (e) {
           console.warn('Intento rápido main-thread falló:', e.message)
         }
@@ -459,8 +472,8 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
 
-      if (resultado && resultado.points && resultado.points.length === 4) {
-        const pointsMapped = resultado.points.map(p => ({ x: Math.round(p.x / (scaleFast || 1)), y: Math.round(p.y / (scaleFast || 1)) }))
+      if (resultado && resultado.length === 4) {
+        const pointsMapped = resultado.map(p => ({ x: Math.round(p.x / (scaleFast || 1)), y: Math.round(p.y / (scaleFast || 1)) }))
         setPoints(pointsMapped)
         setErrorDeteccion(null)
         console.log('✅ Detección rápida exitosa', pointsMapped)
@@ -474,10 +487,20 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       tempCanvas.width = Math.max(1, Math.round(origW * scaleFactor))
       tempCanvas.height = Math.max(1, Math.round(origH * scaleFactor))
       tempCanvas.getContext('2d').drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
+      tempDetectWidthRef.current = tempCanvas.width
 
       const timeoutMs = 10000
       try {
-        resultado = await detectDocumentEdgesWorker(tempCanvas, timeoutMs)
+        const workerResult = await detectDocumentEdgesWorker(tempCanvas, timeoutMs)
+        if (workerResult) {
+          resultado = workerResult.points
+          if (workerResult.debug) {
+            // Save debug image to show in UI
+            const blob = await workerResult.debug.convertToBlob()
+            setDebugImage(URL.createObjectURL(blob))
+            setDebugInfo(workerResult.diagnostics)
+          }
+        }
       } catch (e) {
         console.warn('Worker detection (full) failed, falling back to main thread', e.message)
         try {
@@ -493,14 +516,18 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
 
-      if (resultado && resultado.points && resultado.points.length === 4) {
-        const puntosEscalados = resultado.points.map(p => ({ x: Math.round(p.x / (scaleFactor || 1)), y: Math.round(p.y / (scaleFactor || 1)) }))
+      if (resultado && resultado.length === 4) {
+        const puntosEscalados = resultado.map(p => ({ x: Math.round(p.x / (scaleFactor || 1)), y: Math.round(p.y / (scaleFactor || 1)) }))
         setPoints(puntosEscalados)
         setErrorDeteccion(null)
         console.log('✅ Detección exitosa:', puntosEscalados)
       } else {
         setErrorDeteccion('No se pudo detectar el documento automáticamente. Usa el modo manual o prueba con otra foto.')
         console.warn('⚠️ No se detectaron 4 esquinas')
+        // If we have debug info with candidate polygons, offer to use them
+        if (debugInfo && debugInfo.candidates && debugInfo.candidates.length) {
+          setErrorDeteccion('No se detectaron 4 esquinas exactamente. Revisa la imagen debug y puedes "Usar guía" para establecer un candidato.')
+        }
       }
     } catch (error) {
       if (error.message && error.message.includes('cancelada')) {
@@ -706,6 +733,42 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
                 }`}>
                   {comparingMode ? '📸 Croppeada' : '🖼️ Original'}
                 </div>
+              </div>
+            )}
+
+            {/* Debug image from worker (if available) */}
+            {debugImage && (
+              <div className="absolute left-4 bottom-4 p-2 bg-black bg-opacity-70 rounded">
+                <div className="text-xs text-white font-medium mb-1">Debug detección</div>
+                <img src={debugImage} alt="debug" className="w-48 h-auto border" />
+                {debugInfo && (
+                  <div className="text-xs text-gray-200 mt-1">Contours: {debugInfo.contoursFound} • Top candidates: {debugInfo.candidates?.map((c,idx) => `${idx+1}: ${Math.round(c.area)}px/${c.approxRows}pts`).join(', ')}</div>
+                )}
+                {debugInfo?.candidates?.length > 0 && (
+                  <div className="mt-2 flex gap-2">
+                    {debugInfo.candidates.slice(0,3).map((c,idx) => (
+                      <button key={idx} onClick={() => {
+                        // Use candidate points as guide
+                        const candidate = c
+                        if (candidate && candidate.approxPoints && candidate.approxPoints.length >= 4) {
+                          // pick 4 points either first 4 or evenly sampled
+                          const ptsRaw = candidate.approxPoints
+                          let pts4 = ptsRaw.slice(0,4)
+                          if (ptsRaw.length > 4) {
+                            const step = Math.floor(ptsRaw.length / 4)
+                            pts4 = [ptsRaw[0], ptsRaw[step], ptsRaw[step*2], ptsRaw[step*3]]
+                          }
+                          // Map from debug image coords to canvas coords
+                          const canvas = canvasRef.current
+                          if (!canvas) return
+                          const scale = canvas.width / (tempDetectWidthRef.current || canvas.width)
+                          const mapped = pts4.map(p => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) }))
+                          setPoints(mapped)
+                        }
+                      }} className="text-xs px-2 py-1 rounded bg-gray-100">Usar guía {idx+1}</button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
