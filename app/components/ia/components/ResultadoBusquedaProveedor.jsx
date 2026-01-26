@@ -23,8 +23,8 @@ export function ResultadoBusquedaProveedor({ proveedorEncontrado }) {
           <div className="font-bold text-gray-900 mb-1">{titulo}</div>
           <div className="text-sm text-gray-800">
             <strong>{proveedorEncontrado.proveedor.nombre}</strong>
-            {proveedorEncontrado.proveedor.nombre_fantasia && (
-              <span className="text-gray-600"> ({proveedorEncontrado.proveedor.nombre_fantasia})</span>
+            {proveedorEncontrado.proveedor.nombreFantasia && (
+              <span className="text-gray-600"> ({proveedorEncontrado.proveedor.nombreFantasia})</span>
             )}
           </div>
           <div className="text-xs text-gray-600 mt-1">

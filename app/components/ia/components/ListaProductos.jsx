@@ -3,7 +3,7 @@ import { ProductoItem } from './ProductoItem'
 /**
  * Lista de productos de factura
  */
-export function ListaProductos({ items, productosBuscados, buscandoDatos, CampoEditable, aliasesPorItem, proveedorId, onAbrirModalMapeo, onGuardarFactura }) {
+export function ListaProductos({ items, productosBuscados, buscandoDatos, CampoEditable, aliasesPorItem, proveedorId, onAbrirModalMapeo, onGuardarFactura, guardando = false }) {
   if (!items || items.length === 0) {
     return (
       <div className="bg-orange-50 border-2 border-orange-300 rounded-lg p-4">
@@ -30,14 +30,7 @@ export function ListaProductos({ items, productosBuscados, buscandoDatos, CampoE
             <span className="text-gray-600">⚪ {sinAlias} sin alias</span>
           </div>
         </div>
-        {onGuardarFactura && (
-          <button 
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all font-bold shadow-lg hover:shadow-xl flex items-center gap-2"
-            onClick={onGuardarFactura}
-          >
-            💾 Guardar Factura
-          </button>
-        )}
+
       </div>
       
       <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-2">

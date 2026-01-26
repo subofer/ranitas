@@ -25,7 +25,8 @@ export function ImageColumn({
   isPanning,
   setIsPanning,
   panStart,
-  setPanStart
+  setPanStart,
+  onManualCrop
 }) {
   const containerRef = useRef(null)
   
@@ -89,6 +90,13 @@ export function ImageColumn({
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-bold text-gray-900">📄 Imagen original</h3>
         <div className="flex gap-2">
+            <button
+              onClick={onManualCrop}
+              className="px-3 py-1.5 rounded-lg transition-colors text-sm font-medium bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+              title="Recortar manualmente con 4 vértices"
+            >
+              ✂️ Crop
+            </button>
           <button
             onClick={() => setMostrarControles(!mostrarControles)}
             className={`px-3 py-1.5 rounded-lg transition-colors text-sm font-medium ${
@@ -104,7 +112,7 @@ export function ImageColumn({
             onClick={clear}
             className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
           >
-            ✖ Cerrar
+            ✖ Eliminar
           </button>
         </div>
       </div>

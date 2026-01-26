@@ -6,23 +6,24 @@ import { RangeControl } from './RangeControl'
  */
 export function ImageControlsOverlay({ ajustes, setAjustes, onApply, onReset, onCancel }) {
   return (
-    <div className="absolute inset-0 rounded-lg flex items-start p-4 pointer-events-none z-10">
-      <div className="w-full bg-white/98 backdrop-blur-md rounded-xl p-5 shadow-2xl pointer-events-auto border-2 border-blue-500">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-gray-900 flex items-center gap-2">
-            <span className="text-xl">🎨</span>
-            <span>Ajustar Imagen</span>
+    // Panel compacto anclado en la esquina superior derecha para no bloquear la interacción con la imagen
+    <div className="absolute top-3 right-3 pointer-events-none z-10">
+      <div className="w-72 bg-white/95 backdrop-blur-md rounded-lg p-3 shadow-lg pointer-events-auto border border-blue-300 text-sm">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <span className="text-base">🎨</span>
+            <span>Ajustar</span>
           </h3>
           <button
             onClick={onCancel}
-            className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100"
+            className="text-gray-500 hover:text-gray-700 transition-colors p-1 rounded"
             title="Cerrar controles"
           >
-            ✖️
+            ✖
           </button>
         </div>
-        
-        <div className="grid grid-cols-2 gap-4 mb-4">
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <RangeControl
             label="Contraste"
             icon="🎨"
@@ -45,71 +46,47 @@ export function ImageControlsOverlay({ ajustes, setAjustes, onApply, onReset, on
             color="purple"
           />
           <RangeControl
-            label="Zoom"
-            icon="🔍"
-            value={ajustes.zoom}
-            onChange={(e) => setAjustes({...ajustes, zoom: parseFloat(e.target.value)})}
-            min={0.5}
-            max={3}
-            step={0.1}
+            label="Afilar"
+            icon="✴️"
+            value={ajustes.afilar}
+            onChange={(e) => setAjustes({...ajustes, afilar: parseInt(e.target.value)})}
+            min={0}
+            max={100}
+            step={1}
             color="green"
           />
+          <RangeControl
+            label="Bordes"
+            icon="🔎"
+            value={ajustes.bordes}
+            onChange={(e) => setAjustes({...ajustes, bordes: parseInt(e.target.value)})}
+            min={0}
+            max={100}
+            step={1}
+            color="teal"
+          />
         </div>
-        
-        <div className="mb-4">
-          <label className="text-xs font-semibold text-gray-700 mb-2 block">🧭 Desplazar (Pan)</label>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                <span>←→ Horizontal</span>
-                <span className="font-mono text-blue-600">{(ajustes.panX * 100).toFixed(0)}</span>
-              </div>
-              <input
-                type="range"
-                min="-0.5"
-                max="0.5"
-                step="0.01"
-                value={ajustes.panX}
-                onChange={(e) => setAjustes({...ajustes, panX: parseFloat(e.target.value)})}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              />
-            </div>
-            <div>
-              <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
-                <span>↑↓ Vertical</span>
-                <span className="font-mono text-blue-600">{(ajustes.panY * 100).toFixed(0)}</span>
-              </div>
-              <input
-                type="range"
-                min="-0.5"
-                max="0.5"
-                step="0.01"
-                value={ajustes.panY}
-                onChange={(e) => setAjustes({...ajustes, panY: parseFloat(e.target.value)})}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-              />
-            </div>
-          </div>
-        </div>
-        
+
+        {/* Eliminamos controles de pan para permitir pan libre con Ctrl+arrastrar y ctrl+rueda */}
+
         <div className="flex gap-2">
           <button
             onClick={onApply}
-            className="flex-1 px-5 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold text-sm shadow-lg hover:shadow-xl"
+            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors font-semibold text-sm"
           >
-            ✔️ Aplicar
+            Aplicar
           </button>
           <button
             onClick={onReset}
-            className="px-5 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium text-sm"
+            className="px-3 py-2 bg-gray-100 text-gray-800 rounded-md hover:bg-gray-200 transition-colors text-sm"
           >
-            ↺ Reset
+            Reset
           </button>
           <button
             onClick={onCancel}
-            className="px-5 py-3 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium text-sm"
+            className="px-3 py-2 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors text-sm"
           >
-            ✖️ Cancelar
+            Cancelar
           </button>
         </div>
       </div>

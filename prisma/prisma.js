@@ -11,4 +11,9 @@ if (process.env.NODE_ENV === 'production') {
   prisma = global.prisma;
 }
 
+// Verificar que prisma se haya inicializado correctamente
+if (!prisma) {
+  throw new Error('Failed to initialize Prisma Client');
+}
+
 export default prisma;

@@ -10,7 +10,10 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   const [creandoAlias, setCreandoAlias] = useState(false)
   const [aliasCreado, setAliasCreado] = useState(null)
   
-  const productosEncontrados = productosBuscados[producto.descripcion] || []
+  // Compatibilidad con la nueva estructura de items
+  const descripcionDisplay = (producto.descripcion_exacta || producto.descripcion || producto.detalle || producto.producto || producto.nombre_producto || '').trim()
+  const nombreProducto = producto.nombre_producto || producto.nombre || ''
+  const productosEncontrados = productosBuscados[descripcionDisplay || nombreProducto || producto.descripcion] || []
   const existe = productosEncontrados.length > 0 && productosEncontrados[0].similitud > 0.7
   
   // Determinar estado del alias
@@ -114,9 +117,10 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   }
   
   const handleBuscarWeb = async () => {
-    const urls = await prepararBusquedaWeb(producto.descripcion)
+    const termino = descripcionDisplay || nombreProducto || producto.descripcion || ''
+    const urls = await prepararBusquedaWeb(termino)
     const confirmacion = confirm(
-      `Buscar "${producto.descripcion}" en:\n\n` +
+      `Buscar "${termino}" en:\n\n` +
       `1. Google\n2. Mercado Libre\n3. Google Imágenes\n\n` +
       `¿Abrir búsqueda en Google?`
     )
@@ -138,16 +142,34 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
             <div className="flex-1">
               <div className="flex items-start gap-2">
                 <CampoEditable 
-                  valor={producto.descripcion?.trim() || producto.detalle?.trim() || producto.producto?.trim() || 'Producto sin nombre'}
+                  valor={descripcionDisplay || nombreProducto || 'Producto sin nombre'}
                   path={`items.${index}.${producto.descripcion !== undefined ? 'descripcion' : producto.detalle !== undefined ? 'detalle' : 'producto'}`}
                   className="font-bold text-gray-900 text-base leading-tight flex-1"
                 />
+                {producto.es_devolucion && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium whitespace-nowrap" title="Devolución detectada">
+                    ↩️ Devolución
+                  </span>
+                )}
                 {producto.revisar && (
                   <span className="px-2 py-1 bg-orange-100 text-orange-700 text-xs rounded font-medium whitespace-nowrap" title="Dato con dudas - Requiere revisión">
                     ⚠️ Revisar
                   </span>
                 )}
               </div>
+              
+              {/* Mostrar producto inferido de devolución */}
+              {producto.es_devolucion && producto.productoInferido && (
+                <div className="text-xs bg-blue-50 border border-blue-200 rounded p-1.5 mt-1">
+                  <span className="text-blue-600 font-medium">🔍 Inferido:</span>
+                  <span className="text-blue-800 ml-1 font-medium">{producto.productoInferido.nombre}</span>
+                  {producto.presentacionInferida && (
+                    <span className="text-blue-600 ml-1">
+                      [{producto.presentacionInferida.nombre}]
+                    </span>
+                  )}
+                </div>
+              )}
               
               {/* Mostrar producto mapeado */}
               {mapeado && productoMapeado && (
@@ -215,8 +237,8 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
             <div>
               <div className="text-xs text-gray-500 uppercase">Cantidad</div>
               <CampoEditable 
-                valor={producto.cantidad || ''}
-                path={`items.${index}.cantidad`}
+                valor={producto.cantidad_documento ?? producto.cantidad ?? ''}
+                path={`items.${index}.cantidad_documento`}
                 tipo="number"
                 className="font-bold text-purple-700"
               />
@@ -224,7 +246,7 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
             <div>
               <div className="text-xs text-gray-500 uppercase">P. Unitario</div>
               <CampoEditable 
-                valor={producto.precio_unitario || 0}
+                valor={producto.precio_unitario ?? producto.precio ?? 0}
                 path={`items.${index}.precio_unitario`}
                 tipo="number"
                 className="font-mono"
@@ -234,14 +256,42 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
             <div>
               <div className="text-xs text-gray-500 uppercase">Subtotal</div>
               <CampoEditable 
-                valor={producto.subtotal || 0}
-                path={`items.${index}.subtotal`}
+                valor={producto.subtotal_calculado ?? producto.subtotal_original ?? producto.subtotal ?? 0}
+                path={`items.${index}.subtotal_calculado`}
                 tipo="number"
                 className="font-mono font-bold text-purple-900"
                 formatear={formatCurrency}
               />
             </div>
           </div>
+          
+          {/* Información de presentación si existe */}
+          {(producto.tipo_presentacion_nombre || producto.presentacion_base || (producto.unidades_por_presentacion && producto.unidades_por_presentacion > 1)) && (
+            <div className="bg-gray-50 rounded p-2 mb-2 text-xs">
+              {producto.tipo_presentacion_nombre && (
+                <span className="inline-block bg-purple-100 text-purple-700 px-2 py-0.5 rounded mr-2 font-medium">
+                  📦 {producto.tipo_presentacion_nombre}
+                </span>
+              )}
+              {producto.unidades_por_presentacion && producto.unidades_por_presentacion > 1 && (
+                <span className="text-gray-600 mr-2">
+                  ×{producto.unidades_por_presentacion}
+                </span>
+              )}
+              {producto.presentacion_base && (
+                <span className="text-gray-700 font-medium">
+                  {producto.presentacion_base}
+                </span>
+              )}
+            </div>
+          )}
+          
+          {/* Observaciones si existen */}
+          {producto.observaciones && (
+            <div className="bg-yellow-50 border-l-2 border-yellow-400 rounded p-2 mb-2 text-xs text-gray-700">
+              <span className="font-medium text-yellow-700">💬</span> {producto.observaciones}
+            </div>
+          )}
           
           {/* Botones de acción según estado del alias */}
           <div className="flex gap-2 flex-wrap">

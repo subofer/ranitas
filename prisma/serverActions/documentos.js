@@ -179,6 +179,34 @@ export async function guardarDocumentoConStock(formData, tipoMovimiento, tipoDoc
       include: { detalle: true },
     });
 
+    // Si se envió una imagen en base64 dentro del formData, guardarla en disco bajo public/uploads/invoices/<documento.id>.*
+    try {
+      if (formData.imagen) {
+        const fs = require('fs')
+        const path = require('path')
+        const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'invoices')
+        if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true })
+
+        // formData.imagen puede ser 'data:<mime>;base64,<data>' o solo base64
+        let mime = 'image/jpeg'
+        let base64Data = formData.imagen
+        const dataUrlMatch = /^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i.exec(formData.imagen)
+        if (dataUrlMatch) {
+          mime = dataUrlMatch[1]
+          base64Data = dataUrlMatch[3]
+        }
+
+        const ext = mime.includes('png') ? '.png' : mime.includes('webp') ? '.webp' : '.jpg'
+        const fileName = `${documento.id}${ext}`
+        const filePath = path.join(uploadsDir, fileName)
+
+        fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'))
+        console.log('✅ Imagen de factura guardada en:', filePath)
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudo guardar la imagen de factura en disco:', e.message)
+    }
+
     // Crear pendientes para renglones sin producto (no cortar flujo)
     const pendientesSinProducto = detallesTransformados
       .filter((d) => !d.idProducto)

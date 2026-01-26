@@ -83,10 +83,14 @@ const crearProveedor = async (proveedorData) => {
       create: {
         cuit: proveedorData.cuit,
         nombre: proveedorData.nombre,
+        nombreFantasia: proveedorData.nombreFantasia || null,
         telefono: proveedorData.telefono || '0800-completar-telefono',
-        esProveedor: proveedorData?.esProveedor,
-        esInterno: proveedorData?.esInterno,
-        esMarca: proveedorData?.esMarca,
+        proveedor: proveedorData?.proveedor ?? proveedorData?.esProveedor ?? false,
+        trabajador: proveedorData?.trabajador ?? proveedorData?.esInterno ?? false,
+        marca: proveedorData?.marca ?? proveedorData?.esMarca ?? false,
+        cliente: proveedorData?.cliente ?? false,
+        iva: proveedorData?.iva || 'RESPONSABLE_INSCRIPTO',
+        persona: proveedorData?.persona || 'JURIDICA',
         emails: {
           create: proveedorData.emails.map((email) => ({ email })),
         },
@@ -112,8 +116,13 @@ const seedProveedores = async () => {
     {
       cuit: '27269425496',
       nombre: 'All-Diet S.R.L.',
+      nombreFantasia: 'All Diet',
       telefono: '08003338423',
       emails: ['ventas@alldiet.com.ar'],
+      proveedor: true,
+      marca: true,
+      iva: 'RESPONSABLE_INSCRIPTO',
+      persona: 'JURIDICA',
       direcciones: [{
         idProvincia: '06',
         idLocalidad: '0642701009',
@@ -121,13 +130,17 @@ const seedProveedores = async () => {
         numeroCalle: 268,
         idLocalidadCensal: '06427010',
       }],
-      esProveedor: true,
     },
     {
       cuit: '20316249729',
       nombre: 'Facundo Ezequiel Villagra',
+      nombreFantasia: 'Subofer',
       telefono: '1122385810',
-      emails: ['subofer@hotmail.com, subofer07@gmail.com'],
+      emails: ['subofer@hotmail.com', 'subofer07@gmail.com'],
+      trabajador: true,
+      proveedor: true,
+      iva: 'RESPONSABLE_INSCRIPTO',
+      persona: 'FISICA',
       direcciones: [{
         idProvincia: '02',
         idLocalidad: '0208401002',
@@ -135,14 +148,17 @@ const seedProveedores = async () => {
         numeroCalle: 2777,
         idLocalidadCensal: '02000010',
       }],
-      esInterno: true,
-      esProveedor: true,
     },
     {
       cuit: '27299066180',
       nombre: 'Ribada Fastuca Cecilia Carolina',
-      telefono: '',
+      nombreFantasia: 'Cecilia Ribada',
+      telefono: '1122334455',
       emails: ['darlineza@gmail.com'],
+      trabajador: true,
+      cliente: true,
+      iva: 'RESPONSABLE_INSCRIPTO',
+      persona: 'FISICA',
       direcciones: [{
         idProvincia: '02',
         idLocalidad: '0208401002',
@@ -150,8 +166,6 @@ const seedProveedores = async () => {
         numeroCalle: 2777,
         idLocalidadCensal: '02000010',
       }],
-      esInterno: true,
-      esProveedor: false,
     },
   ];
 
@@ -429,13 +443,13 @@ const seedProductos = async () => {
               connect: cats.map(id => ({ id }))
             } : undefined,
             presentaciones: {
-              create: presentaciones.map(pres => ({
+              create: presentaciones.map((pres, index) => ({
                 ...pres,
-                stock: {
-                  create: {
-                    stockCerrado: Math.floor(Math.random() * 50) + 10 // Stock aleatorio entre 10-60
-                  }
-                }
+                puedeAbrir: index > 0, // Solo presentaciones mayores pueden abrirse
+                puedeCerrar: index > 0, // Solo presentaciones mayores pueden cerrarse
+                puedeProducir: false, // Por defecto false
+                stock_base: index === 0 ? Math.floor(Math.random() * 200) + 50 : 0, // Stock base solo en unidad base
+                stock_empaque: index > 0 ? Math.floor(Math.random() * 20) + 5 : 0, // Stock empaque solo en presentaciones mayores
               }))
             }
           }
@@ -486,7 +500,7 @@ const seedMockData = async () => {
         update: {},
         create: {
           ...provFields,
-          esProveedor: true,
+          proveedor: true,
           cuit: `20${Math.random().toString().substr(2, 8)}9`,
           persona: 'JURIDICA',
           iva: 'RESPONSABLE_INSCRIPTO',
@@ -638,26 +652,44 @@ const seedMockData = async () => {
     }
 
     // Crear algunos documentos de prueba (facturas)
-    const proveedores = await prisma.contactos.findMany({ where: { esProveedor: true } });
+    const proveedores = await prisma.contactos.findMany({ where: { proveedor: true } });
     const empresa = proveedores.find(p => p.cuit === '27269425496');
 
     if (proveedores.length > 0 && empresa) {
+      // Crear facturas de prueba con detalle (totales consistentes)
+      const productosAll = await prisma.productos.findMany({ include: { presentaciones: true } })
       for (let i = 0; i < 5; i++) {
         const fecha = new Date();
         fecha.setDate(fecha.getDate() - i * 7); // Documentos de las últimas 5 semanas
+
+        // Armar entre 1 y 4 items aleatorios por factura
+        const numItems = Math.floor(Math.random() * 4) + 1
+        const detalles = []
+        let totalDoc = 0
+
+        for (let k = 0; k < numItems; k++) {
+          const p = productosAll[Math.floor(Math.random() * productosAll.length)]
+          const precio = (p.presentaciones && p.presentaciones[0] && p.presentaciones[0].precio) ? p.presentaciones[0].precio : (Math.floor(Math.random() * 5000) + 1000)
+          const cantidad = Math.floor(Math.random() * 5) + 1
+          totalDoc += precio * cantidad
+          detalles.push({ idProducto: p.id, cantidad, precioUnitario: precio })
+        }
 
         await prisma.documentos.create({
           data: {
             numeroDocumento: `F001-${i + 1}`,
             fecha,
             tipoDocumento: 'FACTURA_A',
-            tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA', // Alternar entre compras y ventas
-            total: Math.floor(Math.random() * 10000) + 5000,
+            tipoMovimiento: i % 2 === 0 ? 'ENTRADA' : 'SALIDA',
+            total: totalDoc,
             idContacto: proveedores[i % proveedores.length]?.id,
             idDestinatario: empresa.id,
             idEmisor: proveedores[i % proveedores.length]?.id,
             estadoDocumento: {
               connect: { codigo: 'IMPAGA' }
+            },
+            detalle: {
+              create: detalles
             }
           }
         });

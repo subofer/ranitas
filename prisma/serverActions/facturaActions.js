@@ -4,29 +4,34 @@ import prisma from '../prisma'
 import { upsertAliasPresentacionProveedor } from './aliasesProveedor'
 
 /**
- * Busca un proveedor por CUIT o nombre similar
+ * Busca un proveedor por CUIT, nombre similar o alias
  * @param {string} cuit - CUIT del proveedor
  * @param {string} nombre - Nombre del proveedor
  * @returns {Object|null} Proveedor encontrado o null
  */
 export async function buscarProveedor(cuit, nombre) {
   try {
+    // Validación defensiva: asegurar que prisma esté disponible
+    if (!prisma) {
+      console.error('❌ Prisma client no está disponible')
+      return null
+    }
+    
     // Primero intentar buscar por CUIT exacto
     if (cuit && cuit.trim()) {
-      const porCuit = await prisma.contacto.findFirst({
+      const porCuit = await prisma.contactos.findFirst({
         where: {
           cuit: cuit.trim(),
-          es_proveedor: true
+          esProveedor: true
         },
         select: {
           id: true,
           nombre: true,
-          nombre_fantasia: true,
           cuit: true,
-          email: true,
-          telefono: true,
-          direccion: true,
-          frecuencia_entrega: true
+          aliases: {
+            where: { activo: true },
+            select: { alias: true }
+          }
         }
       })
       
@@ -35,46 +40,71 @@ export async function buscarProveedor(cuit, nombre) {
       }
     }
 
-    // Si no encuentra por CUIT, buscar por nombre similar
+    // Si no encuentra por CUIT, buscar por nombre o alias
     if (nombre) {
       const nombreLimpio = nombre.trim().toLowerCase()
       
-      const porNombre = await prisma.contacto.findMany({
+      const porNombreOAlias = await prisma.contactos.findMany({
         where: {
-          es_proveedor: true,
+          esProveedor: true,
           OR: [
             { nombre: { contains: nombreLimpio, mode: 'insensitive' } },
-            { nombre_fantasia: { contains: nombreLimpio, mode: 'insensitive' } }
+            { nombreFantasia: { contains: nombreLimpio, mode: 'insensitive' } },
+            { aliases: { some: { alias: { contains: nombreLimpio, mode: 'insensitive' }, activo: true } } }
           ]
         },
         select: {
           id: true,
           nombre: true,
-          nombre_fantasia: true,
           cuit: true,
-          email: true,
-          telefono: true,
-          direccion: true,
-          frecuencia_entrega: true
+          nombreFantasia: true,
+          aliases: {
+            where: { activo: true },
+            select: { alias: true }
+          }
         },
         take: 5
       })
 
-      if (porNombre.length > 0) {
-        // Calcular similitud básica (coincidencias de palabras)
-        const conSimilitud = porNombre.map(p => {
+      if (porNombreOAlias.length > 0) {
+        // Calcular similitud (nombre, nombre fantasía y aliases)
+        const conSimilitud = porNombreOAlias.map(p => {
           const nombreDB = (p.nombre || '').toLowerCase()
-          const nombreFantasia = (p.nombre_fantasia || '').toLowerCase()
+          const nombreFantasiaDB = (p.nombreFantasia || '').toLowerCase()
+          const aliasesDB = p.aliases.map(a => a.alias.toLowerCase())
           const palabrasFactura = nombreLimpio.split(' ')
           
           let coincidencias = 0
+          let maxCoincidencias = palabrasFactura.length
+          
+          // Chequear nombre principal
           palabrasFactura.forEach(palabra => {
-            if (nombreDB.includes(palabra) || nombreFantasia.includes(palabra)) {
-              coincidencias++
+            if (nombreDB.includes(palabra)) coincidencias++
+          })
+          
+          // Chequear nombre fantasía
+          if (nombreFantasiaDB) {
+            palabrasFactura.forEach(palabra => {
+              if (nombreFantasiaDB.includes(palabra)) coincidencias++
+            })
+          }
+          
+          // Chequear aliases (alta prioridad)
+          aliasesDB.forEach(alias => {
+            const palabrasAlias = alias.split(' ')
+            let coincidenciasAlias = 0
+            palabrasFactura.forEach(palabra => {
+              if (alias.includes(palabra)) coincidenciasAlias++
+            })
+            // Si el alias matchea muy bien, dar bonus
+            if (coincidenciasAlias / palabrasFactura.length > 0.8) {
+              coincidencias += palabrasFactura.length * 2 // Bonus por alias exacto
+            } else {
+              coincidencias += coincidenciasAlias
             }
           })
           
-          const similitud = coincidencias / palabrasFactura.length
+          const similitud = Math.min(1, coincidencias / maxCoincidencias)
           
           return {
             ...p,
@@ -89,7 +119,7 @@ export async function buscarProveedor(cuit, nombre) {
         return {
           proveedor: mejor,
           confianza: mejor.similitud > 0.7 ? 'alta' : mejor.similitud > 0.4 ? 'media' : 'baja',
-          metodo: 'nombre',
+          metodo: mejor.aliases && mejor.aliases.length > 0 ? 'alias' : 'nombre',
           alternativas: conSimilitud.slice(1, 3)
         }
       }
@@ -112,7 +142,7 @@ export async function buscarProducto(descripcion, proveedorId = null) {
   try {
     const descripcionLimpia = descripcion.trim().toLowerCase()
     
-    const productos = await prisma.producto.findMany({
+    const productos = await prisma.productos.findMany({
       where: {
         OR: [
           { nombre: { contains: descripcionLimpia, mode: 'insensitive' } },
@@ -123,8 +153,7 @@ export async function buscarProducto(descripcion, proveedorId = null) {
         id: true,
         nombre: true,
         descripcion: true,
-        stock_base: true,
-        stock_empaque: true,
+        stockSuelto: true,
         marca: {
           select: {
             id: true,
@@ -135,20 +164,19 @@ export async function buscarProducto(descripcion, proveedorId = null) {
           select: {
             id: true,
             nombre: true,
-            precio_compra: true,
-            precio_venta: true,
-            stock_empaque: true,
-            factor_conversion: true,
-            alias_proveedor: proveedorId ? {
-              where: { proveedor_id: proveedorId },
+            precio: true,
+            skuAliases: proveedorId ? {
+              where: { proveedorId: proveedorId },
               select: {
-                alias: true,
-                proveedor_id: true
+                sku: true,
+                nombreEnProveedor: true,
+                proveedorId: true
               }
             } : {
               select: {
-                alias: true,
-                proveedor_id: true
+                sku: true,
+                nombreEnProveedor: true,
+                proveedorId: true
               }
             }
           }
@@ -165,7 +193,7 @@ export async function buscarProducto(descripcion, proveedorId = null) {
       
       // Obtener todos los alias
       const aliases = p.presentaciones?.flatMap(pres => 
-        pres.alias_proveedor?.map(a => a.alias.toLowerCase()) || []
+        pres.skuAliases?.map(a => a.nombreEnProveedor.toLowerCase()) || []
       ) || []
       
       let coincidencias = 0
@@ -186,9 +214,9 @@ export async function buscarProducto(descripcion, proveedorId = null) {
               maxCoincidenciasAlias = coincidenciasAlias
               // Encontrar el alias original (con mayúsculas)
               const aliasOriginal = p.presentaciones.flatMap(pres => 
-                pres.alias_proveedor || []
-              ).find(a => a.alias.toLowerCase() === alias)
-              mejorAlias = aliasOriginal?.alias
+                pres.skuAliases || []
+              ).find(a => a.nombreEnProveedor.toLowerCase() === alias)
+              mejorAlias = aliasOriginal?.nombreEnProveedor
             }
           }
         })
@@ -222,59 +250,12 @@ export async function buscarProducto(descripcion, proveedorId = null) {
  */
 export async function buscarPedidosRelacionados(proveedorId, numeroFactura, fechaFactura) {
   try {
-    const fechaInicio = new Date(fechaFactura)
-    fechaInicio.setDate(fechaInicio.getDate() - 30) // 30 días antes
-    
-    const fechaFin = new Date(fechaFactura)
-    fechaFin.setDate(fechaFin.getDate() + 7) // 7 días después
-    
-    const pedidos = await prisma.pedido.findMany({
-      where: {
-        proveedor_id: proveedorId,
-        fecha_pedido: {
-          gte: fechaInicio,
-          lte: fechaFin
-        },
-        estado: {
-          in: ['pendiente', 'enviado', 'recibido_parcial']
-        }
-      },
-      select: {
-        id: true,
-        fecha_pedido: true,
-        fecha_entrega_estimada: true,
-        estado: true,
-        total: true,
-        items: {
-          select: {
-            id: true,
-            producto_id: true,
-            presentacion_id: true,
-            cantidad: true,
-            precio_unitario: true,
-            producto: {
-              select: {
-                nombre: true
-              }
-            },
-            presentacion: {
-              select: {
-                nombre: true
-              }
-            }
-          }
-        }
-      },
-      orderBy: {
-        fecha_pedido: 'desc'
-      },
-      take: 5
-    })
-
-    return pedidos
+    // Por ahora retornar array vacío hasta que se actualice el modelo completo
+    console.warn('⚠️ buscarPedidosRelacionados: Funcionalidad pendiente de implementar con modelo actualizado')
+    return []
   } catch (error) {
     console.error('Error buscando pedidos:', error)
-    throw error
+    return []
   }
 }
 
@@ -286,24 +267,12 @@ export async function buscarPedidosRelacionados(proveedorId, numeroFactura, fech
  */
 export async function verificarFacturaDuplicada(numeroFactura, proveedorId) {
   try {
-    const factura = await prisma.factura.findFirst({
-      where: {
-        numero: numeroFactura,
-        proveedor_id: proveedorId
-      },
-      select: {
-        id: true,
-        numero: true,
-        fecha: true,
-        total: true,
-        estado: true
-      }
-    })
-
-    return factura
+    // Por ahora retornar null hasta que se actualice el modelo completo
+    console.warn('⚠️ verificarFacturaDuplicada: Funcionalidad pendiente de implementar con modelo actualizado')
+    return null
   } catch (error) {
     console.error('Error verificando factura duplicada:', error)
-    throw error
+    return null
   }
 }
 
@@ -356,6 +325,44 @@ export async function guardarAuditoriaEdicion(datos) {
   } catch (error) {
     console.error('Error guardando auditoría:', error)
     return { ok: false, error: error.message }
+  }
+}
+
+/**
+ * Guarda un evento de auditoría cuando un modelo (Ollama) falla al procesar una imagen
+ * @param {Object} datos - Información del fallo
+ */
+export async function guardarAuditoriaOllamaFailure(datos) {
+  try {
+    const {
+      model,
+      mode,
+      fileName,
+      fileSize,
+      responseStatus,
+      errorText,
+      timing
+    } = datos
+
+    // Log por ahora (podemos mover a una tabla de auditoría más adelante)
+    console.error('🔴 Auditoría OLLAMA_FAILURE:', {
+      model,
+      mode,
+      fileName,
+      fileSize,
+      responseStatus,
+      errorSnippet: (String(errorText || '')).substring(0, 200),
+      timing,
+      timestamp: new Date().toISOString()
+    })
+
+    // Si en el futuro se quiere persistir en BD:
+    // await prisma.auditorias.create({ data: { tipo: 'OLLAMA_FAILURE', payload: JSON.stringify({ model, mode, fileName, fileSize, responseStatus, errorText }), timestamp: new Date() } })
+
+    return { ok: true }
+  } catch (err) {
+    console.error('Error guardando auditoría Ollama:', err)
+    return { ok: false, error: err.message }
   }
 }
 

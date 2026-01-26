@@ -4,13 +4,19 @@ import Icon from './Icon';
 import overlayImage from '../png/camara.png'
 import Image from '../Image';
 
-const CameraCaptureModal = ({ onCapture }) => {
+const CameraCaptureModal = ({ onCapture, isOpen: externallyOpen, setIsOpen: setExternallyOpen, showTrigger = true, onRequestClose }) => {
   const videoRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [videoReady, setVideoReady] = useState(true);
   const [capturedImage, setCapturedImage] = useState('');
   const [isCaptured, setIsCaptured] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const actualOpen = typeof externallyOpen === 'boolean' ? externallyOpen : isModalOpen
+  const setActualOpen = (v) => {
+    if (typeof setExternallyOpen === 'function') setExternallyOpen(v)
+    else setIsModalOpen(v)
+  }
 
   const startCamera = async () => {
     try {
@@ -22,11 +28,12 @@ const CameraCaptureModal = ({ onCapture }) => {
       }
     } catch (error) {
       console.error('Error accessing the camera:', error);
+      alert('No se pudo acceder a la cámara: ' + (error.message || String(error)))
     }
   };
 
   const openModal = async () => {
-    setIsModalOpen(true);
+    setActualOpen(true);
     startCamera();
   };
 
@@ -38,6 +45,7 @@ const CameraCaptureModal = ({ onCapture }) => {
   }
   const takePicture = async () => {
     const video = videoRef.current;
+    if (!video) return
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -49,15 +57,17 @@ const CameraCaptureModal = ({ onCapture }) => {
 
   const handleSave = () => {
     onCapture(capturedImage);
-    setIsModalOpen(false);
+    setActualOpen(false);
+    if (typeof onRequestClose === 'function') onRequestClose()
   };
 
   const handleCancel = () => {
     stopCamera();
-    setIsModalOpen(false);
+    setActualOpen(false);
     setStream(null);
     setCapturedImage('');
     setVideoReady(true)
+    if (typeof onRequestClose === 'function') onRequestClose()
   };
 
   const handleRetry = () => {
@@ -71,15 +81,18 @@ const CameraCaptureModal = ({ onCapture }) => {
   )
   useEffect(() => {
     setVideoReady(true)
-  },[isModalOpen]
+  },[actualOpen]
   )
 
   return (
     <>
-      <Icon className={`rounded-full text-white bg-blue-500 hover:bg-blue-600 transition-colors duration-200`} onClick={openModal} icono={"camera"}/>
-      { isModalOpen && (
-      <div className={`fixed inset-0 z-50 overflow-hidden bg-black bg-opacity-75 flex justify-center items-center text-white transition-opacity duration-500 opacity-${isModalOpen?"100":"0"}`}>
-        <div className={`relative w-full max-w-3xl max-h-full overflow-hidden transition-opacity duration-500 opacity-${isModalOpen?"100":"0"}`}>
+      {showTrigger && (
+        <Icon className={`rounded-full text-white bg-blue-500 hover:bg-blue-600 transition-colors duration-200`} onClick={openModal} icono={"camera"}/>
+      )}
+
+      {actualOpen && (
+      <div className={`fixed inset-0 z-50 overflow-hidden bg-black bg-opacity-75 flex justify-center items-center text-white transition-opacity duration-500 opacity-100`}>
+        <div className={`relative w-full max-w-3xl max-h-full overflow-hidden transition-opacity duration-500 opacity-100`}>
           { isCaptured
             ? (
               <>

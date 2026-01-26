@@ -89,9 +89,9 @@ export async function obtenerArticulosSinMapear({ proveedorId, skip = 0, take = 
  */
 export async function obtenerProveedoresConPendientes() {
   try {
-    const proveedores = await prisma.contacto.findMany({
+    const proveedores = await prisma.contactos.findMany({
       where: {
-        es_proveedor: true,
+        esProveedor: true,
         documentosProveedor: {
           some: {
             detalles: {

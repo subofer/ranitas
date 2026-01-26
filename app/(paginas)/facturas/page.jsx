@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { getInvoices } from '@/prisma/consultas/dashboard';
 import { cambiarEstadoDocumento } from '@/prisma/serverActions/documentos';
 import { getEstadoDocumentoOptions } from '@/prisma/consultas/opcionesDocumento';
@@ -125,6 +126,9 @@ export default function FacturasPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Imagen
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Número
                   </th>
@@ -152,6 +156,10 @@ export default function FacturasPage() {
                 {invoices.length > 0 ? (
                   invoices.map((invoice) => (
                     <tr key={invoice.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm">
+                        <Image src={`/uploads/invoices/${invoice.id}.jpg`} alt={`Factura ${invoice.numeroDocumento || invoice.id}`} width={48} height={32} className="object-cover rounded" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/favicon.ico' }} data-cy="imagen-resultado" />
+                      </td>
+
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {invoice.numeroDocumento || 'N/A'}
                       </td>

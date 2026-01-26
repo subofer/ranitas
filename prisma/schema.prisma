@@ -132,6 +132,7 @@ model Documentos {
   emisor          Contactos          @relation("EmisorDocumento", fields: [idContacto], references: [id])
   receptor        Contactos          @relation("ReceptorDocumento", fields: [idDestinatario], references: [id])
   pagos           Pagos[]
+  imagen          String?
 
   @@unique([idContacto, numeroDocumento])
 }
@@ -160,6 +161,7 @@ model Contactos {
   esInterno           Boolean             @default(false)
   esProveedor         Boolean             @default(false)
   esMarca             Boolean             @default(false)
+  nombreFantasia      String?             
   frecuenciaEntrega   FrecuenciaEntrega?
   diasEntrega         String[]            @default([])
   leadTimeDias        Int?
@@ -175,6 +177,28 @@ model Contactos {
   compraPedidos       CompraPedido[]
   skuAliases          ProveedorSkuAlias[]
   compraItems         CompraPedidoItem[]
+  aliases             AliasContacto[]     // Nombres alternativos para reconocimiento
+}
+
+model AliasContacto {
+  id          String    @id @default(uuid())
+  createdAt   DateTime  @default(now())
+  contactoId  String
+  alias       String    @unique // El nombre alternativo (ej: nombre mal escaneado)
+  fuente      FuenteAlias @default(MANUAL) // De dónde se originó el alias
+  activo      Boolean   @default(true)
+  observaciones String?
+  creadoPor   String?   // ID del usuario que creó el alias
+  contacto    Contactos @relation(fields: [contactoId], references: [id], onDelete: Cascade)
+  
+  @@index([contactoId])
+  @@index([alias])
+}
+
+enum FuenteAlias {
+  MANUAL      // Creado manualmente por usuario
+  IA_SCAN     // Detectado por escaneo de IA
+  IMPORTACION // Desde importación de datos
 }
 
 enum FrecuenciaEntrega {

@@ -19,6 +19,7 @@ afectando el stock.
 - **Trabajador**: Contacto que gestiona operaciones dentro del sistema.
 - **Marca**: Contacto que representa la marca de un productos.
 - **Categoría**: Clasificación asignada a productos para organización y filtrado.
+- **Alias de Contacto**: Nombre alternativo para un contacto (proveedor/cliente), usado para mejorar el reconocimiento OCR en facturas escaneadas.
 - **Alias por Proveedor/Presentación**: Nombre alternativo asignado a una presentación específica de un producto por un proveedor determinado.
 - **Factor de conversión**: Cantidad de unidades base contenidas en una presentación de empaque (ej: Caja de 12 unidades tiene un factor de conversión de 12).
 
@@ -27,9 +28,16 @@ afectando el stock.
 - Cada acción que modifique stock debe registrar un evento de auditoría con detalles: tipo de acción, usuario, timestamp, cantidades antes y después.
 - Los eventos de auditoría deben ser inmutables y consultables para revisiones futuras.
 - Todas las acciones que modifiquen datos de la base de datos, dejan un registro en la tabla de auditoría.
-- Las auditorias tienen nombres de acciones definidos en el sistema, como por ejemplo: "CREAR_FACTURA", "AJUSTAR_STOCK", "ABRIR_EMPAQUE", "PRODUCIR_PRODUCTO".
+- Las auditorias tienen nombres de acciones definidos en el sistema, como por ejemplo: "CREAR_FACTURA", "AJUSTAR_STOCK", "ABRIR_EMPAQUE", "PRODUCIR_PRODUCTO", "OLLAMA_FAILURE", "CREAR_ALIAS_CONTACTO", "DESACTIVAR_ALIAS_CONTACTO", "BUSCAR_PRODUCTO_IA", "CREAR_PRODUCTO_DESDE_IA".
+- La auditoría "OLLAMA_FAILURE" registra fallos en el procesamiento de imágenes con IA (modelo, modo, archivo, error, timing).
+- La auditoría "CREAR_ALIAS_CONTACTO" registra la creación de aliases para contactos (proveedor, alias, fuente, observaciones).
+- La auditoría "DESACTIVAR_ALIAS_CONTACTO" registra la desactivación de aliases (proveedor, alias, motivo).
+- La auditoría "BUSCAR_PRODUCTO_IA" registra búsquedas de información de productos con IA/Puppeteer (consulta, resultados, producto, marca, categorías).
+- La auditoría "CREAR_PRODUCTO_DESDE_IA" registra la creación automática de productos desde información encontrada con IA.
 - Algunas acciones tienen la posibilidad de deshacerse desde la auditoria, revirtiendo los cambios realizados y dejando un registro en la auditoría indicando la reversión.
 - Debera existir un archivo de configuración donde se definan los nombres y descripcion de las acciones que dejan auditoría y cuales de ellas permiten reversión.
+- La función `guardarAuditoriaOllamaFailure` en `prisma/serverActions/facturaActions.js` registra fallos de Ollama (actualmente por console.log, preparada para persistencia en BD).
+
 
 ## Informacion de producto
 - El produco es en si la presentación "Unidad Base",
@@ -94,8 +102,10 @@ afectando el stock.
 - Utilizar PascalCase para nombres de clases y componentes React.
 - Mantener una indentación consistente de 2 espacios.
 - Escribir comentarios claros y concisos para explicar la lógica compleja.
-- Dividir el código en funciones pequeñas y reutilizables.
+- Dividir el código en funciones pequeñas y reutilizables, removiendo duplicación a cada paso.
 - Seguir las mejores prácticas de seguridad y manejo de errores.
+- Todos los handlers críticos deben estar protegidos con try/catch y mostrar mensajes de error amigables al usuario.
+- Los errores de procesamiento de imágenes, cámara y Ollama deben registrarse en auditoría.
 - Escribir pruebas unitarias para funciones críticas.
 - Documentar las funciones públicas con JSDoc.
 - Utilizar nombres descriptivos para variables y funciones.
@@ -109,8 +119,129 @@ afectando el stock.
 - Optimizar el rendimiento del código cuando sea necesario.
 - Utilizar patrones de diseño apropiados para resolver problemas comunes.
 - Mantener la coherencia en el estilo de codificación en todo el proyecto.
+- Luego de cada cambio de sintaxis, correr un lint y arreglar los errores y warnings.
+- Siempre verificar que todos los estados useState estén correctamente declarados antes de usarlos.
 
 # Reglas de Memoria del Proyecto
 
+## Sistema de Carga de Facturas con IA (Última actualización: 25/01/2026)
+
+### Componentes Principales
+- **IaImage.jsx**: Componente principal para carga y análisis de facturas
+  - Estados: 25 estados useState (file, preview, imagenOriginal, previewOriginal, result, errorMessage, parsedData, loading, etc.)
+  - Hooks: useImageAutoFocus, useImageTransformations, useOllamaStatusContext
+  - Funcionalidades: Upload (drag&drop + input), Cámara (móvil + desktop), Cropping manual/automático
+  - Gestión dual de imágenes: Croppeada para LLM, Original para BD
+
+### Flujo de Procesamiento de Imágenes
+1. **Captura/Upload**: 
+   - Drag & drop protegido con try/catch
+   - Input file protegido con try/catch
+   - Cámara con handler compartido `handleCameraCapture`
+   - onFile guarda automáticamente imagen original (imagenOriginal, previewOriginal)
+2. **Preprocesamiento**:
+   - Auto-enfoque aplicado automáticamente
+   - Posibilidad de deshacer auto-enfoque
+   - Cropping manual por 4 vértices (ManualVertexCropper mejorado)
+3. **Crop Manual (ManualVertexCropper)**:
+   - Arrastre de puntos mejorado (área 15px, hover effects)
+   - Previsualización en tiempo real del crop
+   - Retorna objeto con ambas imágenes: { cropped: {file, preview}, original: {file, preview} }
+   - Calidad JPEG: 0.95 para preservar detalles
+4. **Optimización** (server):
+   - Conversión a escala de grises
+   - Auto-recorte de bordes
+   - Compresión JPEG (85%)
+   - Reducción ~66% del tamaño
+5. **Análisis Ollama**:
+   - Timeout: 10 minutos
+   - Detección de errores GGML_ASSERT/panic
+   - Registro de fallos en auditoría
+   - Se envía imagen croppeada y procesada (file)
+6. **Post-procesamiento**:
+   - Normalización de totales y descuentos
+   - Detección de devoluciones
+   - Búsqueda automática de proveedor y productos
+
+### Auditoría de Fallos
+- **guardarAuditoriaOllamaFailure**: Registra fallos de procesamiento IA
+  - Puntos de registro: Error HTTP, Timeout, Parse error, Error de conexión
+  - Información: model, mode, fileName, fileSize, errorText, timing
+  - Estado actual: Console.log (preparado para BD)
+
+### Gestión de Imágenes Dual
+- **Imagen Croppeada** (file, preview): Se usa para mostrar en UI y enviar al LLM
+- **Imagen Original** (imagenOriginal, previewOriginal): Se guarda en BD para referencia futura
+- **handleCrop**: Recibe objeto `{ cropped: {file, preview}, original: {file, preview} }`
+- **handleGuardarFactura**: Guarda `imagenOriginal || file` en la base de datos
+
+### Manejo de Errores
+- Todos los handlers de upload/cámara con try/catch
+- Mensajes de error amigables al usuario
+- Estado `errorMessage` para mostrar errores en UI
+- Botón "Reintentar" visible cuando hay errores retryables
+
+### Crop Manual Mejorado
+- **Arrastre de puntos**: Área de detección 15px, efectos hover (tamaño 8px→12px, color azul→rojo)
+- **Cursores dinámicos**: crosshair (crear), grab (hover), grabbing (arrastrar)
+- **Previsualización**: Botón "👁️ Previsualizar" muestra resultado en tiempo real
+- **Layout adaptativo**: Split screen (1fr 1fr) cuando preview activa
+- **Calidad alta**: JPEG 95% para preservar detalles del documento
+
+### UX Móvil
+- Botón pequeño de cámara (desktop + mobile)
+- Botón grande de cámara solo móvil (`sm:hidden`)
+- Optimización de imágenes capturadas (max 1200px, JPEG 85%)
+
+## Sistema de Aliases para Proveedores (Última actualización: 26/01/2026)
+
+### Descripción
+Sistema que permite vincular nombres escaneados (que no se encontraron) con proveedores existentes, creando aliases para mejorar el reconocimiento automático en futuras cargas de facturas.
+
+### Base de Datos
+- **Modelo AliasContacto**: id, contactoId, alias (unique), fuente, activo, observaciones, creadoPor
+- **Enum FuenteAlias**: MANUAL, IA_SCAN, IMPORTACION
+- **Relación**: Contactos.aliases → AliasContacto[] (uno a muchos)
+- **Indices**: contactoId, alias
+
+### Server Actions (aliasActions.js)
+- **buscarContactoPorNombreOAlias**: Busca contacto por nombre, nombreFantasia o alias
+- **crearAliasContacto**: Crea nuevo alias con validación y auditoría
+- **vincularNombreEscaneadoConContacto**: Función especializada para vincular nombres detectados por IA
+- **desactivarAliasContacto**: Desactiva alias manteniendo histórico
+
+### Búsqueda de Proveedores
+- La función `buscarProveedor()` en facturaActions.js ahora busca también en aliases activos
+- Los aliases tienen prioridad alta en el cálculo de similitud (bonus 2x en match exacto)
+- Retorna `metodo: 'alias'` cuando encuentra match por alias
+
+### Componentes UI
+- **ModalVincularProveedor.jsx**: Modal para vincular nombre escaneado con proveedor existente
+  - Props: nombreEscaneado, isOpen, onCancelar, onVinculado
+  - Lista todos los proveedores con búsqueda en tiempo real
+  - Selección visual con checkmark
+  - Observaciones pre-llenadas
+- **SelectorProveedorSimilar.jsx**: Modificado con botón "🔗 Vincular con Existente"
+  - Integra ModalVincularProveedor
+  - Handler handleProveedorVinculado
+
+### Flujo de Usuario
+1. Usuario carga factura → IA detecta "VALMAIRA S.A."
+2. Sistema no encuentra proveedor (nombre, nombreFantasia, CUIT, aliases)
+3. Se muestra SelectorProveedorSimilar con 3 opciones:
+   - 🔗 Vincular con Existente
+   - ➕ Crear Nuevo Contacto
+   - ✓ Asociar con [seleccionado similar]
+4. Usuario elige "Vincular con Existente" → Se abre ModalVincularProveedor
+5. Usuario busca y selecciona "Valmaira SA"
+6. Sistema crea alias y registra auditoría
+7. Próxima vez que se escanee "VALMAIRA S.A." → Encuentra automáticamente "Valmaira SA"
+
+### Auditoría
+- **CREAR_ALIAS_CONTACTO**: Registra aliasId, contactoId, alias, fuente, observaciones
+- **DESACTIVAR_ALIAS_CONTACTO**: Registra aliasId, alias, motivo
+
+### API
+- **GET /api/contactos?tipo=proveedor**: Retorna lista de contactos filtrada por tipo
 
 

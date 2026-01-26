@@ -101,3 +101,19 @@ html{
     font-size: 12pt; /* Ajusta el tamaño de la fuente para la impresión */
   }
 }
+
+/* Select control: hide native dropdown arrows across browsers and ensure consistent appearance */
+.select-no-arrow {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+  background-image: none !important;
+}
+/* Hide IE/Edge dropdown arrow */
+select.select-no-arrow::-ms-expand {
+  display: none;
+}
+/* If app uses a global reset that overrides appearance, this helps ensure consistent look */
