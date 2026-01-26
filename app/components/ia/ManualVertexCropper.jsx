@@ -373,24 +373,39 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     console.log('🎯 Iniciando detección automática...')
     setDetectando(true)
     setErrorDeteccion(null)
-    
+
     try {
       const canvas = canvasRef.current
       if (!canvas) {
         throw new Error('Canvas no disponible')
       }
-      
-      // Ejecutar detección
-      const resultado = await detectDocumentEdges(canvas)
-      
-      if (resultado.points && resultado.points.length === 4) {
-        // Convertir puntos detectados a coordenadas del canvas
-        const scale = canvas.dataset.scale ? Number(canvas.dataset.scale) : 1
+
+      // Escalar la imagen para evitar procesamiento excesivo en imágenes muy grandes
+      const MAX_DIM = 1200
+      const originalW = canvas.width
+      const originalH = canvas.height
+      const scaleFactor = Math.min(1, MAX_DIM / Math.max(originalW, originalH))
+
+      const tempCanvas = document.createElement('canvas')
+      tempCanvas.width = Math.max(1, Math.round(originalW * scaleFactor))
+      tempCanvas.height = Math.max(1, Math.round(originalH * scaleFactor))
+      const tctx = tempCanvas.getContext('2d')
+      tctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
+
+      // Ejecutar detección con timeout (guard) para evitar bloqueos aparentes
+      const detectPromise = detectDocumentEdges(tempCanvas)
+      const timeoutMs = 12000
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
+
+      const resultado = await Promise.race([detectPromise, timeoutPromise])
+
+      if (resultado && resultado.points && resultado.points.length === 4) {
+        // Mapear puntos detectados (en coords de tempCanvas) de vuelta a coords del canvas de visualización
         const puntosEscalados = resultado.points.map(p => ({
-          x: p.x * scale,
-          y: p.y * scale
+          x: Math.round(p.x / (scaleFactor || 1)),
+          y: Math.round(p.y / (scaleFactor || 1))
         }))
-        
+
         setPoints(puntosEscalados)
         setErrorDeteccion(null)
         console.log('✅ Detección exitosa:', puntosEscalados)
@@ -399,7 +414,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
         console.warn('⚠️ No se detectaron 4 esquinas')
       }
     } catch (error) {
-      console.error('❌ Error en detección:', error)
+      console.error('❌ Error en detección automática:', error)
       setErrorDeteccion(`Error: ${error.message}. Usa el modo manual.`)
     } finally {
       setDetectando(false)
