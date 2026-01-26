@@ -1,9 +1,9 @@
 // Worker para ejecutar detección de documentos usando OpenCV.js
-// Intenta cargar primero la versión local '/opencv/opencv.js', luego el CDN
+// Trata de usar primero el CDN (más fiable), y solo comprueba la versión local si hace falta
 
 const sources = [
-  '/opencv/opencv.js',
-  'https://docs.opencv.org/4.x/opencv.js'
+  'https://docs.opencv.org/4.x/opencv.js',
+  '/opencv/opencv.js'
 ]
 
 let cvReady = false
@@ -21,6 +21,20 @@ async function loadOpenCVWorker() {
 
   for (const src of sources) {
     try {
+      // Si es un recurso local, hacer un HEAD primero para evitar un 404 en la consola
+      if (src.startsWith('/')) {
+        try {
+          const resp = await fetch(src, { method: 'HEAD' })
+          if (!resp.ok) {
+            console.warn('Worker: recurso local OpenCV no disponible en', src, 'status', resp.status)
+            continue
+          }
+        } catch (e) {
+          console.warn('Worker: comprobación HEAD fallida para', src, e.message)
+          continue
+        }
+      }
+
       importScripts(src)
       // Esperar inicialización si Module.onRuntimeInitialized existe
       if (typeof Module !== 'undefined' && Module && typeof Module.onRuntimeInitialized === 'function') {
