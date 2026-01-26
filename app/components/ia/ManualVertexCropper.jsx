@@ -406,6 +406,74 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     setComparingMode(!comparingMode)
   }
 
+  // React component: RestoreButton - creates a preview crop (if needed), sends it to /api/yolo/restore
+  function RestoreButton({ points, previewCanvasRef, setPreviewGenerated, setDebugImage, setErrorDeteccion, generatePreview }) {
+    const [restoring, setRestoring] = useState(false)
+
+    const doRestore = async () => {
+      if (points.length !== 4) return
+      setErrorDeteccion(null)
+
+      // Ensure preview exists
+      if (!previewGenerated) {
+        generatePreview()
+        setPreviewGenerated(true)
+        // wait a tick for preview canvas to be painted
+        await new Promise(r => setTimeout(r, 120))
+      }
+
+      const prevCanvas = previewCanvasRef.current
+      if (!prevCanvas) { setErrorDeteccion('No hay preview para restaurar'); return }
+
+      setRestoring(true)
+      try {
+        await new Promise(r => setTimeout(r, 10)) // tiny pause
+        const blob = await new Promise(resolve => prevCanvas.toBlob(resolve, 'image/jpeg', 0.95))
+        if (!blob) throw new Error('No se pudo generar el blob del recorte')
+
+        const fd = new FormData()
+        fd.append('image', blob, 'cropped.jpg')
+
+        const res = await fetch('/api/yolo/restore', { method: 'POST', body: fd })
+        const data = await res.json()
+        if (!res.ok || !data.ok) {
+          setErrorDeteccion(data.error || data.reason || 'Error al restaurar el documento')
+          return
+        }
+
+        // Show restored image in the preview canvas
+        if (data.restored_image_base64) {
+          const img = new Image()
+          img.onload = () => {
+            const pc = previewCanvasRef.current
+            if (!pc) return
+            pc.width = img.width
+            pc.height = img.height
+            const ctx = pc.getContext('2d')
+            ctx.clearRect(0,0,pc.width, pc.height)
+            ctx.drawImage(img, 0, 0)
+            setPreviewGenerated(true)
+            setDebugImage('data:image/png;base64,' + data.restored_image_base64)
+            setErrorDeteccion(null)
+          }
+          img.src = 'data:image/png;base64,' + data.restored_image_base64
+        }
+
+      } catch (err) {
+        console.error('Error restaurando:', err)
+        setErrorDeteccion(String(err))
+      } finally {
+        setRestoring(false)
+      }
+    }
+
+    return (
+      <button onClick={doRestore} disabled={points.length !== 4 || restoring} className={`px-3 py-1.5 rounded-lg border transition-all duration-300 ${restoring ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'}`}>
+        {restoring ? '🧼 Restaurando...' : '🧼 Restaurar documento'}
+      </button>
+    )
+  }
+
 
   const detectarAutomaticamente = async () => {
     setDetectando(true)
@@ -573,7 +641,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   return (
     <div className="fixed left-0 right-0 bg-black bg-opacity-90 z-50 flex items-start justify-center" style={{ top: modalTop + 'px', maxHeight: `calc(100vh - ${modalTop}px - 16px)` }} >
       <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
++      </div>        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-lg text-gray-900">✂️ Crop manual (4 vértices)</h3>
             <p className="text-sm text-gray-600 mt-1">
@@ -705,17 +773,20 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
               </div>
             )}
           </div>
-          <button 
-            onClick={applyCrop} 
-            disabled={points.length !== 4}
-            className={`px-4 py-2 rounded-lg transition-colors ${
-              points.length === 4
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            ✂️ Aplicar crop y continuar
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={applyCrop} 
+              disabled={points.length !== 4}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                points.length === 4
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              ✂️ Aplicar crop y continuar
+            </button>
+            <RestoreButton points={points} canvasRef={canvasRef} previewCanvasRef={previewCanvasRef} setPreviewGenerated={setPreviewGenerated} setDebugImage={setDebugImage} setErrorDeteccion={setErrorDeteccion} />
+          </div>
         </div>
       </div>
     </div>

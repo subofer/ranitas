@@ -55,9 +55,35 @@ MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', os.path.join(os.path.dirname(__fi
 CONFIDENCE = float(os.environ.get('YOLO_CONF', 0.25))
 MASK_THRESHOLD = float(os.environ.get('MASK_THRESHOLD', 0.5))
 
-# Lazy load model
+# Lazy load models
 _model = None
+_docres_model = None
 
+# Try import DocRes (document restoration model) optionally
+try:
+    from docres import DocRes  # type: ignore[import]
+except Exception:
+    DocRes = None
+
+DOCRES_PATH = os.environ.get('DOCRES_MODEL_PATH', os.path.join(os.path.dirname(__file__), 'docres.pt'))
+
+
+def get_docres_model():
+    global _docres_model
+    if _docres_model is None:
+        if DocRes is None:
+            # DocRes not installed in environment
+            return None
+        if not os.path.exists(DOCRES_PATH):
+            # model not found
+            return None
+        logger.info(f"Loading DocRes model from {DOCRES_PATH}")
+        try:
+            _docres_model = DocRes(DOCRES_PATH)
+        except Exception as e:
+            logger.exception('Failed to load DocRes model: %s', e)
+            _docres_model = None
+    return _docres_model
 def get_model():
     global _model
     if _model is None:
@@ -124,6 +150,44 @@ def fallback_rect(w, h, margin=0.1):
         {"x": int((1 - m) * w), "y": int((1 - m) * h)},
         {"x": int(m * w), "y": int((1 - m) * h)},
     ]
+
+
+def restore_fallback(img_np):
+    """A conservative restoration pipeline when DocRes model is not available.
+    - Convert to LAB and apply gentle CLAHE on L channel
+    - Use morphological closing and background subtraction to reduce shadows/folds
+    - Denoise with fastNlMeansDenoisingColored
+    - Return restored BGR image
+    """
+    try:
+        # CLAHE on L
+        lab = cv2.cvtColor(img_np, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        l2 = clahe.apply(l)
+        lab2 = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+
+        # Shadow removal: approximate background by large closing and subtract
+        gray = cv2.cvtColor(img_clahe, cv2.COLOR_BGR2GRAY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61,61))
+        bg = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+        diff = cv2.subtract(bg, gray)
+        norm = cv2.normalize(diff, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+        mask = cv2.threshold(norm, 30, 255, cv2.THRESH_BINARY)[1]
+        mask = cv2.GaussianBlur(mask, (21,21), 0)
+        mask3 = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR).astype(float)/255.0
+
+        # Blend the image with a version with increased brightness where shadow suspected
+        brighten = cv2.addWeighted(img_clahe, 1.08, cv2.GaussianBlur(img_clahe, (0,0), 2.0), -0.08, 0)
+        restored = (img_clahe.astype(float) * (1 - mask3) + brighten.astype(float) * mask3).astype('uint8')
+
+        # Denoise mildly
+        denoised = cv2.fastNlMeansDenoisingColored(restored, None, h=7, hColor=7, templateWindowSize=7, searchWindowSize=21)
+        return denoised
+    except Exception as e:
+        logger.exception('restore_fallback failed: %s', e)
+        return img_np
 
 
 @app.post('/detect')
@@ -333,4 +397,46 @@ async def detect_corners(image: UploadFile = File(...)):
 
     except Exception as e:
         logger.exception('Error in detect endpoint')
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+@app.post('/restore')
+async def restore_document(image: UploadFile = File(...)):
+    start = time.time()
+    if cv2 is None:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "Missing Python requirements (opencv, ultralytics, pillow)"})
+    try:
+        contents = await image.read()
+        pil = Image.open(io.BytesIO(contents)).convert('RGB')
+        img = np.array(pil)[:, :, ::-1]  # PIL RGB -> BGR
+
+        # Try DocRes model first (if installed and model file present)
+        doc_model = get_docres_model()
+        if doc_model:
+            try:
+                # Best-effort API compatibility: try common methods
+                if hasattr(doc_model, 'restore'):
+                    out = doc_model.restore(img)
+                elif callable(doc_model):
+                    out = doc_model(img)
+                else:
+                    raise RuntimeError('DocRes model loaded but has no usable interface')
+                # Ensure result is numpy array BGR
+                if isinstance(out, tuple):
+                    out = out[0]
+                restored = out.astype('uint8')
+                elapsed = int((time.time() - start) * 1000)
+                _, png = cv2.imencode('.png', restored)
+                return {"ok": True, "restored_image_base64": base64.b64encode(png.tobytes()).decode(), "model": 'DocRes', "timing_ms": elapsed}
+            except Exception as e:
+                logger.exception('DocRes model failed, falling back: %s', e)
+                # fall through to fallback
+
+        # Fallback restoration
+        restored = restore_fallback(img)
+        elapsed = int((time.time() - start) * 1000)
+        _, png = cv2.imencode('.png', restored)
+        return {"ok": True, "restored_image_base64": base64.b64encode(png.tobytes()).decode(), "model": 'fallback', "timing_ms": elapsed}
+    except Exception as e:
+        logger.exception('Error in restore endpoint')
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
