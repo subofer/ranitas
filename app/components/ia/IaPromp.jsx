@@ -137,7 +137,7 @@ function ControlHeader({
   setTab
 }) {
   return (
-    <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-5">
+    <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-5 ia-control-header">
       <div className="flex items-start gap-3">
         <div className="flex flex-col">
           <div className="flex items-center gap-2 mb-2">

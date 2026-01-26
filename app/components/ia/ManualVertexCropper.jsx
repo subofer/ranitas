@@ -2,6 +2,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { detectDocumentEdges } from '@/lib/opencvDocumentDetection'
 import { detectDocumentEdgesWorker } from '@/lib/opencvWorkerClient'
+import Image from 'next/image'
 
 // Helper: solve 8x8 linear system via Gaussian elimination
 function solveLinearSystem(A, b) {
@@ -105,6 +106,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const detectCancelRef = useRef(false)
   const [debugImage, setDebugImage] = useState(null)
   const [debugInfo, setDebugInfo] = useState(null)
+  const [debugDims, setDebugDims] = useState({ w: 300, h: 200 })
   const tempDetectWidthRef = useRef(null)
 
   const draw = useCallback(() => {
@@ -496,6 +498,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
           resultado = workerResult.points
           if (workerResult.debug) {
             // Save debug image to show in UI
+            setDebugDims({ w: workerResult.debug.width, h: workerResult.debug.height })
             const blob = await workerResult.debug.convertToBlob()
             setDebugImage(URL.createObjectURL(blob))
             setDebugInfo(workerResult.diagnostics)
@@ -645,7 +648,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+    <div className="fixed left-0 right-0 bottom-0 bg-black bg-opacity-90 z-50 flex items-start justify-center overflow-auto" style={{ top: modalTop + 'px' }} >
       <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div>
@@ -740,7 +743,9 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
             {debugImage && (
               <div className="absolute left-4 bottom-4 p-2 bg-black bg-opacity-70 rounded">
                 <div className="text-xs text-white font-medium mb-1">Debug detección</div>
-                <img src={debugImage} alt="debug" className="w-48 h-auto border" />
+                <div className="w-48 h-auto border inline-block">
+                  <Image src={debugImage} alt="debug" width={Math.min(480, debugDims.w)} height={Math.round(Math.min(480, debugDims.w) * (debugDims.h / debugDims.w || 0.66))} unoptimized />
+                </div>
                 {debugInfo && (
                   <div className="text-xs text-gray-200 mt-1">Contours: {debugInfo.contoursFound} • Top candidates: {debugInfo.candidates?.map((c,idx) => `${idx+1}: ${Math.round(c.area)}px/${c.approxRows}pts`).join(', ')}</div>
                 )}

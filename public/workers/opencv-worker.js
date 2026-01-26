@@ -175,6 +175,21 @@ async function detectOnImageData(imageBitmap) {
         pts.push({ x: bestApprox.data32S[i*2], y: bestApprox.data32S[i*2 + 1] })
       }
       detectedPoints = orderPoints(pts)
+    } else {
+      // As a last resort, use top candidate approxPoints or bounding box from candidate if available
+      if (contourInfo && contourInfo.length > 0) {
+        const top = contourInfo[0]
+        if (top.approxPoints && top.approxPoints.length >= 4) {
+          const pts = top.approxPoints.slice(0,4)
+          detectedPoints = orderPoints(pts)
+        } else if (top.approxPoints && top.approxPoints.length > 0) {
+          // fallback bounding box based on approxPoints
+          const xs = top.approxPoints.map(p => p.x)
+          const ys = top.approxPoints.map(p => p.y)
+          const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+          detectedPoints = orderPoints([{x:minX,y:minY},{x:maxX,y:minY},{x:maxX,y:maxY},{x:minX,y:maxY}])
+        }
+      }
     }
   }
 
@@ -199,11 +214,27 @@ async function detectOnImageData(imageBitmap) {
       dctx.closePath()
       dctx.stroke()
     }
+  }
+
+  if (detectedPoints) {
     dctx.fillStyle = 'rgba(0,255,0,0.6)'
     detectedPoints.forEach((pt, idx) => {
       dctx.beginPath(); dctx.arc(pt.x, pt.y, 12, 0, Math.PI*2); dctx.fill();
       dctx.fillStyle = 'white'; dctx.fillText(String(idx+1), pt.x+6, pt.y+6); dctx.fillStyle = 'rgba(0,255,0,0.6)'
     })
+  } else {
+    // draw centers of top candidates to help debugging
+    dctx.fillStyle = 'rgba(255,165,0,0.6)'
+    for (let i = 0; i < Math.min(5, contourInfo.length); i++) {
+      const ci = contourInfo[i]
+      if (ci.approxPoints && ci.approxPoints.length) {
+        const xs = ci.approxPoints.map(p=>p.x)
+        const ys = ci.approxPoints.map(p=>p.y)
+        const cx = xs.reduce((a,b)=>a+b,0)/xs.length
+        const cy = ys.reduce((a,b)=>a+b,0)/ys.length
+        dctx.beginPath(); dctx.arc(cx, cy, 8, 0, Math.PI*2); dctx.fill();
+      }
+    }
   }
 
   // Cleanup mats
@@ -218,17 +249,19 @@ self.onmessage = async (ev) => {
     try {
       await loadOpenCVWorker()
       const bmp = msg.imageBitmap
-      const points = await detectOnImageData(bmp)
+      const res = await detectOnImageData(bmp)
+      const points = res.points
+      const diagnostics = res.diagnostics
       // Transfer result
       try {
-        if (debugCanvas) {
-          const debugBitmap = await createImageBitmap(debugCanvas)
-          self.postMessage({ ok: true, points: detectedPoints, debugCanvas: debugBitmap, diagnostics })
+        if (res.debugCanvas) {
+          const debugBitmap = await createImageBitmap(res.debugCanvas)
+          self.postMessage({ ok: true, points, debugCanvas: debugBitmap, diagnostics })
         } else {
-          self.postMessage({ ok: true, points: detectedPoints, diagnostics })
+          self.postMessage({ ok: true, points, diagnostics })
         }
       } catch (e) {
-        self.postMessage({ ok: true, points: detectedPoints, diagnostics })
+        self.postMessage({ ok: true, points, diagnostics })
       }
     } catch (e) {
       self.postMessage({ ok: false, error: e.message })
