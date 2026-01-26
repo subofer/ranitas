@@ -7,10 +7,6 @@ export default function SafeImage(props) {
   // Fallback to plain <img> when NextImage is not a function to avoid runtime errors like "default is not a constructor".
   const { src, alt = '', width, height, unoptimized = true, className = '', ...rest } = props
 
-  if (typeof NextImage !== 'function') {
-    return <img src={src} alt={alt} width={width} height={height} className={className} {...rest} />
-  }
-
   // Use NextImage with unoptimized by default for blob URLs and local debug images
   return <NextImage src={src} alt={alt} width={width} height={height} unoptimized={unoptimized} className={className} {...rest} />
 }

@@ -358,11 +358,23 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       e.preventDefault()
       e.stopPropagation()
       setDragIndex(idx)
-      // Evitar que se dispare el click
-      canvasRef.current.style.pointerEvents = 'none'
-      setTimeout(() => {
-        if (canvasRef.current) canvasRef.current.style.pointerEvents = 'auto'
-      }, 100)
+
+      // Add window-level listeners to track pointer even if it leaves the canvas
+      const onMove = (ev) => {
+        const q = toCanvasCoords(ev.clientX, ev.clientY)
+        setPoints(prev => prev.map((pt, i) => i === idx ? q : pt))
+      }
+      const onUp = (ev) => {
+        setDragIndex(null)
+        window.removeEventListener('mousemove', onMove)
+        window.removeEventListener('mouseup', onUp)
+        window.removeEventListener('touchmove', onMove)
+        window.removeEventListener('touchend', onUp)
+      }
+      window.addEventListener('mousemove', onMove)
+      window.addEventListener('mouseup', onUp)
+      window.addEventListener('touchmove', (t) => onMove(t.touches[0] || t), { passive: false })
+      window.addEventListener('touchend', onUp)
     }
   }
 
