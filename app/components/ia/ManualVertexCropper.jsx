@@ -434,13 +434,33 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       clearTimeout(timeout)
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        // Try to parse JSON error, fallback to text
+        let err = { error: 'Unknown error' }
+        try {
+          err = await res.json()
+        } catch (parseErr) {
+          try {
+            const txt = await res.text()
+            err = { error: txt || 'Unknown error' }
+          } catch (e) {
+            err = { error: 'Unknown error' }
+          }
+        }
         setErrorDeteccion(err.error || 'Error en detección LLM')
         console.warn('LLM detection failed', err)
         return
       }
 
-      const data = await res.json()
+      let data = null
+      try {
+        data = await res.json()
+      } catch (parseErr) {
+        const text = await res.text().catch(() => '')
+        setErrorDeteccion(`Respuesta inválida del servidor: ${text ? text.slice(0,200) : 'no body'}`)
+        console.warn('Invalid JSON from /api/ai/detect-corners:', parseErr, text)
+        return
+      }
+
       if (!data.ok) {
         setErrorDeteccion(data.error || 'Detección con LLM no devolvió resultado')
         console.warn('LLM responded with error:', data)

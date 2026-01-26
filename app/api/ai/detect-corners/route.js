@@ -6,7 +6,8 @@ const OLLAMA_HOST = 'http://localhost:11434'
 const ollama = new Ollama({ host: OLLAMA_HOST })
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'edge'
+// Use server runtime (Node) so native packages like `sharp` and `ollama` work reliably
+// (do NOT use the Edge runtime for this route)
 
 async function prepareImageForModel(buffer, maxSize = 896) {
   const img = sharp(buffer).rotate()
@@ -65,14 +66,18 @@ export async function POST(req) {
         options: { temperature: 0 }
       })
     } catch (err) {
-      console.error('Ollama error:', err.message || err)
-      return NextResponse.json({ ok: false, error: 'LLM error', details: String(err) }, { status: 500 })
+      console.error('Ollama error:', err?.message || String(err))
+      // Ensure we always return valid JSON so client can parse it
+      return NextResponse.json({ ok: false, error: 'LLM error', details: String(err?.message || err) }, { status: 500 })
     }
 
     const text = resp?.response || ''
     // Extract JSON from response
-    const match = text.match(/\{[\s\S]*\}/)
-    if (!match) return NextResponse.json({ ok: false, error: 'No JSON in LLM response', raw: text }, { status: 502 })
+    const match = (typeof text === 'string' && text.match && text.match(/\{[\s\S]*\}/)) ? text.match(/\{[\s\S]*\}/) : null
+    if (!match) {
+      console.error('Detect-corners: no JSON in LLM response. Raw response:', String(text).slice(0, 1000))
+      return NextResponse.json({ ok: false, error: 'No JSON in LLM response', raw: String(text).slice(0, 2000) }, { status: 502 })
+    }
 
     let parsed
     try {
