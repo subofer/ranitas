@@ -116,8 +116,8 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       const header = document.querySelector('.ia-control-header')
       if (header) {
         const r = header.getBoundingClientRect()
-        // Add small margin
-        setModalTop(Math.round(r.top + r.height + 8))
+        // Align modal top with the top of the IA control banner (small downward offset not necessary)
+        setModalTop(Math.round(r.top))
       } else {
         setModalTop(64)
       }
