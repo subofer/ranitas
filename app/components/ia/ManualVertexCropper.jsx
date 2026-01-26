@@ -103,8 +103,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const [detectando, setDetectando] = useState(false)
   const [errorDeteccion, setErrorDeteccion] = useState(null)
-  const detectCancelRef = useRef(false)
-  const [debugImage, setDebugImage] = useState(null)
+  const detectCancelRef = useRef(false)  const detectControllerRef = useRef(null)  const [debugImage, setDebugImage] = useState(null)
   const [debugInfo, setDebugInfo] = useState(null)
   const [debugDims, setDebugDims] = useState({ w: 300, h: 200 })
   const tempDetectWidthRef = useRef(null)
@@ -125,9 +124,15 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     computeTop()
     window.addEventListener('resize', computeTop)
     window.addEventListener('scroll', computeTop, true)
+
+    // Prevent body scroll while modal is open
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     return () => {
       window.removeEventListener('resize', computeTop)
       window.removeEventListener('scroll', computeTop, true)
+      document.body.style.overflow = prevOverflow
     }
   }, [])
 
@@ -471,8 +476,10 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
 
       let resultado = null
       // Primero intentar con Worker (más seguro para no bloquear UI)
+      // Setup abort controller for fast attempt
+      detectControllerRef.current = new AbortController()
       try {
-        const workerResultFast = await detectDocumentEdgesWorker(fastCanvas, 5000)
+        const workerResultFast = await detectDocumentEdgesWorker(fastCanvas, 5000, detectControllerRef.current.signal)
         if (workerResultFast) {
           if (workerResultFast.debug) {
             const blob = await workerResultFast.debug.convertToBlob()
@@ -482,16 +489,23 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
           resultado = workerResultFast.points
         }
       } catch (fastErr) {
-        console.warn('Intento rápido con worker falló, fallback a main thread:', fastErr.message)
-        try {
-          const mres = await Promise.race([
-            detectDocumentEdges(fastCanvas),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 4000))
-          ])
-          resultado = mres
-        } catch (e) {
-          console.warn('Intento rápido main-thread falló:', e.message)
+        if (fastErr && fastErr.message && fastErr.message.includes('cancel')) {
+          console.warn('Detección rápida cancelada por usuario')
+        } else {
+          console.warn('Intento rápido con worker falló, fallback a main thread:', fastErr.message)
+          try {
+            const mres = await Promise.race([
+              detectDocumentEdges(fastCanvas),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout detectando (fast)')), 4000))
+            ])
+            resultado = mres
+          } catch (e) {
+            console.warn('Intento rápido main-thread falló:', e.message)
+          }
         }
+      } finally {
+        // Clean up fast abort controller
+        if (detectControllerRef.current) { try { detectControllerRef.current = null } catch (e) {} }
       }
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
@@ -514,8 +528,10 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       tempDetectWidthRef.current = tempCanvas.width
 
       const timeoutMs = 10000
+      // Setup abort controller for full attempt
+      detectControllerRef.current = new AbortController()
       try {
-        const workerResult = await detectDocumentEdgesWorker(tempCanvas, timeoutMs)
+        const workerResult = await detectDocumentEdgesWorker(tempCanvas, timeoutMs, detectControllerRef.current.signal)
         if (workerResult) {
           resultado = workerResult.points
           if (workerResult.debug) {
@@ -527,16 +543,23 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
           }
         }
       } catch (e) {
-        console.warn('Worker detection (full) failed, falling back to main thread', e.message)
-        try {
-          resultado = await Promise.race([
-            detectDocumentEdges(tempCanvas),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
-          ])
-        } catch (ff) {
-          console.warn('Full detect failed on main thread too:', ff.message)
-          resultado = null
+        if (e && e.message && e.message.includes('cancel')) {
+          console.warn('Detección completa cancelada por usuario')
+        } else {
+          console.warn('Worker detection (full) failed, falling back to main thread', e.message)
+          try {
+            resultado = await Promise.race([
+              detectDocumentEdges(tempCanvas),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout en detección automática')), timeoutMs))
+            ])
+          } catch (ff) {
+            console.warn('Full detect failed on main thread too:', ff.message)
+            resultado = null
+          }
         }
+      } finally {
+        // Clean up full abort controller
+        if (detectControllerRef.current) { try { detectControllerRef.current = null } catch (e) {} }
       }
 
       if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
@@ -670,7 +693,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   }
 
   return (
-    <div className="fixed left-0 right-0 bottom-0 bg-black bg-opacity-90 z-50 flex items-start justify-center overflow-auto" style={{ top: modalTop + 'px' }} >
+    <div className="fixed left-0 right-0 bg-black bg-opacity-90 z-50 flex items-start justify-center" style={{ top: modalTop + 'px', maxHeight: `calc(100vh - ${modalTop}px - 16px)` }} >
       <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div>
@@ -700,7 +723,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
                 🤖 Detectar automáticamente
               </button>
             ) : (
-              <button onClick={() => { detectCancelRef.current = true; setDetectando(false); setErrorDeteccion('Detección cancelada por usuario') }} className="px-4 py-2 rounded-lg border bg-red-100 text-red-700">✖ Cancelar detección</button>
+              <button onClick={() => { detectCancelRef.current = true; setDetectando(false); setErrorDeteccion('Detección cancelada por usuario'); if (detectControllerRef.current) try { detectControllerRef.current.abort() } catch (e) {} }} className="px-4 py-2 rounded-lg border bg-red-100 text-red-700">✖ Cancelar detección</button>
             )}
             {points.length === 4 && (
               <button 
