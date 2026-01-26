@@ -3,9 +3,10 @@ import Pagelogin from './pageLogin'
 import { login } from '@/lib/sesion/sesion'
 import { redirect } from 'next/navigation'
 
-export default function Page({ searchParams }) {
-  const goNext = typeof searchParams?.goNext === 'string' ? searchParams.goNext : '/';
-  const error = searchParams?.error === '1';
+export default async function Page({ searchParams }) {
+  const sp = searchParams ? await searchParams : {}
+  const goNext = typeof sp?.goNext === 'string' ? sp.goNext : '/';
+  const error = sp?.error === '1';
 
   async function loginAction(formData) {
     'use server';
