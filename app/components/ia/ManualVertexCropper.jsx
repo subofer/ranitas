@@ -641,7 +641,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   return (
     <div className="fixed left-0 right-0 bg-black bg-opacity-90 z-50 flex items-start justify-center" style={{ top: modalTop + 'px', maxHeight: `calc(100vh - ${modalTop}px - 16px)` }} >
       <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
-+      </div>        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-lg text-gray-900">✂️ Crop manual (4 vértices)</h3>
             <p className="text-sm text-gray-600 mt-1">
