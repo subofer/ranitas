@@ -83,6 +83,39 @@ def order_corners(pts):
     return ordered
 
 
+def polygon_touches_edge(pts, w, h, tol=3):
+    """Return True if polygon points touch or are very close to image edges."""
+    if pts is None:
+        return False
+    pts = np.array(pts).reshape(-1, 2)
+    if pts.size == 0:
+        return False
+    xs = pts[:, 0]
+    ys = pts[:, 1]
+    return xs.min() <= tol or ys.min() <= tol or xs.max() >= (w - tol) or ys.max() >= (h - tol)
+
+
+def preprocess_image(img_np):
+    """Apply subtle contrast and sharpening to improve detection robustness.
+    Uses CLAHE on the L channel and a gentle unsharp mask. Non-destructive and conservative."""
+    try:
+        lab = cv2.cvtColor(img_np, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l2 = clahe.apply(l)
+        lab2 = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+
+        # Slight unsharp mask (subtle sharpening)
+        blurred = cv2.GaussianBlur(img_clahe, (0, 0), sigmaX=1.0)
+        sharpened = cv2.addWeighted(img_clahe, 1.12, blurred, -0.12, 0)
+        return sharpened
+    except Exception:
+        # If any step fails, return the original image
+        return img_np
+
+
+
 def fallback_rect(w, h, margin=0.1):
     m = margin
     return [
@@ -104,6 +137,9 @@ async def detect_corners(image: UploadFile = File(...)):
         pil = Image.open(io.BytesIO(contents)).convert('RGB')
         img = np.array(pil)[:, :, ::-1]  # PIL RGB -> BGR
         h, w = img.shape[:2]
+
+        # Preprocess image subtly to improve detection (CLAHE + light sharpen)
+        img_proc = preprocess_image(img)
 
         # Try to load YOLO and use it; if not available or fails, fall back to OpenCV-based contour detection
         use_yolo = True
@@ -153,6 +189,20 @@ async def detect_corners(image: UploadFile = File(...)):
                     break
 
             if best is not None:
+                # If detected polygon touches image edges or covers a big fraction, prefer full-image rectangle
+                try:
+                    best_area = cv2.contourArea(best)
+                    if polygon_touches_edge(best, w, h, tol=6) or (best_area >= 0.55 * (w * h)):
+                        logger.info('Contour touches edge or covers large area - snapping to full image rectangle')
+                        full = [{'x': 0, 'y': 0}, {'x': w, 'y': 0}, {'x': w, 'y': h}, {'x': 0, 'y': h}]
+                        dbg = img_np.copy()
+                        cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                        _, png = cv2.imencode('.png', dbg)
+                        debug_b64 = base64.b64encode(png.tobytes()).decode()
+                        return {'ok': True, 'points': full, 'debug_image_base64': debug_b64}
+                except Exception:
+                    pass
+
                 ordered = order_corners(best)
                 dbg = img_np.copy()
                 for i, (x, y) in enumerate(ordered):
@@ -164,7 +214,21 @@ async def detect_corners(image: UploadFile = File(...)):
                 return {'ok': True, 'points': [{'x': int(x), 'y': int(y)} for x, y in ordered], 'debug_image_base64': debug_b64}
 
             # No quad found
-            fb = fallback_rect(w, h, margin=0.10)
+            # If the largest contour touches edges and covers a big area, assume document spans full image
+            if contour_info and contour_info[0]['area'] >= 0.55 * (w * h):
+                try:
+                    candidate = contour_info[0]
+                    pts_arr = np.array([[p['x'], p['y']] for p in candidate['approxPoints']], dtype=np.int32)
+                    if polygon_touches_edge(pts_arr, w, h, tol=6):
+                        full = [{'x': 0, 'y': 0}, {'x': w, 'y': 0}, {'x': w, 'y': h}, {'x': 0, 'y': h}]
+                        dbg = img_np.copy()
+                        cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                        _, png = cv2.imencode('.png', dbg)
+                        debug_b64 = base64.b64encode(png.tobytes()).decode()
+                        return {'ok': True, 'points': full, 'debug_image_base64': debug_b64}
+                except Exception:
+                    pass
+
             dbg = img_np.copy()
             for i, p in enumerate(fb):
                 cv2.circle(dbg, (p['x'], p['y']), 8, (0, 165, 255), -1)
@@ -177,7 +241,7 @@ async def detect_corners(image: UploadFile = File(...)):
         # If YOLO available, try it first
         if use_yolo:
             try:
-                results = model(img, device=0, conf=CONFIDENCE, verbose=False)
+                results = model(img_proc, device=0, conf=CONFIDENCE, verbose=False)
 
                 # Iterate results and look for masks
                 for r in results:
@@ -207,6 +271,27 @@ async def detect_corners(image: UploadFile = File(...)):
                         eps = eps_ratio * per
                         approx = cv2.approxPolyDP(best_poly.astype(np.float32), eps, True)
                         if len(approx) == 4:
+                            approx_pts = approx.reshape(4, 2)
+                            try:
+                                area_approx = cv2.contourArea(approx_pts.astype(np.int32))
+                                if polygon_touches_edge(approx_pts, w, h, tol=6) or (area_approx >= 0.55 * (w * h)):
+                                    # Prefer full-image rectangle when mask touches edges or covers most of image
+                                    full = [{"x": 0, "y": 0}, {"x": w, "y": 0}, {"x": w, "y": h}, {"x": 0, "y": h}]
+                                    dbg = img.copy()
+                                    cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                                    _, png = cv2.imencode('.png', dbg)
+                                    debug_b64 = base64.b64encode(png.tobytes()).decode()
+                                    elapsed = int((time.time() - start) * 1000)
+                                    return {
+                                        "ok": True,
+                                        "points": full,
+                                        "debug_image_base64": debug_b64,
+                                        "model": os.path.basename(MODEL_PATH),
+                                        "timing_ms": elapsed,
+                                    }
+                            except Exception:
+                                pass
+
                             ordered = order_corners(approx.reshape(4, 2))
                             # create debug image
                             dbg = img.copy()
@@ -226,8 +311,8 @@ async def detect_corners(image: UploadFile = File(...)):
                                 "timing_ms": elapsed,
                             }
                         
-                # If YOLO didn't find, fallback to OpenCV
-                oc_res = opencv_detect(img)
+                # If YOLO didn't find, fallback to OpenCV using preprocessed image
+                oc_res = opencv_detect(img_proc)
                 if oc_res.get('ok'):
                     elapsed = int((time.time() - start) * 1000)
                     return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
@@ -241,8 +326,8 @@ async def detect_corners(image: UploadFile = File(...)):
                 elapsed = int((time.time() - start) * 1000)
                 return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
 
-        # If not using YOLO, use OpenCV fallback
-        oc_res = opencv_detect(img)
+        # If not using YOLO, use OpenCV fallback on the preprocessed image
+        oc_res = opencv_detect(img_proc)
         elapsed = int((time.time() - start) * 1000)
         return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
 
