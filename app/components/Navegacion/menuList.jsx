@@ -8,6 +8,7 @@ const menuList = {
   "Compras" : "/compras",
   "Proveedores" : "/proveedores",
   "Ia" : "/ia",
+  "Configuración": "/configuracion"
 }
 
 export default menuList;
@@ -36,4 +37,5 @@ export const menuListHorizontal = [
   { menu: "Ia", href: "/ia", subMenu: [] },
   { menu: "Auditoria", href: "/audit", subMenu: []  },
   { menu: "Pendientes", href: "/pendientes", subMenu: [] },
+  { menu: "Configuración", href: "/configuracion", subMenu: [] },
 ];
