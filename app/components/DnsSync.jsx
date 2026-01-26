@@ -49,18 +49,13 @@ export default function DnsSync({ className = '' }) {
         {error && <div className="text-red-600">Error: {error}</div>}
         {result && result.type === 'check' && (
           <div>
-            {result.data.ok ? (
-              <div>
-                <div>Host: <span className="font-medium">{result.data.host}</span></div>
-                <div>Public IP: <span className="font-medium">{result.data.publicIp}</span></div>
-                <div>DNS A: <span className="font-medium">{(result.data.dnsA || []).join(', ')}</span></div>
-                <div className={`mt-1 font-medium ${result.data.synced ? 'text-green-600' : 'text-yellow-600'}`}>
-                  {result.data.synced ? '✅ Sincronizado' : '⚠️ No sincronizado'}
-                </div>
-              </div>
-            ) : (
-              <div className="text-yellow-600">{result.data.message}</div>
-            )}
+            {result.data.message && <div className="text-xs text-yellow-600 mb-1">{result.data.message}</div>}
+            <div>Host: <span className="font-medium">{result.data.host}</span></div>
+            <div>Public IP: <span className="font-medium">{result.data.publicIp || 'Desconocida'}</span></div>
+            <div>DNS A: <span className="font-medium">{(result.data.dnsA || []).length ? (result.data.dnsA || []).join(', ') : '—'}</span></div>
+            <div className={`mt-1 font-medium ${result.data.synced ? 'text-green-600' : 'text-yellow-600'}`}>
+              {result.data.synced ? '✅ Sincronizado' : '⚠️ No sincronizado'}
+            </div>
           </div>
         )}
         {result && result.type === 'sync' && (
