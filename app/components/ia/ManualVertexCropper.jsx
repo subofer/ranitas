@@ -192,12 +192,12 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       for (let i=0;i<points.length;i++){
         const pt = points[i]
         const isHovered = hoveredIndex === i || dragIndex === i
-        const radius = isHovered ? 12 : 8
+        const radius = isHovered ? 18 : 12
         
         // Círculo blanco
         ctx.fillStyle = '#fff'
         ctx.strokeStyle = isHovered ? '#ef4444' : '#2563eb'
-        ctx.lineWidth = isHovered ? 4 : 3
+        ctx.lineWidth = isHovered ? 5 : 3
         ctx.beginPath()
         ctx.arc(pt.x, pt.y, radius, 0, Math.PI*2)
         ctx.fill()
@@ -344,7 +344,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     
     // Verificar que no estamos cerca de un punto existente (evitar click accidental)
     const p = toCanvasCoords(e.clientX, e.clientY)
-    const nearPoint = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 15)
+    const nearPoint = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 24)
     if (nearPoint >= 0) return // Si estamos cerca de un punto, no agregar nuevo
     
     setPoints(prev => [...prev, p])
@@ -353,7 +353,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   function handleMouseDown(e) {
     const p = toCanvasCoords(e.clientX, e.clientY)
     // check if clicking near existing point
-    const idx = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 20)
+    const idx = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 28)
     if (idx >= 0) {
       e.preventDefault()
       e.stopPropagation()
@@ -376,7 +376,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     }
     
     // Detectar hover
-    const idx = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 15)
+    const idx = points.findIndex(pt => Math.hypot(pt.x - p.x, pt.y - p.y) < 24)
     setHoveredIndex(idx >= 0 ? idx : null)
   }
 
@@ -656,7 +656,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
 
             {/* Debug image from worker (if available) */}
             {debugImage && (
-              <div className="absolute left-4 bottom-4 p-2 bg-black bg-opacity-70 rounded">
+              <div className="absolute right-4 top-16 p-2 bg-black bg-opacity-70 rounded">
                 <div className="text-xs text-white font-medium mb-1">Debug detección</div>
                 <div className="w-48 h-auto border inline-block">
                   <SafeImage src={debugImage} alt="debug" width={Math.min(480, debugDims.w)} height={Math.round(Math.min(480, debugDims.w) * (debugDims.h / debugDims.w || 0.66))} unoptimized className="rounded-sm" />
