@@ -12,12 +12,13 @@ export async function GET(req) {
 
     const where = {}
     if (tipo === 'proveedor') {
-      where.proveedor = true
+      where.esProveedor = true
     } else if (tipo === 'cliente') {
-      where.cliente = true
+      // No hay campo 'cliente' en el modelo; interpretamos cliente = !esProveedor
+      where.esProveedor = false
     }
 
-    const contactos = await prisma.contactos.findMany({
+    const contactosRaw = await prisma.contactos.findMany({
       where,
       orderBy: { nombre: 'asc' },
       select: {
@@ -25,11 +26,22 @@ export async function GET(req) {
         nombre: true,
         nombreFantasia: true,
         cuit: true,
-        proveedor: true,
-        cliente: true,
-        marca: true,
+        esProveedor: true,
+        esInterno: true,
+        esMarca: true,
       }
     })
+
+    // Mapear a la forma que espera la UI (proveedor/cliente flags legibles)
+    const contactos = contactosRaw.map(c => ({
+      id: c.id,
+      nombre: c.nombre,
+      nombreFantasia: c.nombreFantasia,
+      cuit: c.cuit,
+      proveedor: !!c.esProveedor,
+      cliente: !c.esProveedor && !c.esInterno, // cliente = no proveedor y no interno
+      marca: !!c.esMarca
+    }))
 
     return NextResponse.json({ 
       ok: true, 
