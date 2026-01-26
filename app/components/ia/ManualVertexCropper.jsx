@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { detectDocumentEdges } from '@/lib/opencvDocumentDetection'
 import { detectDocumentEdgesWorker } from '@/lib/opencvWorkerClient'
-import Image from 'next/image'
+import SafeImage from '@/components/ui/SafeImage'
 
 // Helper: solve 8x8 linear system via Gaussian elimination
 function solveLinearSystem(A, b) {
@@ -766,7 +766,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
               <div className="absolute left-4 bottom-4 p-2 bg-black bg-opacity-70 rounded">
                 <div className="text-xs text-white font-medium mb-1">Debug detección</div>
                 <div className="w-48 h-auto border inline-block">
-                  <Image src={debugImage} alt="debug" width={Math.min(480, debugDims.w)} height={Math.round(Math.min(480, debugDims.w) * (debugDims.h / debugDims.w || 0.66))} unoptimized />
+                  <SafeImage src={debugImage} alt="debug" width={Math.min(480, debugDims.w)} height={Math.round(Math.min(480, debugDims.w) * (debugDims.h / debugDims.w || 0.66))} unoptimized className="rounded-sm" />
                 </div>
                 {debugInfo && (
                   <div className="text-xs text-gray-200 mt-1">Contours: {debugInfo.contoursFound} • Top candidates: {debugInfo.candidates?.map((c,idx) => `${idx+1}: ${Math.round(c.area)}px/${c.approxRows}pts`).join(', ')}</div>
