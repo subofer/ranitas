@@ -109,6 +109,28 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [debugDims, setDebugDims] = useState({ w: 300, h: 200 })
   const tempDetectWidthRef = useRef(null)
 
+  // Modal top position to place the modal below the IA header
+  const [modalTop, setModalTop] = useState(48)
+  useEffect(() => {
+    const computeTop = () => {
+      const header = document.querySelector('.ia-control-header')
+      if (header) {
+        const r = header.getBoundingClientRect()
+        // Add small margin
+        setModalTop(Math.round(r.top + r.height + 8))
+      } else {
+        setModalTop(64)
+      }
+    }
+    computeTop()
+    window.addEventListener('resize', computeTop)
+    window.addEventListener('scroll', computeTop, true)
+    return () => {
+      window.removeEventListener('resize', computeTop)
+      window.removeEventListener('scroll', computeTop, true)
+    }
+  }, [])
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d', { willReadFrequently: false })
