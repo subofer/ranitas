@@ -1,7 +1,6 @@
 import './globals.css'
 import AiProviderClient from '@/components/ai/AiProviderClient'
 import { ThemeProvider } from '@/context/ThemeContext'
-import DnsSync from '@/components/DnsSync'
 export const metadata = {
   title: 'Sistema de Gestión - Las Ranitas',
   description: 'Sistema completo de gestión de productos e inventario',
@@ -17,7 +16,6 @@ export default function RootLayout({ children }) {
         <ThemeProvider>
           <AiProviderClient>
             {children}
-            <DnsSync />
           </AiProviderClient>
         </ThemeProvider>
       </body>

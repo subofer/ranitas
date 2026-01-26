@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { MetricCard } from './MetricCard';
 import { getDashboardMetrics, getExecutiveSummary } from '@/prisma/consultas/dashboard';
+import DnsSync from '@/components/DnsSync';
 
 export function Dashboard() {
   const [metrics, setMetrics] = useState([]);
@@ -115,8 +116,11 @@ export function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900">Dashboard Financiero</h2>
           <p className="text-sm text-gray-600 mt-1">Métricas clave de ventas, compras y flujo de caja</p>
         </div>
-        <div className="text-sm text-green-600 bg-green-100 px-3 py-1 rounded-full font-medium">
-          📈 Actualizado
+        <div className="flex items-center gap-4">
+          <div className="text-sm text-green-600 bg-green-100 px-3 py-1 rounded-full font-medium">📈 Actualizado</div>
+          <div className="hidden sm:block">
+            <DnsSync className="w-64" />
+          </div>
         </div>
       </div>
 
