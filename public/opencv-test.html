@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test OpenCV.js - Detección de Documentos</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+    .status {
+      padding: 12px;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-weight: 500;
+    }
+    .loading { background: #fef3c7; color: #92400e; }
+    .success { background: #d1fae5; color: #065f46; }
+    .error { background: #fee2e2; color: #991b1b; }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    button:hover { background: #4f46e5; }
+    button:disabled {
+      background: #d1d5db;
+      cursor: not-allowed;
+    }
+    #fileInput {
+      margin: 20px 0;
+    }
+    canvas {
+      max-width: 100%;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      margin: 10px 0;
+    }
+    .canvas-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+    .canvas-box {
+      text-align: center;
+    }
+    .canvas-box h3 {
+      margin: 10px 0;
+      color: #6366f1;
+    }
+    #log {
+      background: #1f2937;
+      color: #10b981;
+      padding: 15px;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      margin-top: 20px;
+    }
+    .log-entry {
+      margin: 3px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Test de Detección Automática de Documentos</h1>
+    <p>Prueba del sistema de detección de bordes con OpenCV.js</p>
+
+    <div id="status" class="status loading">
+      ⏳ Esperando acción del usuario...
+    </div>
+
+    <div>
+      <button id="loadBtn" onclick="loadOpenCV()">📦 Cargar OpenCV.js</button>
+      <button id="detectBtn" onclick="testDetection()" disabled>🔍 Detectar Documento</button>
+      <button onclick="clearLog()">🗑️ Limpiar Log</button>
+    </div>
+
+    <div>
+      <label for="fileInput" style="display: block; margin: 20px 0 10px 0; font-weight: 600;">
+        Cargar imagen de factura:
+      </label>
+      <input type="file" id="fileInput" accept="image/*" onchange="loadImage(event)">
+    </div>
+
+    <div class="canvas-container">
+      <div class="canvas-box">
+        <h3>📸 Imagen Original</h3>
+        <canvas id="originalCanvas"></canvas>
+      </div>
+      <div class="canvas-box">
+        <h3>✅ Documento Detectado</h3>
+        <canvas id="resultCanvas"></canvas>
+      </div>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <script>
+    let cv = null;
+    let loadedImage = null;
+    const statusDiv = document.getElementById('status');
+    const logDiv = document.getElementById('log');
+    const loadBtn = document.getElementById('loadBtn');
+    const detectBtn = document.getElementById('detectBtn');
+
+    function log(message, type = 'info') {
+      const timestamp = new Date().toLocaleTimeString();
+      const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warn' ? '⚠️' : '🔹';
+      const color = type === 'error' ? '#ef4444' : type === 'success' ? '#10b981' : type === 'warn' ? '#f59e0b' : '#60a5fa';
+      logDiv.innerHTML += `<div class="log-entry" style="color: ${color}">${icon} [${timestamp}] ${message}</div>`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(message);
+    }
+
+    function clearLog() {
+      logDiv.innerHTML = '';
+      log('Log limpiado');
+    }
+
+    function updateStatus(message, type = 'loading') {
+      statusDiv.className = `status ${type}`;
+      statusDiv.textContent = message;
+    }
+
+    async function loadOpenCV() {
+      if (cv) {
+        log('OpenCV.js ya está cargado', 'warn');
+        updateStatus('✅ OpenCV.js ya está cargado', 'success');
+        return;
+      }
+
+      updateStatus('⏳ Cargando OpenCV.js desde CDN...', 'loading');
+      log('Iniciando carga de OpenCV.js...');
+      loadBtn.disabled = true;
+
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://docs.opencv.org/4.x/opencv.js';
+        script.async = true;
+
+        script.onload = () => {
+          log('Script de OpenCV.js cargado, esperando inicialización...');
+          const checkInterval = setInterval(() => {
+            if (window.cv && window.cv.Mat) {
+              clearInterval(checkInterval);
+              cv = window.cv;
+              log('✅ OpenCV.js inicializado correctamente', 'success');
+              updateStatus('✅ OpenCV.js listo para usar', 'success');
+              detectBtn.disabled = !loadedImage;
+              loadBtn.textContent = '✅ OpenCV.js Cargado';
+              resolve(cv);
+            }
+          }, 100);
+
+          setTimeout(() => {
+            clearInterval(checkInterval);
+            if (!cv) {
+              const msg = 'Timeout esperando inicialización de OpenCV.js';
+              log(msg, 'error');
+              updateStatus('❌ ' + msg, 'error');
+              loadBtn.disabled = false;
+              reject(new Error(msg));
+            }
+          }, 10000);
+        };
+
+        script.onerror = () => {
+          const msg = 'Error cargando OpenCV.js desde CDN';
+          log(msg, 'error');
+          updateStatus('❌ ' + msg, 'error');
+          loadBtn.disabled = false;
+          reject(new Error(msg));
+        };
+
+        document.head.appendChild(script);
+      });
+    }
+
+    function loadImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      log(`Cargando imagen: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          loadedImage = img;
+          log(`✅ Imagen cargada: ${img.width}x${img.height}`, 'success');
+          
+          // Dibujar en canvas original
+          const canvas = document.getElementById('originalCanvas');
+          const maxW = 500;
+          const scale = Math.min(maxW / img.width, 1);
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          if (cv) {
+            detectBtn.disabled = false;
+            updateStatus('✅ Listo para detectar documento', 'success');
+          } else {
+            updateStatus('⚠️ Carga OpenCV.js primero', 'loading');
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function orderPoints(points) {
+      const sorted = [...points].sort((a, b) => a.y - b.y);
+      const topPoints = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+      const bottomPoints = sorted.slice(2, 4).sort((a, b) => a.x - b.x);
+      return [topPoints[0], topPoints[1], bottomPoints[1], bottomPoints[0]];
+    }
+
+    async function testDetection() {
+      if (!cv) {
+        log('Debes cargar OpenCV.js primero', 'error');
+        return;
+      }
+      if (!loadedImage) {
+        log('Debes cargar una imagen primero', 'error');
+        return;
+      }
+
+      log('🔍 Iniciando detección de documento...');
+      updateStatus('🔍 Detectando...', 'loading');
+      detectBtn.disabled = true;
+
+      try {
+        // Preparar canvas
+        const canvas = document.getElementById('originalCanvas');
+        const src = cv.imread(canvas);
+        log(`📸 Imagen procesada: ${src.cols}x${src.rows}`);
+
+        // Escala de grises
+        const gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+        log('⚫ Conversión a escala de grises completada');
+
+        // Desenfoque Gaussiano
+        const blurred = new cv.Mat();
+        cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+        log('🌫️ Desenfoque Gaussiano aplicado (kernel 5x5)');
+
+        // Detección de bordes Canny
+        const edges = new cv.Mat();
+        cv.Canny(blurred, edges, 50, 150, 3, false);
+        log('🔲 Detección de bordes Canny (50-150)');
+
+        // Dilatación
+        const dilated = new cv.Mat();
+        const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+        cv.dilate(edges, dilated, kernel);
+        log('🔳 Bordes dilatados (kernel 5x5)');
+
+        // Encontrar contornos
+        const contours = new cv.MatVector();
+        const hierarchy = new cv.Mat();
+        cv.findContours(dilated, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+        log(`📊 ${contours.size()} contornos encontrados`);
+
+        // Buscar mejor contorno
+        let maxArea = 0;
+        let bestApprox = null;
+        const minArea = (src.cols * src.rows) * 0.1;
+
+        for (let i = 0; i < contours.size(); i++) {
+          const contour = contours.get(i);
+          const area = cv.contourArea(contour);
+          
+          if (area < minArea) continue;
+          
+          const approx = new cv.Mat();
+          const perimeter = cv.arcLength(contour, true);
+          cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
+          
+          if (approx.rows === 4 && area > maxArea) {
+            maxArea = area;
+            if (bestApprox) bestApprox.delete();
+            bestApprox = approx;
+          } else {
+            approx.delete();
+          }
+        }
+
+        if (bestApprox && maxArea > 0) {
+          log(`🎯 Documento detectado! Área: ${maxArea.toFixed(0)} px²`, 'success');
+          
+          // Extraer puntos
+          const points = [];
+          for (let i = 0; i < bestApprox.rows; i++) {
+            points.push({
+              x: bestApprox.data32S[i * 2],
+              y: bestApprox.data32S[i * 2 + 1]
+            });
+          }
+          const orderedPoints = orderPoints(points);
+          log(`📍 Puntos ordenados: TL(${orderedPoints[0].x},${orderedPoints[0].y}) TR(${orderedPoints[1].x},${orderedPoints[1].y}) BR(${orderedPoints[2].x},${orderedPoints[2].y}) BL(${orderedPoints[3].x},${orderedPoints[3].y})`);
+
+          // Dibujar resultado
+          const result = src.clone();
+          const color = new cv.Scalar(0, 255, 0, 255);
+          const contourVec = new cv.MatVector();
+          contourVec.push_back(bestApprox);
+          cv.drawContours(result, contourVec, 0, color, 3);
+
+          orderedPoints.forEach((pt, idx) => {
+            cv.circle(result, new cv.Point(pt.x, pt.y), 10, new cv.Scalar(255, 0, 0, 255), -1);
+            cv.putText(result, String(idx + 1), new cv.Point(pt.x + 15, pt.y + 15),
+                       cv.FONT_HERSHEY_SIMPLEX, 1, new cv.Scalar(255, 255, 0, 255), 2);
+          });
+
+          const resultCanvas = document.getElementById('resultCanvas');
+          resultCanvas.width = src.cols;
+          resultCanvas.height = src.rows;
+          cv.imshow(resultCanvas, result);
+
+          result.delete();
+          contourVec.delete();
+          updateStatus('✅ Documento detectado exitosamente!', 'success');
+        } else {
+          log('⚠️ No se pudo detectar un documento con 4 esquinas', 'warn');
+          updateStatus('⚠️ No se detectó documento', 'error');
+        }
+
+        // Limpiar
+        src.delete();
+        gray.delete();
+        blurred.delete();
+        edges.delete();
+        dilated.delete();
+        kernel.delete();
+        contours.delete();
+        hierarchy.delete();
+        if (bestApprox) bestApprox.delete();
+
+      } catch (error) {
+        log(`❌ Error: ${error.message}`, 'error');
+        updateStatus('❌ Error en detección', 'error');
+        console.error(error);
+      } finally {
+        detectBtn.disabled = false;
+      }
+    }
+
+    // Log inicial
+    log('Sistema de detección de documentos iniciado');
+    log('Paso 1: Cargar OpenCV.js');
+    log('Paso 2: Seleccionar imagen de factura');
+    log('Paso 3: Hacer clic en "Detectar Documento"');
+  </script>
+</body>
+</html>

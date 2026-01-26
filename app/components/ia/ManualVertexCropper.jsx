@@ -1,5 +1,6 @@
 "use client"
 import React, { useRef, useState, useEffect, useCallback } from 'react'
+import { detectDocumentEdges } from '@/lib/opencvDocumentDetection'
 
 // Helper: solve 8x8 linear system via Gaussian elimination
 function solveLinearSystem(A, b) {
@@ -98,6 +99,8 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [comparingMode, setComparingMode] = useState(false) // false = original, true = croppeada
   const [previewGenerated, setPreviewGenerated] = useState(false)
+  const [detectando, setDetectando] = useState(false)
+  const [errorDeteccion, setErrorDeteccion] = useState(null)
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -354,6 +357,7 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     setPoints([])
     setComparingMode(false)
     setPreviewGenerated(false)
+    setErrorDeteccion(null)
   }
 
   const toggleCompare = () => {
@@ -362,6 +366,44 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
       setPreviewGenerated(true)
     }
     setComparingMode(!comparingMode)
+  }
+
+  // Nueva función: Detección automática con OpenCV
+  const detectarAutomaticamente = async () => {
+    console.log('🎯 Iniciando detección automática...')
+    setDetectando(true)
+    setErrorDeteccion(null)
+    
+    try {
+      const canvas = canvasRef.current
+      if (!canvas) {
+        throw new Error('Canvas no disponible')
+      }
+      
+      // Ejecutar detección
+      const resultado = await detectDocumentEdges(canvas)
+      
+      if (resultado.points && resultado.points.length === 4) {
+        // Convertir puntos detectados a coordenadas del canvas
+        const scale = canvas.dataset.scale ? Number(canvas.dataset.scale) : 1
+        const puntosEscalados = resultado.points.map(p => ({
+          x: p.x * scale,
+          y: p.y * scale
+        }))
+        
+        setPoints(puntosEscalados)
+        setErrorDeteccion(null)
+        console.log('✅ Detección exitosa:', puntosEscalados)
+      } else {
+        setErrorDeteccion('No se pudo detectar el documento automáticamente. Usa el modo manual.')
+        console.warn('⚠️ No se detectaron 4 esquinas')
+      }
+    } catch (error) {
+      console.error('❌ Error en detección:', error)
+      setErrorDeteccion(`Error: ${error.message}. Usa el modo manual.`)
+    } finally {
+      setDetectando(false)
+    }
   }
 
   async function applyCrop() {
@@ -475,11 +517,29 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
             <h3 className="font-semibold text-lg text-gray-900">✂️ Crop manual (4 vértices)</h3>
             <p className="text-sm text-gray-600 mt-1">
               {points.length < 4 
-                ? 'Haz click 4 veces para marcar los vértices del documento'
+                ? 'Usa detección automática o haz click 4 veces para marcar los vértices del documento'
                 : '¡Perfecto! Ahora puedes arrastrar los puntos para ajustar o ver la previsualización'}
             </p>
+            {errorDeteccion && (
+              <p className="text-xs text-yellow-600 mt-1 font-medium">
+                ⚠️ {errorDeteccion}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
+            <button 
+              onClick={detectarAutomaticamente}
+              disabled={detectando || points.length === 4}
+              className={`px-4 py-2 rounded-lg border transition-all duration-300 ${
+                detectando
+                  ? 'bg-gray-300 text-gray-500 cursor-wait'
+                  : points.length === 4
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'
+              }`}
+            >
+              {detectando ? '🔄 Detectando...' : '🤖 Detectar automáticamente'}
+            </button>
             {points.length === 4 && (
               <button 
                 onClick={toggleCompare} 
