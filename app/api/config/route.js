@@ -4,11 +4,14 @@ import { DEFAULT_ADJUSTMENTS, MODES } from '@/lib/ia/constants'
 function maskUrl(url) {
   try {
     const u = new URL(url)
-    // Mask query params values
-    const params = Array.from(u.searchParams.keys()).map(k => `${k}=*****`).join('&')
-    return `${u.origin}${u.pathname}${params ? '?'+params : ''}`
+    // Always hide the query string entirely to avoid leaking tokens
+    return `${u.origin}${u.pathname}${u.search ? '?*****' : ''}`
   } catch (e) {
-    return url.replace(/([?&]=).*/,'')
+    // Fallback: cut at ? and append masked marker
+    if (typeof url === 'string' && url.includes('?')) {
+      return url.split('?')[0] + '?*****'
+    }
+    return url
   }
 }
 
@@ -20,7 +23,8 @@ export async function GET() {
     ok: true,
     dns: {
       url: dnsUrl ? maskUrl(dnsUrl) : null,
-      host: dnsHost || null
+      host: dnsHost || null,
+      masked: !!dnsUrl
     },
     ia: {
       DEFAULT_ADJUSTMENTS,

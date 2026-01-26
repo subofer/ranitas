@@ -41,7 +41,30 @@ export default function ConfiguracionPage() {
             {config && (
               <div className="text-xs text-gray-700">
                 <div className="mb-2"><strong>DNS Update Host:</strong> {config.dns.host || 'No configurado'}</div>
-                <div className="mb-2"><strong>DNS Update URL:</strong> <code className="break-all">{config.dns.url || 'No configurado'}</code></div>
+
+                <div className="mb-2">
+                  <div className="flex items-center gap-2">
+                    <strong>DNS Update URL:</strong>
+                    {config.dns.masked ? (
+                      <span className="text-gray-600 text-xs">(token oculto por seguridad)</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <code className="break-all bg-gray-50 px-2 py-1 rounded text-xs">{config.dns.url || 'No configurado'}</code>
+                    <button
+                      className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(config.dns.url || '')
+                          alert('URL (enmascarada) copiada al portapapeles')
+                        } catch (e) {
+                          alert('No se pudo copiar')
+                        }
+                      }}
+                    >Copiar</button>
+                  </div>
+                </div>
+
                 <div className="mb-2"><strong>NODE_ENV:</strong> {config.env.nodeEnv}</div>
                 <div className="mb-2"><strong>IA - Ajustes por defecto:</strong>
                   <pre className="bg-gray-50 p-2 rounded mt-1 text-xs overflow-auto">{JSON.stringify(config.ia.DEFAULT_ADJUSTMENTS, null, 2)}</pre>
