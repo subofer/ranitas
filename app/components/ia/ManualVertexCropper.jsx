@@ -1,7 +1,5 @@
 "use client"
 import React, { useRef, useState, useEffect, useCallback } from 'react'
-import { detectDocumentEdges } from '@/lib/opencvDocumentDetection'
-import { detectDocumentEdgesWorker } from '@/lib/opencvWorkerClient'
 import SafeImage from '@/components/ui/SafeImage'
 
 // Helper: solve 8x8 linear system via Gaussian elimination
@@ -404,175 +402,74 @@ export default function ManualVertexCropper({ src, onCrop, onCancel }) {
     setComparingMode(!comparingMode)
   }
 
-  // Nueva función: Detección automática con OpenCV
-  // Heurística rápida (JS) para detectar si la imagen tiene bordes suficientes
-  const quickEdgeHeuristic = (canvas, smallDim = 256) => {
-    try {
-      const w = canvas.width
-      const h = canvas.height
-      const scale = Math.min(1, smallDim / Math.max(w, h))
-      const c = document.createElement('canvas')
-      c.width = Math.max(1, Math.round(w * scale))
-      c.height = Math.max(1, Math.round(h * scale))
-      const ctx = c.getContext('2d')
-      ctx.drawImage(canvas, 0, 0, c.width, c.height)
-      const img = ctx.getImageData(0, 0, c.width, c.height)
-      const data = img.data
-      let edgeCount = 0
-      const threshold = 20 // simple intensity diff threshold
-
-      for (let y = 0; y < c.height - 1; y++) {
-        for (let x = 0; x < c.width - 1; x++) {
-          const i = (y * c.width + x) * 4
-          const r = data[i], g = data[i+1], b = data[i+2]
-          const v = (r + g + b) / 3
-          const iR = (y * c.width + (x+1)) * 4
-          const r2 = data[iR], g2 = data[iR+1], b2 = data[iR+2]
-          const v2 = (r2 + g2 + b2) / 3
-          const diff = Math.abs(v - v2)
-          if (diff > threshold) edgeCount++
-        }
-      }
-
-      const total = (c.width - 1) * (c.height - 1)
-      const ratio = edgeCount / total
-      // Si menos de 0.3% de pixeles muestran bordes, asumimos que no hay suficientes bordes
-      return ratio > 0.003
-    } catch (e) {
-      return true
-    }
-  }
 
   const detectarAutomaticamente = async () => {
-    console.log('🎯 Iniciando detección automática...')
+    console.log('🎯 Iniciando detección automática (LLM)...')
     setDetectando(true)
     setErrorDeteccion(null)
 
-    // Cancellation flag
-    detectCancelRef.current = false
-
     try {
       const canvas = canvasRef.current
-      if (!canvas) {
-        throw new Error('Canvas no disponible')
-      }
+      if (!canvas) throw new Error('Canvas no disponible')
 
-      // Primera heurística rápida
-      const hasEdges = quickEdgeHeuristic(canvas, 256)
-      if (!hasEdges) {
-        setErrorDeteccion('La imagen no tiene suficientes bordes para una detección automática confiable. Usa el modo manual.')
-        console.warn('⚠️ Heurística rápida falló: pocos bordes detectados')
+      // Prepare abort controller for fetch
+      detectControllerRef.current = new AbortController()
+      const signal = detectControllerRef.current.signal
+
+      // Fetch image blob from src (src is an objectURL/file URL)
+      const imgResp = await fetch(src)
+      if (!imgResp.ok) throw new Error('No se pudo descargar la imagen para enviar al modelo')
+      const blob = await imgResp.blob()
+
+      const fd = new FormData()
+      fd.append('image', blob, 'upload.jpg')
+      fd.append('model', 'qwen2.5-vl')
+
+      const timeoutMs = 20000
+      const timeout = setTimeout(() => {
+        try { detectControllerRef.current?.abort() } catch (e) {}
+      }, timeoutMs)
+
+      const res = await fetch('/api/ai/detect-corners', { method: 'POST', body: fd, signal })
+      clearTimeout(timeout)
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        setErrorDeteccion(err.error || 'Error en detección LLM')
+        console.warn('LLM detection failed', err)
         return
       }
 
-      // Intento rápido (baja resolución) - worker preferente
-      const MAX_DIM_FAST = 512
-      const origW = canvas.width
-      const origH = canvas.height
-      const scaleFast = Math.min(1, MAX_DIM_FAST / Math.max(origW, origH))
-      const fastCanvas = document.createElement('canvas')
-      fastCanvas.width = Math.max(1, Math.round(origW * scaleFast))
-      fastCanvas.height = Math.max(1, Math.round(origH * scaleFast))
-      fastCanvas.getContext('2d').drawImage(canvas, 0, 0, fastCanvas.width, fastCanvas.height)
-      tempDetectWidthRef.current = fastCanvas.width
-
-      let resultado = null
-      // Primero intentar con Worker (más seguro para no bloquear UI)
-      // Setup abort controller for fast attempt
-      detectControllerRef.current = new AbortController()
-      try {
-        const workerResultFast = await detectDocumentEdgesWorker(fastCanvas, 5000, detectControllerRef.current.signal)
-        if (workerResultFast) {
-          if (workerResultFast.debug) {
-            const blob = await workerResultFast.debug.convertToBlob()
-            setDebugImage(URL.createObjectURL(blob))
-            setDebugInfo(workerResultFast.diagnostics)
-          }
-          resultado = workerResultFast.points
-        }
-      } catch (fastErr) {
-        if (fastErr && fastErr.message && fastErr.message.includes('cancel')) {
-          console.warn('Detección rápida cancelada por usuario')
-        } else {
-          console.warn('Intento rápido con worker falló (no se ejecutará fallback en main-thread para evitar bloquear la UI):', fastErr.message)
-          // Para evitar colgar la UI, no intentamos la detección main-thread aquí
-          resultado = null
-        }
-      } finally {
-        // Clean up fast abort controller
-        if (detectControllerRef.current) { try { detectControllerRef.current = null } catch (e) {} }
-      }
-
-      if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
-
-      if (resultado && resultado.length === 4) {
-        const pointsMapped = resultado.map(p => ({ x: Math.round(p.x / (scaleFast || 1)), y: Math.round(p.y / (scaleFast || 1)) }))
-        setPoints(pointsMapped)
-        setErrorDeteccion(null)
-        console.log('✅ Detección rápida exitosa', pointsMapped)
+      const data = await res.json()
+      if (!data.ok) {
+        setErrorDeteccion(data.error || 'Detección con LLM no devolvió resultado')
+        console.warn('LLM responded with error:', data)
         return
       }
 
-      // Intento completo (resolución moderada) - worker preferente
-      const MAX_DIM = 900
-      const scaleFactor = Math.min(1, MAX_DIM / Math.max(origW, origH))
-      const tempCanvas = document.createElement('canvas')
-      tempCanvas.width = Math.max(1, Math.round(origW * scaleFactor))
-      tempCanvas.height = Math.max(1, Math.round(origH * scaleFactor))
-      tempCanvas.getContext('2d').drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height)
-      tempDetectWidthRef.current = tempCanvas.width
-
-      const timeoutMs = 10000
-      // Setup abort controller for full attempt
-      detectControllerRef.current = new AbortController()
-      try {
-        const workerResult = await detectDocumentEdgesWorker(tempCanvas, timeoutMs, detectControllerRef.current.signal)
-        if (workerResult) {
-          resultado = workerResult.points
-          if (workerResult.debug) {
-            // Save debug image to show in UI
-            setDebugDims({ w: workerResult.debug.width, h: workerResult.debug.height })
-            const blob = await workerResult.debug.convertToBlob()
-            setDebugImage(URL.createObjectURL(blob))
-            setDebugInfo(workerResult.diagnostics)
-          }
-        }
-      } catch (e) {
-        if (e && e.message && e.message.includes('cancel')) {
-          console.warn('Detección completa cancelada por usuario')
-        } else {
-          console.warn('Worker detection (full) failed (no fallback main-thread to avoid blocking the UI):', e.message)
-          resultado = null
-        }
-      } finally {
-        // Clean up full abort controller
-        if (detectControllerRef.current) { try { detectControllerRef.current = null } catch (e) {} }
-      }
-
-      if (detectCancelRef.current) throw new Error('Detección cancelada por el usuario')
-
-      if (resultado && resultado.length === 4) {
-        const puntosEscalados = resultado.map(p => ({ x: Math.round(p.x / (scaleFactor || 1)), y: Math.round(p.y / (scaleFactor || 1)) }))
-        setPoints(puntosEscalados)
+      // data.points are absolute coords in original image. Map to canvas coords (canvas may be scaled)
+      const scale = canvas.dataset.scale ? Number(canvas.dataset.scale) : 1
+      const mapped = (data.points || []).map(p => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) }))
+      if (mapped.length === 4) {
+        setPoints(mapped)
+        setDebugDims({ w: data.optimized?.width || 300, h: data.optimized?.height || 200 })
+        if (data.debug) setDebugImage('data:image/png;base64,' + data.debug)
         setErrorDeteccion(null)
-        console.log('✅ Detección exitosa:', puntosEscalados)
+        console.log('✅ Detección LLM exitosa', mapped)
       } else {
-        setErrorDeteccion('No se pudo detectar el documento automáticamente. Usa el modo manual o prueba con otra foto.')
-        console.warn('⚠️ No se detectaron 4 esquinas')
-        // If we have debug info with candidate polygons, offer to use them
-        if (debugInfo && debugInfo.candidates && debugInfo.candidates.length) {
-          setErrorDeteccion('No se detectaron 4 esquinas exactamente. Revisa la imagen debug y puedes "Usar guía" para establecer un candidato.')
-        }
+        setErrorDeteccion('LLM no devolvió 4 puntos válidos')
+        console.warn('LLM no devolvió 4 puntos válidos', data)
       }
-    } catch (error) {
-      if (error.message && error.message.includes('cancelada')) {
+    } catch (err) {
+      if (err.name === 'AbortError') {
         setErrorDeteccion('Detección cancelada')
       } else {
-        console.error('❌ Error en detección automática:', error)
-        setErrorDeteccion(`Error: ${error.message}. Usa el modo manual.`)
+        console.error('❌ Error en detección con LLM:', err)
+        setErrorDeteccion(`Error: ${err.message}`)
       }
     } finally {
       setDetectando(false)
+      if (detectControllerRef.current) detectControllerRef.current = null
     }
   }
 
