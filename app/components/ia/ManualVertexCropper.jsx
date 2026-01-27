@@ -96,6 +96,9 @@ function bilinearSample(srcData, sx, sy, width, height) {
 function ManualVertexCropper({ src, onCrop, onCancel }) {
   const canvasRef = useRef(null)
   const previewCanvasRef = useRef(null)
+  // New: separate canvases for side-by-side comparison
+  const origPreviewRef = useRef(null)
+  const enhancedPreviewRef = useRef(null)
   const imgRef = useRef(null)
   const detectControllerRef = useRef(null)
   // For drawing a box by dragging (start point + drag to size)
@@ -304,8 +307,8 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     tctx.drawImage(img,0,0)
     const srcData = tctx.getImageData(0,0,tmpCanvas.width, tmpCanvas.height)
 
-    // Create dest canvas for preview
-    const prevCanvas = previewCanvasRef.current
+    // Create dest canvas for preview (original crop)
+    const prevCanvas = origPreviewRef.current || previewCanvasRef.current
     if (!prevCanvas) return
     prevCanvas.width = dstW
     prevCanvas.height = dstH
@@ -330,6 +333,16 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     }
 
     dctx.putImageData(dstImage, 0, 0)
+
+    // Ensure enhanced canvas matches size for side-by-side comparison (blank until enhanced result arrives)
+    const enhCanvas = enhancedPreviewRef.current
+    if (enhCanvas) {
+      enhCanvas.width = dstW
+      enhCanvas.height = dstH
+      const ectx = enhCanvas.getContext('2d')
+      ectx.clearRect(0,0,dstW,dstH)
+      // optionally draw a faint overlay or 'No data' label — for now keep blank
+    }
   }, [points])
   
   // Regenerar preview cuando se mueven los puntos (solo si está en modo comparación)
@@ -482,7 +495,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
 
   // React component: RestoreButton - creates a preview crop (if needed), sends it to /api/yolo/restore
-  function RestoreButton({ points, previewCanvasRef, setErrorDeteccion, generatePreview }) {
+  function RestoreButton({ points, setErrorDeteccion, generatePreview }) {
     const [restoring, setRestoring] = useState(false) 
 
     const doRestore = async () => {
@@ -497,7 +510,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         await new Promise(r => setTimeout(r, 120))
       }
 
-      const prevCanvas = previewCanvasRef.current
+      const prevCanvas = origPreviewRef.current || previewCanvasRef.current
       if (!prevCanvas) { setErrorDeteccion('No hay preview para restaurar'); return }
 
       setRestoring(true)
@@ -555,13 +568,18 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (data.restored_image_base64) {
           const img = new Image()
           img.onload = () => {
-            const pc = previewCanvasRef.current
-            if (!pc) return
-            pc.width = img.width
-            pc.height = img.height
-            const ctx = pc.getContext('2d')
-            ctx.clearRect(0,0,pc.width, pc.height)
-            ctx.drawImage(img, 0, 0)
+            const origCanvas = origPreviewRef.current || previewCanvasRef.current
+            const enhCanvas = enhancedPreviewRef.current || previewCanvasRef.current
+            if (!origCanvas || !enhCanvas) return
+
+            // Ensure enhanced canvas matches original preview size for side-by-side
+            enhCanvas.width = origCanvas.width
+            enhCanvas.height = origCanvas.height
+            const ctx = enhCanvas.getContext('2d')
+            ctx.clearRect(0,0,enhCanvas.width, enhCanvas.height)
+            // Draw server restored image scaled to match orig canvas
+            ctx.drawImage(img, 0, 0, enhCanvas.width, enhCanvas.height)
+
             setPreviewGenerated(true)
             // Store enhanced preview and file (for saving when user accepts the crop)
             (async () => {
@@ -714,7 +732,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       await new Promise(r => setTimeout(r, 160))
     }
 
-    const prevCanvas = previewCanvasRef.current
+    const prevCanvas = origPreviewRef.current || previewCanvasRef.current
     if (!prevCanvas) { setErrorDeteccion('No hay preview para mejorar'); return }
 
     setEnhancingHeader(true)
@@ -727,10 +745,12 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       fd.append('enhance', '1')
 
       // Agregar parámetros de mejora desde localStorage
+      let sentParams = {}
       try {
         const params = localStorage.getItem('imageEnhancementParams')
         if (params) {
           const parsed = JSON.parse(params)
+          sentParams = parsed
           if (parsed.clahe_clip !== undefined) fd.append('clahe_clip', parsed.clahe_clip)
           if (parsed.kernel_size !== undefined) fd.append('kernel_size', parsed.kernel_size)
           if (parsed.shadow_threshold !== undefined) fd.append('shadow_threshold', parsed.shadow_threshold)
@@ -745,6 +765,10 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
       // Push event + overlay
       pushRestoreEvent('Enviando imagen al servicio...')
+      if (Object.keys(sentParams).length > 0) {
+        pushRestoreEvent('Parámetros enviados: ' + JSON.stringify(sentParams))
+        setDebugInfo(prev => ({ ...prev, sentParams }))
+      }
       setProcessingPreview(true)
 
       const res = await fetch(`${VISION_SERVICE_URL}/restore`, { method: 'POST', body: fd })
@@ -767,13 +791,16 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (data.restored_image_base64) {
         const img = new Image()
         img.onload = () => {
-          const pc = previewCanvasRef.current
-          if (!pc) return
-          pc.width = img.width
-          pc.height = img.height
-          const ctx = pc.getContext('2d')
-          ctx.clearRect(0,0,pc.width, pc.height)
-          ctx.drawImage(img, 0, 0)
+          const origCanvas = origPreviewRef.current || previewCanvasRef.current
+          const enhCanvas = enhancedPreviewRef.current || previewCanvasRef.current
+          if (!origCanvas || !enhCanvas) return
+
+          enhCanvas.width = origCanvas.width
+          enhCanvas.height = origCanvas.height
+          const ctx = enhCanvas.getContext('2d')
+          ctx.clearRect(0,0,enhCanvas.width, enhCanvas.height)
+          ctx.drawImage(img, 0, 0, enhCanvas.width, enhCanvas.height)
+
           setPreviewGenerated(true)
           // Store enhanced preview and file for later saving
           (async () => {
@@ -787,7 +814,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
               console.warn('No se pudo crear archivo de versión mejorada:', e)
             }
           })()
-          setDebugInfo(prev => ({ ...prev, restoredModel: data.model, restoredTimingMs: data.timing_ms }))
+          setDebugInfo(prev => ({ ...prev, restoredModel: data.model, restoredTimingMs: data.timing_ms, restoredParams: data.params }))
           if (data.fallback) {
             pushRestoreEvent('Se aplicó fallback conservador')
             setRestoreStatus('Se aplicó fallback conservador')
@@ -826,13 +853,14 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       setPreviewGenerated(true)
       await new Promise(r => setTimeout(r, 120))
     }
-    const pc = previewCanvasRef.current
-    if (!pc) { setErrorDeteccion('No hay preview para mejorar'); return }
+    const orig = origPreviewRef.current || previewCanvasRef.current
+    const enh = enhancedPreviewRef.current || previewCanvasRef.current
+    if (!orig || !enh) { setErrorDeteccion('No hay preview para mejorar'); return }
 
     // Work on a temporary canvas (scale down for speed)
     const maxW = 800
-    const w = pc.width
-    const h = pc.height
+    const w = orig.width
+    const h = orig.height
     const scale = Math.min(1, maxW / w)
     const tw = Math.max(1, Math.round(w * scale))
     const th = Math.max(1, Math.round(h * scale))
@@ -841,7 +869,8 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     tmp.width = tw
     tmp.height = th
     const tctx = tmp.getContext('2d')
-    tctx.drawImage(pc, 0, 0, tw, th)
+    tctx.drawImage(orig, 0, 0, tw, th)
+
 
     let imgData = tctx.getImageData(0,0,tw,th)
     const data = imgData.data
@@ -911,14 +940,14 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
     tctx.putImageData(imgData, 0, 0)
 
-    // Draw back to preview canvas at original size
-    const pcCtx = pc.getContext('2d')
-    pc.width = w
-    pc.height = h
-    pcCtx.clearRect(0,0,w,h)
-    pcCtx.drawImage(tmp, 0, 0, tw, th, 0, 0, w, h)
+    // Draw local enhancement into enhanced canvas scaled to orig size
+    enh.width = w
+    enh.height = h
+    const enhCtx = enh.getContext('2d')
+    enhCtx.clearRect(0,0,w,h)
+    enhCtx.drawImage(tmp, 0, 0, tw, th, 0, 0, w, h)
 
-    const png = pc.toDataURL('image/png')
+    const png = enh.toDataURL('image/png')
     // Save local enhancement result as enhanced preview/file
     (async () => {
       try {
@@ -1113,22 +1142,30 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
               />
             </div>
 
-            {/* Preview panel (separate, does not overlay) */}
+            {/* Preview panel (side-by-side original / enhanced) */}
             {previewGenerated && (
               <div className="w-full md:w-1/3 flex flex-col items-center p-3 bg-white rounded shadow-sm relative">
                 <div className="relative w-full">
-                  <canvas
-                    ref={previewCanvasRef}
-                    className="w-full h-auto border-2 border-green-400 rounded shadow-lg"
-                  />
-                  {processingPreview && (
-                    <div className="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center rounded">
-                      <div className="text-center text-white">
-                        <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                        <div className="text-sm font-medium">Procesando...</div>
-                      </div>
+                  <div className="flex gap-3">
+                    <div className="flex-1 flex flex-col items-center">
+                      <div className="text-xs font-semibold mb-1">Original</div>
+                      <canvas ref={origPreviewRef} className="w-full h-auto border-2 border-gray-300 rounded shadow-sm" />
                     </div>
-                  )}
+
+                    <div className="flex-1 flex flex-col items-center relative">
+                      <div className="text-xs font-semibold mb-1">Mejorada</div>
+                      <canvas ref={enhancedPreviewRef} className="w-full h-auto border-2 border-green-400 rounded shadow-lg" />
+
+                      {processingPreview && (
+                        <div className="absolute right-0 top-6 w-1/2 h-[calc(100%-1.5rem)] bg-black bg-opacity-40 flex items-center justify-center rounded">
+                          <div className="text-center text-white">
+                            <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                            <div className="text-sm font-medium">Procesando...</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <p className="text-xs text-green-300 mt-2 font-medium">✓ Vista previa del crop enderezado</p>
               </div>
@@ -1164,7 +1201,6 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
             <RestoreButton 
               points={points} 
               canvasRef={canvasRef} 
-              previewCanvasRef={previewCanvasRef} 
               setErrorDeteccion={setErrorDeteccion} 
               generatePreview={generatePreview} 
             />
