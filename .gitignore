@@ -36,3 +36,49 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 cementerio/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.env
+.env.*
+.venv/
+venv/
+env/
+venv*/
+.Python
+pip-wheel-metadata/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.tox/
+.coverage
+.cache/
+
+# Venvs y dependencias de servicios Python
+services/**/.venv/
+services/**/venv/
+services/**/__pycache__/
+services/**/*.pyc
+services/**/.pytest_cache/
+services/**/.mypy_cache/
+# Local service logs
+services/**/*.log
+
+# Modelos de ML (grandes archivos binarios)
+services/yolo/models/*.pt
+services/yolo/models/*.pth
+services/yolo/models/*.onnx
+*.pt
+*.pth
+*.onnx
+!**/requirements.txt
+
+# Editor
+.vscode/
+.idea/

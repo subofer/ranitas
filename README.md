@@ -77,6 +77,14 @@ cp configEnv .env.local
 # Editar .env.local con tus configuraciones
 ```
 
+> 🔧 Nota: Si trabajaste con el servicio de visión localmente, puedes limpiar artefactos Python (entornos `.venv`, `__pycache__`, `*.pyc`, `*.log`) con:
+>
+> ```bash
+> ./scripts/cleanup-python-artifacts.sh --dry-run
+> ./scripts/cleanup-python-artifacts.sh
+> ```
+> El script opera sólo dentro de `services/` y no borra los modelos en `services/yolo/models/`.
+
 ### 5. Ejecutar migraciones
 ```bash
 npm run prisma:migrate

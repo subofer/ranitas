@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "clean": "pkill -9 node || true && rm -rf .next && npm run build && npm run dev",
+    "clean:python": "bash scripts/cleanup-python-artifacts.sh",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:psql": "docker exec -it $(docker ps -qf name=postgres) psql -U postgres",
