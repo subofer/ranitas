@@ -15,5 +15,42 @@ services:
       timeout: 3s
       retries: 10
 
+  vision:
+    build:
+      context: ./services/yolo
+      dockerfile: Dockerfile
+    container_name: ranitas-vision
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/yolo/models:/app/models
+      - vision-cache:/root/.cache
+      - vision-ollama:/root/.ollama
+      # Mount host timezone so container logs/timestamps match host
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      - YOLO_MODEL_PATH=/app/models/yolo11n-seg.pt
+      - YOLO_CONF=0.25
+      - MASK_THRESHOLD=0.5
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
+      - OLLAMA_HOST=http://127.0.0.1:11434
++      # Set to 0 to avoid auto-pulling the configured OLLAMA model on every container start
++      - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-1}
++      # Container timezone (set TZ in your environment or .env to match host timezone, default UTC)
++      - TZ=${TZ:-UTC}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
 volumes:
   dbdata:
+  vision-cache:
+  vision-ollama:
