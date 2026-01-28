@@ -1,7 +1,9 @@
 "use client"
 import React, { useState, useEffect, useRef } from 'react'
-import { useOllamaStatusContext } from '@/context/OllamaStatusContext'
-import ImageCropper from './ImageCropper'
+import Image from 'next/image'
+import { useVisionStatusContext } from '@/context/OllamaStatusContext'
+// ImageCropper modal moved to 'cementerio' — preserved as commented JSX below
+// import ImageCropper from './ImageCropper'
 import FilterSelect from '../formComponents/FilterSelect'
 import { 
   buscarProveedor, 
@@ -50,9 +52,21 @@ export default function IaImage({ model, preloadModel }) {
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState('factura')
   const [metadata, setMetadata] = useState(null)
-  const [showCropper, setShowCropper] = useState(false)
-  const [tempFile, setTempFile] = useState(null)
-  const [tempPreview, setTempPreview] = useState(null)
+  // showCropper modal retired (moved to cementerio). Use inline manual cropper instead.
+  // const [showCropper, setShowCropper] = useState(false)
+  // const [tempFile, setTempFile] = useState(null)
+  // const [tempPreview, setTempPreview] = useState(null)
+
+  // Live streaming preview states
+  const [streaming, setStreaming] = useState(false)
+  const [streamCrop, setStreamCrop] = useState(null)
+  const [streamCropPoints, setStreamCropPoints] = useState(null)
+  const [streamRestored, setStreamRestored] = useState(null)
+  const [streamInferPreview, setStreamInferPreview] = useState(null)
+  const [streamInferMeta, setStreamInferMeta] = useState(null)
+  const [streamOcr, setStreamOcr] = useState(null)
+  const [streamItems, setStreamItems] = useState(null)
+  const [streamError, setStreamError] = useState(null)
   
   const [proveedorEncontrado, setProveedorEncontrado] = useState(null)
   const [productosBuscados, setProductosBuscados] = useState({})
@@ -81,8 +95,11 @@ export default function IaImage({ model, preloadModel }) {
   
   // Estados para permitir deshacer auto-enfoque
   const [imagenOriginal, setImagenOriginal] = useState(null)
+  const [imagenMejorada, setImagenMejorada] = useState(null) // archivo mejorado (si aplica)
   const [previewOriginal, setPreviewOriginal] = useState(null)
   const [autoEnfoqueAplicado, setAutoEnfoqueAplicado] = useState(false)
+  // Estado para indicar si la imagen que se muestra es la original, mejorada o recortada
+  const [imagenStatus, setImagenStatus] = useState('original') // 'original' | 'mejorada' | 'recortada'
   // Estado para drag & drop
   const [dragActive, setDragActive] = useState(false)
   
@@ -94,8 +111,8 @@ export default function IaImage({ model, preloadModel }) {
   const autoEnfocar = useImageAutoFocus()
   const aplicarTransformaciones = useImageTransformations(preview, imgOriginalRef, canvasRef, ajustes, zoom, pan)
   
-  // Estado de Ollama (para saber si el modelo está cargado)
-  const { getModelStatus } = useOllamaStatusContext()
+  // Estado de IA local (para saber si el modelo está cargado)
+  const { getModelStatus } = useVisionStatusContext()
   
   // Efectos
   useEffect(() => {
@@ -127,10 +144,14 @@ export default function IaImage({ model, preloadModel }) {
       })
       
       // Auto-enfocar después de un momento
-      setTimeout(() => {
+      setTimeout(async () => {
         try {
-          autoEnfocar(f, url, setFile, setPreview, preview)
-          setAutoEnfoqueAplicado(true)
+          const applied = await autoEnfocar(f, url, setFile, setPreview, preview)
+          setAutoEnfoqueAplicado(Boolean(applied))
+          if (!applied) {
+            // Auto-enfoque no detectó nada útil → abrir recorte manual en la pantalla principal
+            setManualCropOpen(true)
+          }
         } catch (ae) {
           console.error('Error en auto-enfoque:', ae)
           setErrorMessage('No se pudo aplicar el preprocesamiento automático de la imagen.')
@@ -214,11 +235,10 @@ export default function IaImage({ model, preloadModel }) {
     }
   }
 
+  // Open inline manual cropper instead of modal
   const abrirCropper = () => {
     if (!file) return
-    setTempFile(file)
-    setTempPreview(preview)
-    setShowCropper(true)
+    setManualCropOpen(true)
   }
 
   const abrirManualCrop = () => {
@@ -226,38 +246,66 @@ export default function IaImage({ model, preloadModel }) {
     setManualCropOpen(true)
   }
 
-  const handleCrop = (images) => {
-    // images = { cropped: {file, preview}, original: {file, preview} }
-    
-    // La imagen croppeada se usa para mostrar y enviar al LLM
-    setFile(images.cropped.file)
-    setPreview(images.cropped.preview)
-    
+  const handleCrop = async (images) => {
+    // images = { cropped: {file, preview}, original: {file, preview}, enhanced?: {file, preview} }
+
+    // Si existe una versión mejorada, usarla como imagen principal
+    const primary = images.enhanced || images.cropped
+
+    // La imagen croppeada (o mejorada) se usa para mostrar y enviar al LLM
+    setFile(primary.file)
+    setPreview(primary.preview)
+
     // La original se guarda para la base de datos
     setImagenOriginal(images.original.file)
     setPreviewOriginal(images.original.preview)
-    
+
+    // Guardar referencia a la imagen mejorada si existe (para auditoría/debug)
+    try {
+      if (images.enhanced) {
+        setImagenMejorada(images.enhanced.file)
+        setImagenStatus('mejorada')
+        // Auditoría: usuario aceptó imagen mejorada desde crop manual
+        await guardarAuditoriaEdicion({
+          campo: 'IMAGEN_MEJORADA',
+          valorAnterior: null,
+          valorNuevo: images.enhanced.file.name,
+          contexto: { source: 'manual_crop', method: 'enhanced' }
+        })
+      } else {
+        // Si no hay mejora, es un crop simple
+        setImagenMejorada(null)
+        setImagenStatus('recortada')
+        await guardarAuditoriaEdicion({
+          campo: 'IMAGEN_RECORTADA',
+          valorAnterior: null,
+          valorNuevo: images.cropped.file.name,
+          contexto: { source: 'manual_crop', method: 'crop_only' }
+        })
+      }
+    } catch (e) {
+      console.warn('No se pudo guardar auditoría de crop/mejora:', e)
+    }
+
     setResult(null)
     setMetadata(null)
-    setShowCropper(false)
+    // Close inline cropper
     setManualCropOpen(false)
-    setTempFile(null)
-    setTempPreview(null)
 
-    // Re-aplicar auto-enfoque y preprocesamiento SOLO a la croppeada (para LLM)
+    // Re-aplicar auto-enfoque y preprocesamiento sobre la imagen principal (mejorada si existe)
     setTimeout(() => {
-      autoEnfocar(images.cropped.file, images.cropped.preview, setFile, setPreview, preview)
-      setAutoEnfoqueAplicado(true)
+      try {
+        autoEnfocar(primary.file, primary.preview, setFile, setPreview, preview)
+        setAutoEnfoqueAplicado(true)
+      } catch (e) {
+        console.warn('No se pudo re-aplicar auto-enfoque en la imagen aceptada:', e)
+      }
     }, 100)
   }
   
+  // Cancel no longer supports modal flow; close inline cropper instead
   const handleCancelCrop = () => {
-    setShowCropper(false)
-    setTempFile(null)
-    if (tempPreview) {
-      URL.revokeObjectURL(tempPreview)
-    }
-    setTempPreview(null)
+    setManualCropOpen(false)
   }
   
   // Función helper para esperar que un modelo se cargue
@@ -284,18 +332,37 @@ export default function IaImage({ model, preloadModel }) {
     try {
       const status = getModelStatus(model)
       if (status === 'unloaded' && typeof preloadModel === 'function') {
-        console.log('🔄 Modelo no cargado, iniciando precarga...')
-        
-        // Llamar a preloadModel para iniciar la carga
-        await preloadModel()
-        
-        // Esperar a que el modelo se cargue monitoreando el estado
-        console.log('⏳ Esperando que el modelo se cargue...')
+        console.log('🔄 Modelo no cargado, comprobando fallback heurístico...')
         try {
-          await waitForModelLoad(model, 300000) // Timeout de 5 minutos
-          console.log('✅ Modelo cargado, continuando con análisis...')
-        } catch (waitErr) {
-          console.warn('Timeout esperando modelo, intentando analizar de todas formas:', waitErr)
+          // Verificar si el parser heurístico ya está cargado para evitar esperas largas
+          const ms = await fetch('/api/ai/status')
+          const msj = await ms.json()
+          const loadedNames = (msj.loadedModels || []).map(m => m.name)
+          if (loadedNames.includes('heuristic/parser')) {
+            console.warn('Heurístico disponible → usando heuristic/parser en lugar de esperar carga del modelo solicitado')
+            setModel('heuristic/parser')
+          } else {
+            // Si heurístico no está, iniciar precarga del modelo y esperar (con timeout)
+            console.log('🔄 Heurístico no disponible; iniciando precarga del modelo solicitado...')
+            await preloadModel()
+            console.log('⏳ Esperando que el modelo se cargue...')
+            try {
+              await waitForModelLoad(model, 300000) // Timeout de 5 minutos
+              console.log('✅ Modelo cargado, continuando con análisis...')
+            } catch (waitErr) {
+              console.warn('Timeout esperando modelo, intentando analizar de todas formas:', waitErr)
+              // Reintentar ver heurístico y hacer fallback si aparece
+              const ms2 = await fetch('/api/ai/status')
+              const msj2 = await ms2.json()
+              const loaded2 = (msj2.loadedModels || []).map(m => m.name)
+              if (!loaded2.includes(model) && loaded2.includes('heuristic/parser')) {
+                console.warn('Modelo no cargado → fallback automático a heuristic/parser')
+                setModel('heuristic/parser')
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('No se pudo comprobar o precargar el modelo:', err)
         }
       }
     } catch (err) {
@@ -548,7 +615,8 @@ export default function IaImage({ model, preloadModel }) {
       // Si tenemos el archivo de la factura en `file`, convertirlo a data URL y adjuntarlo
       // IMPORTANTE: Guardar la imagen ORIGINAL (sin crop ni procesamiento) en la BD
       // Pero si no hay original, usar la procesada (file)
-      const imagenParaGuardar = imagenOriginal || file
+      // Preferir guardar la versión mejorada si existe, sino la original, sino la crop
+      const imagenParaGuardar = imagenMejorada || imagenOriginal || file
       
       if (imagenParaGuardar) {
         const fileToDataUrl = (f) => new Promise((resolve, reject) => {
@@ -561,7 +629,16 @@ export default function IaImage({ model, preloadModel }) {
         try {
           const dataUrl = await fileToDataUrl(imagenParaGuardar)
           datosFactura.imagen = dataUrl
-          console.log('💾 Guardando imagen original en BD:', imagenParaGuardar.name)
+          console.log('💾 Guardando imagen en BD (preferencia aplicada):', imagenParaGuardar.name)
+
+          // Adjuntar metadatos de mejora si existieran
+          if (debugInfo?.restoredModel || debugInfo?.restoredParams || debugInfo?.enhancedSaved) {
+            datosFactura.imagen_meta = {
+              restoredModel: debugInfo?.restoredModel || null,
+              restoredParams: debugInfo?.restoredParams || null,
+              enhancedSaved: !!debugInfo?.enhancedSaved
+            }
+          }
         } catch (e) {
           console.warn('No se pudo convertir la imagen a base64 para guardar:', e.message)
         }
@@ -622,6 +699,99 @@ export default function IaImage({ model, preloadModel }) {
       alert('❌ Error guardando factura: ' + error.message)
     } finally {
       setGuardandoFactura(false)
+    }
+  }
+
+  // Start a streaming preview from the vision microservice (SSE-like chunked JSON)
+  const startLiveProcessing = async () => {
+    if (!file) return
+    setStreaming(true)
+    setStreamCrop(null)
+    setStreamCropPoints(null)
+    setStreamRestored(null)
+    setStreamOcr(null)
+    setStreamItems(null)
+    setStreamError(null)
+
+    try {
+      const VISION_HOST = process.env.NEXT_PUBLIC_VISION_HOST || 'http://localhost:8000'
+      const form = new FormData()
+      form.append('image', file)
+      form.append('mode', mode)
+      form.append('enhance', '1')
+      form.append('auto_crop', '1')
+      form.append('stream', '1')
+
+      const res = await fetch(`${VISION_HOST}/restore`, { method: 'POST', body: form })
+      if (!res.ok) {
+        const txt = await res.text()
+        setStreamError(`Streaming request failed: ${res.status} ${res.statusText} - ${txt}`)
+        setStreaming(false)
+        return
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buf = ''
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        // SSE-ish payloads separated by double newline
+        const parts = buf.split('\n\n')
+        for (let i = 0; i < parts.length - 1; i++) {
+          const part = parts[i].trim()
+          if (!part) continue
+          // Each event is expected as: data: <json>
+          const lines = part.split('\n').map(l => l.trim())
+          for (const ln of lines) {
+            if (ln.startsWith('data:')) {
+              const raw = ln.replace(/^data:\s*/, '')
+              try {
+                const ev = JSON.parse(raw)
+                // Handle stages
+                if (ev.stage === 'crop') {
+                  setStreamCrop(ev.crop_image_base64 || null)
+                  setStreamCropPoints(ev.crop_points || null)
+                } else if (ev.stage === 'restored') {
+                  setStreamRestored(ev.restored_image_base64 || null)
+                } else if (ev.stage === 'ocr') {
+                  setStreamOcr(ev.ocr_text || null)
+                  if (ev.infer_preview_base64) {
+                    setStreamInferPreview(ev.infer_preview_base64)
+                    setStreamInferMeta(ev.infer_preview_meta || null)
+                  }
+                } else if (ev.stage === 'formatted_items') {
+                  setStreamItems(ev.items || null)
+                } else if (ev.stage === 'final') {
+                  // Apply final parsed extraction to UI but keep streaming previews
+                  if (ev.extraction) {
+                    setParsedData(ev.extraction)
+                  }
+                  if (ev.restored_image_base64) setStreamRestored(ev.restored_image_base64)
+                  if (ev.crop_image_base64) setStreamCrop(ev.crop_image_base64)
+                  if (ev.inference_image_base64) {
+                    setStreamInferPreview(ev.inference_image_base64)
+                    setStreamInferMeta(ev.inference_image_meta || null)
+                  }
+                } else if (ev.stage === 'error') {
+                  setStreamError(ev.error || 'Unknown')
+                }
+              } catch (e) {
+                console.warn('Failed to parse stream event JSON:', e, raw)
+              }
+            }
+          }
+        }
+        buf = parts[parts.length - 1]
+      }
+
+    } catch (err) {
+      console.error('Streaming preview failed:', err)
+      setStreamError(err.message || String(err))
+    } finally {
+      setStreaming(false)
     }
   }
   
@@ -780,6 +950,7 @@ export default function IaImage({ model, preloadModel }) {
 
   return (
     <div className="grid gap-4">
+      {/* CEMENTERIO: Former modal cropper preserved here for reference; not used in current flow.
       {showCropper && tempPreview && (
         <ImageCropper 
           src={tempPreview}
@@ -789,6 +960,7 @@ export default function IaImage({ model, preloadModel }) {
           onCancel={handleCancelCrop}
         />
       )}
+      */}
       {preview && mode === 'factura' && (
         <div className="grid lg:grid-cols-2 gap-4">
           {/* Columna izquierda: Imagen */}
@@ -814,6 +986,7 @@ export default function IaImage({ model, preloadModel }) {
             panStart={panStart}
             setPanStart={setPanStart}
             onManualCrop={abrirManualCrop}
+            headerText={imagenStatus === 'mejorada' ? '📄 Imagen mejorada' : imagenStatus === 'recortada' ? '📄 Imagen recortada' : '📄 Imagen original'}
           />
 
           {manualCropOpen && (
@@ -837,7 +1010,7 @@ export default function IaImage({ model, preloadModel }) {
                   <div className="text-xs text-gray-500 mt-1 space-y-0.5">
                     <div>
                       ⏱️ Tiempo: {(metadata.timing.totalMs / 1000).toFixed(3)}s ({metadata.timing.totalMs} ms)
-                      {metadata.timing.ollamaMs ? ` • Ollama: ${metadata.timing.ollamaMs} ms` : ''}
+                      {metadata.timing.visionMs ? ` • IA: ${metadata.timing.visionMs} ms` : ''}
                     </div>
                     {metadata.image?.reduction && (
                       <div className="text-green-600 font-medium">
@@ -980,13 +1153,24 @@ export default function IaImage({ model, preloadModel }) {
                 )}
                 
                 {!loading && (
-                  <button 
-                    className="w-full px-6 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors font-bold text-lg shadow-lg"
-                    onClick={submit} 
-                    disabled={!file}
-                  >
-                    🚀 Analizar Factura
-                  </button>
+                  <div className="flex gap-3">
+                    <button 
+                      className="flex-1 px-6 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors font-bold text-lg shadow-lg"
+                      onClick={submit} 
+                      disabled={!file}
+                    >
+                      🚀 Analizar Factura
+                    </button>
+
+                    <button
+                      className={`px-4 py-4 bg-white border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors font-bold text-lg shadow-sm ${!file ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={startLiveProcessing}
+                      disabled={!file || streaming}
+                      title="Muestra recorte y mejora en tiempo real"
+                    >
+                      {streaming ? '⏳ Vista previa...' : '👁️ Vista previa'}
+                    </button>
+                  </div>
                 )}
                 
                 {loading && (
@@ -995,6 +1179,81 @@ export default function IaImage({ model, preloadModel }) {
                   </div>
                 )}
                 
+                {(streamCrop || streamRestored || streamItems || streamOcr || streamError) && (
+                  <div className="mt-4 grid grid-cols-2 gap-3 items-start">
+                    {streamCrop && (
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 mb-1">✂️ Recorte (preview)</div>
+                        <div className="relative w-full" style={{ minHeight: 120 }}>
+                          <Image
+                            src={`data:image/png;base64,${streamCrop}`}
+                            alt="crop preview"
+                            unoptimized={true}
+                            className="rounded-lg border"
+                            width={800}
+                            height={600}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {streamRestored && (
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 mb-1">✨ Mejorada (preview)</div>
+                        <div className="relative w-full" style={{ minHeight: 120 }}>
+                          <Image
+                            src={`data:image/png;base64,${streamRestored}`}
+                            alt="restored preview"
+                            unoptimized={true}
+                            className="rounded-lg border"
+                            width={800}
+                            height={600}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {streamInferPreview && (
+                      <div className="text-center">
+                        <div className="text-xs text-gray-600 mb-1">🔎 Infer preview (enviado a OCR/LLM)</div>
+                        <div className="relative w-full" style={{ minHeight: 120 }}>
+                          <Image
+                            src={`data:image/jpeg;base64,${streamInferPreview}`}
+                            alt="infer preview"
+                            unoptimized={true}
+                            className="rounded-lg border"
+                            width={800}
+                            height={600}
+                          />
+                        </div>
+                        {streamInferMeta && (
+                          <div className="text-xs text-muted mt-1">{streamInferMeta.width}×{streamInferMeta.height} • {Math.round((streamInferMeta.size_bytes||0)/1024)}KB • q{streamInferMeta.quality} • {streamInferMeta.gray ? 'grayscale' : 'color'}</div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="col-span-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-2">
+                      {streamOcr && (
+                        <div className="mb-2">
+                          <div className="font-medium text-xs text-gray-600">🔤 OCR (preview)</div>
+                          <pre className="text-xs mt-1 max-h-28 overflow-auto bg-white p-2 rounded border">{streamOcr}</pre>
+                        </div>
+                      )}
+                      {streamItems && (
+                        <div className="mb-2">
+                          <div className="font-medium text-xs text-gray-600">📦 Items (heuristic preview)</div>
+                          <ul className="text-xs mt-1 list-disc list-inside max-h-28 overflow-auto">
+                            {streamItems.map((it, idx) => (
+                              <li key={idx}>{it.descripcion || '(sin descripción)'} — {it.cantidad ?? '-'} x {it.precio_unitario ?? '-'}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {streamError && <div className="text-xs text-red-600">Error: {streamError}</div>}
+                    </div>
+                  </div>
+                )}
+
                 <AdvancedImageActions
                   loading={loading}
                   autoEnfoqueAplicado={autoEnfoqueAplicado}
@@ -1124,8 +1383,8 @@ export default function IaImage({ model, preloadModel }) {
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-gray-700">
           <div className="font-medium mb-1">💡 Cómo usar:</div>
           <ul className="list-disc list-inside space-y-1 text-xs">
-            <li>Ollama debe estar corriendo (puerto 11434)</li>
-            <li>Modelo <code className="bg-white px-1.5 py-0.5 rounded border border-blue-200 font-mono text-purple-600">minicpm-v</code> recomendado para facturas</li>
+            <li>El microservicio `vision` debe estar corriendo (por defecto en el contenedor: puerto 8000)</li>
+            <li>Modelo <code className="bg-white px-1.5 py-0.5 rounded border border-blue-200 font-mono text-purple-600">qwen2.5-vl</code> recomendado para facturas</li>
             <li>Usa el recorte para enfocar el área relevante</li>
             <li>Para mejores resultados: imágenes claras, buena iluminación</li>
           </ul>
