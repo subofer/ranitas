@@ -93,12 +93,24 @@ function bilinearSample(srcData, sx, sy, width, height) {
   return res
 }
 
-function ManualVertexCropper({ src, onCrop, onCancel }) {
+function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
   const canvasRef = useRef(null)
   const previewCanvasRef = useRef(null)
   // New: separate canvases for side-by-side comparison
   const origPreviewRef = useRef(null)
   const enhancedPreviewRef = useRef(null)
+  // Offscreen canvases (store full-resolution crop images here)
+  const offscreenOrigRef = useRef(null)
+  const offscreenEnhRef = useRef(null)
+
+  // View transform refs for synchronized zoom/pan
+  const viewScaleRef = useRef(1)
+  const viewTxRef = useRef(0)
+  const viewTyRef = useRef(0)
+  const [viewScale, setViewScale] = useState(1) // mirrored for UI display
+  const isPanningRef = useRef(false)
+  const lastPointerRef = useRef({ x: 0, y: 0 })
+
   const imgRef = useRef(null)
   const detectControllerRef = useRef(null)
   // For drawing a box by dragging (start point + drag to size)
@@ -111,6 +123,17 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
   const [dragIndex, setDragIndex] = useState(null)
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [previewGenerated, setPreviewGenerated] = useState(false)
+  const previewGeneratedRef = useRef(false)
+  const markPreviewGenerated = (v) => {
+    // Update ref immediately so synchronous logic can rely on it
+    previewGeneratedRef.current = !!v
+    try {
+      if (typeof setPreviewGenerated === 'function') setPreviewGenerated(!!v)
+      else console.warn('markPreviewGenerated: setPreviewGenerated is not a function')
+    } catch (e) {
+      console.warn('markPreviewGenerated: failed to call setPreviewGenerated', e)
+    }
+  }
   const [detectando, setDetectando] = useState(false)
   const [errorDeteccion, setErrorDeteccion] = useState(null)
   // Enhanced image (restored) stored transiently when user runs 'Mejorar'
@@ -145,6 +168,19 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         } else {
           const d = await res.json()
           setYoloStatus(d)
+
+          // If DocRes model exists but not yet loaded, warm it up in background
+          try {
+            if (d.docres_model_path && d.docres_model_exists && !d.docres_loaded) {
+              pushRestoreEvent('Pre-warming DocRes model...')
+              fetch(`${VISION_SERVICE_URL}/warmup`, { method: 'POST' })
+                .then(r => r.json().catch(()=>null))
+                .then(js => { if (js && js.ok) pushRestoreEvent('DocRes warmed: ' + js.timing_ms + 'ms'); else pushRestoreEvent('DocRes warmup failed') })
+                .catch(e => pushRestoreEvent('DocRes warmup error'))
+            }
+          } catch (e) {
+            // ignore warmup failures
+          }
         }
       } catch (e) {
         setYoloStatus({ ok: false, error: String(e) })
@@ -159,12 +195,23 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     return () => {
       document.body.style.overflow = prevOverflow
     }
-  }, [])
+  }, [pushRestoreEvent])
 
   // Abort any pending detection when the component unmounts
   useEffect(() => {
     return () => { try { detectControllerRef.current?.abort() } catch(e){} }
   }, [])
+
+  // Optionally run automatic detection when component mounts (useful when opening inline cropper)
+  useEffect(() => {
+    if (detectOnMount) {
+      // don't force overwrite if user already edited
+      detectarAutomaticamente(false).catch(e => {
+        console.warn('Auto-detect on mount failed:', e)
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectOnMount])
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current
@@ -334,15 +381,37 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
     dctx.putImageData(dstImage, 0, 0)
 
-    // Ensure enhanced canvas matches size for side-by-side comparison (blank until enhanced result arrives)
-    const enhCanvas = enhancedPreviewRef.current
-    if (enhCanvas) {
-      enhCanvas.width = dstW
-      enhCanvas.height = dstH
-      const ectx = enhCanvas.getContext('2d')
-      ectx.clearRect(0,0,dstW,dstH)
-      // optionally draw a faint overlay or 'No data' label — for now keep blank
+    // Create/store offscreen original canvas (full-resolution crop) and then render view
+    const off = document.createElement('canvas')
+    off.width = dstW
+    off.height = dstH
+    const offCtx = off.getContext('2d')
+    offCtx.putImageData(dstImage, 0, 0)
+    offscreenOrigRef.current = off
+
+    // Ensure visible canvases have proper intrinsic size (match offscreen)
+    const prevCanvasDom = origPreviewRef.current || previewCanvasRef.current
+    const enhCanvasDom = enhancedPreviewRef.current || previewCanvasRef.current
+    if (prevCanvasDom) {
+      prevCanvasDom.width = dstW
+      prevCanvasDom.height = dstH
+      prevCanvasDom.style.maxHeight = '420px'
     }
+    if (enhCanvasDom) {
+      enhCanvasDom.width = dstW
+      enhCanvasDom.height = dstH
+      enhCanvasDom.style.maxHeight = '420px'
+      // Clear enhanced canvas until an enhanced image arrives
+      const ectx = enhCanvasDom.getContext('2d')
+      ectx.clearRect(0,0,dstW,dstH)
+    }
+
+    // Reset view transform to show full image and render
+    viewScaleRef.current = 1
+    viewTxRef.current = 0
+    viewTyRef.current = 0
+    setViewScale(1)
+    renderView()
   }, [points])
   
   // Regenerar preview cuando se mueven los puntos (solo si está en modo comparación)
@@ -354,6 +423,97 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       return () => clearTimeout(timeout)
     }
   }, [points, previewGenerated, generatePreview, dragIndex])
+
+  // --- Synchronized view (zoom & pan) utilities ---
+  const resetView = useCallback(() => {
+    viewScaleRef.current = 1
+    viewTxRef.current = 0
+    viewTyRef.current = 0
+    setViewScale(1)
+    renderView()
+  }, [])
+
+  function renderView() {
+    // Draw the current view from offscreen canvases into visible canvases applying scale/translate
+    const origCanvas = origPreviewRef.current
+    const enhCanvas = enhancedPreviewRef.current
+    const offOrig = offscreenOrigRef.current
+    const offEnh = offscreenEnhRef.current
+    const scale = viewScaleRef.current
+    const tx = viewTxRef.current
+    const ty = viewTyRef.current
+
+    if (origCanvas && offOrig) {
+      const ctx = origCanvas.getContext('2d')
+      ctx.save()
+      ctx.clearRect(0, 0, origCanvas.width, origCanvas.height)
+      ctx.setTransform(scale, 0, 0, scale, tx, ty)
+      ctx.drawImage(offOrig, 0, 0)
+      ctx.setTransform(1,0,0,1,0,0)
+      ctx.restore()
+    }
+    if (enhCanvas && offEnh) {
+      const ctx = enhCanvas.getContext('2d')
+      ctx.save()
+      ctx.clearRect(0, 0, enhCanvas.width, enhCanvas.height)
+      ctx.setTransform(scale, 0, 0, scale, tx, ty)
+      ctx.drawImage(offEnh, 0, 0)
+      ctx.setTransform(1,0,0,1,0,0)
+      ctx.restore()
+    }
+  }
+
+  function handleWheel(e) {
+    // Zoom at pointer position
+    e.preventDefault()
+    const rect = (origPreviewRef.current || previewCanvasRef.current)?.getBoundingClientRect()
+    if (!rect) return
+    const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
+
+    const prevScale = viewScaleRef.current
+    const factor = e.deltaY < 0 ? 1.12 : 0.88
+    const newScale = Math.max(0.2, Math.min(8, prevScale * factor))
+
+    // image-space coords of pointer
+    const ix = (px - viewTxRef.current) / prevScale
+    const iy = (py - viewTyRef.current) / prevScale
+
+    viewScaleRef.current = newScale
+    viewTxRef.current = px - ix * newScale
+    viewTyRef.current = py - iy * newScale
+    setViewScale(newScale)
+    renderView()
+  }
+
+  function handlePointerDown(e) {
+    isPanningRef.current = true
+    lastPointerRef.current = { x: e.clientX, y: e.clientY }
+    try { e.target.setPointerCapture(e.pointerId) } catch (err) {}
+  }
+  function handlePointerMove(e) {
+    if (!isPanningRef.current) return
+    e.preventDefault()
+    const dx = e.clientX - lastPointerRef.current.x
+    const dy = e.clientY - lastPointerRef.current.y
+    lastPointerRef.current = { x: e.clientX, y: e.clientY }
+    viewTxRef.current += dx
+    viewTyRef.current += dy
+    renderView()
+  }
+  function handlePointerUp(e) {
+    isPanningRef.current = false
+    try { e.target.releasePointerCapture && e.target.releasePointerCapture(e.pointerId) } catch (err) {}
+  }
+
+  // Expose reset on Escape
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === 'Escape') resetView() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [resetView])
+  // --- end synchronized view utilities ---
+
 
   function toCanvasCoords(clientX, clientY) {
     const canvas = canvasRef.current
@@ -390,6 +550,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     if (nearPoint >= 0) return // Si estamos cerca de un punto, no agregar nuevo
     
     setPoints(prev => [...prev, p])
+    setUserEditedPoints(true) // user added a point manually
   }
 
   function handleMouseDown(e) {
@@ -402,6 +563,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       e.preventDefault()
       e.stopPropagation()
       setDragIndex(idx)
+      setUserEditedPoints(true)
 
       // Add window-level listeners to track pointer even if it leaves the canvas
       const onMove = (ev) => {
@@ -449,6 +611,9 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         // small timeout to allow potential click event suppression
         setTimeout(() => { justDrawnRectRef.current = false }, 250)
 
+        // mark that user finalized a manual rectangle
+        setUserEditedPoints(true)
+
         window.removeEventListener('mousemove', onMoveRect)
         window.removeEventListener('mouseup', onUpRect)
         window.removeEventListener('touchmove', onMoveRect)
@@ -489,8 +654,9 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
   function reset() { 
     setPoints([])
-    setPreviewGenerated(false)
+    markPreviewGenerated(false)
     setErrorDeteccion(null)
+    setUserEditedPoints(false)
   }
 
 
@@ -505,7 +671,12 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       // Ensure preview exists
       if (!previewGenerated) {
         generatePreview()
-        setPreviewGenerated(true)
+        if (typeof markPreviewGenerated === 'function') {
+          markPreviewGenerated(true)
+        } else {
+          previewGeneratedRef.current = true
+          if (typeof setPreviewGenerated === 'function') setPreviewGenerated(true)
+        }
         // wait a tick for preview canvas to be painted
         await new Promise(r => setTimeout(r, 120))
       }
@@ -572,15 +743,29 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
             const enhCanvas = enhancedPreviewRef.current || previewCanvasRef.current
             if (!origCanvas || !enhCanvas) return
 
-            // Ensure enhanced canvas matches original preview size for side-by-side
-            enhCanvas.width = origCanvas.width
-            enhCanvas.height = origCanvas.height
-            const ctx = enhCanvas.getContext('2d')
-            ctx.clearRect(0,0,enhCanvas.width, enhCanvas.height)
-            // Draw server restored image scaled to match orig canvas
-            ctx.drawImage(img, 0, 0, enhCanvas.width, enhCanvas.height)
+            // Normalize enhanced to original offscreen size so both compare equally
+            const targetW = offscreenOrigRef.current ? offscreenOrigRef.current.width : img.width
+            const targetH = offscreenOrigRef.current ? offscreenOrigRef.current.height : img.height
 
-            setPreviewGenerated(true)
+            // Create offscreen enhanced canvas at same size
+            const offE = document.createElement('canvas')
+            offE.width = targetW
+            offE.height = targetH
+            const offECtx = offE.getContext('2d')
+            // draw the loaded img scaled to target size
+            offECtx.drawImage(img, 0, 0, targetW, targetH)
+            offscreenEnhRef.current = offE
+
+            // Ensure visible canvases match intrinsic size
+            enhCanvas.width = targetW
+            enhCanvas.height = targetH
+            origCanvas.width = targetW
+            origCanvas.height = targetH
+
+            // Render with current transform
+            renderView()
+
+            markPreviewGenerated(true)
             // Store enhanced preview and file (for saving when user accepts the crop)
             (async () => {
               try {
@@ -635,7 +820,14 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
   }
 
 
-  const detectarAutomaticamente = async () => {
+  // Accept overrideYoloConf so callers (e.g. slider) can run detection immediately with the new value
+  const detectarAutomaticamente = async (force = false, overrideYoloConf = null) => {
+    // If user manually edited points and this is not a forced re-detect, do not overwrite
+    if (userEditedPoints && !force) {
+      setErrorDeteccion('Caja ajustada manualmente. Usa "Reintentar" para ejecutar la detección con el umbral seleccionado.')
+      return
+    }
+
     setDetectando(true)
     setErrorDeteccion(null)
 
@@ -654,6 +846,8 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
       const fd = new FormData()
       fd.append('image', blob, 'upload.jpg')
+      // Allow overriding YOLO confidence per-request (useful when slider changes)
+      try { fd.append('yolo_conf', String(overrideYoloConf !== null ? overrideYoloConf : yoloConf)) } catch(e) { /* noop */ }
 
       const timeoutMs = 20000
       const timeout = setTimeout(() => { try { detectControllerRef.current?.abort() } catch(e){} }, timeoutMs)
@@ -679,7 +873,13 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (canvas && points.length === 0) {
           const full = [ {x:0,y:0}, {x:canvas.width,y:0}, {x:canvas.width,y:canvas.height}, {x:0,y:canvas.height} ]
           setPoints(full)
-          setPreviewGenerated(false)
+          setUserEditedPoints(false) // automatic full selection, not a manual edit
+          if (typeof markPreviewGenerated === 'function') {
+            markPreviewGenerated(false)
+          } else {
+            previewGeneratedRef.current = false
+            if (typeof setPreviewGenerated === 'function') setPreviewGenerated(false)
+          }
         }
         return
       }
@@ -689,10 +889,13 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
       const mapped = (data.points || []).map(p => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) }))
       if (mapped.length === 4) {
         setPoints(mapped)
+        setUserEditedPoints(false) // automatic detection replaced points
         // No guardamos ni mostramos imágenes de depuración de selección
         setErrorDeteccion(null)
+        setLastDetectMethod(data.method || null)
       } else {
         setErrorDeteccion('Respuesta inválida del servicio YOLO')
+        setLastDetectMethod(data.method || null)
       }
     } catch (err) {
       if (err.name === 'AbortError') setErrorDeteccion('Detección cancelada')
@@ -705,6 +908,18 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
 
   // Header-level enhancement control (used by the header button)
   const [enhancingHeader, setEnhancingHeader] = useState(false)
+  const [yoloConf, setYoloConf] = useState(0.8) // confianza para detectar crops (0.0 - 1.0)
+  const [lastDetectMethod, setLastDetectMethod] = useState(null)
+
+  // If the user manually adjusted points, we should not let automatic detection overwrite them
+  const [userEditedPoints, setUserEditedPoints] = useState(false)
+
+  // Store feature backups (e.g., enhanced preview) so we can hide UI but restore later
+  const [features, setFeatures] = useState({})
+
+  // computed helpers
+  const enhancementAvailable = (yoloStatus && yoloStatus.ok) && points.length === 4 && !enhancedPreview
+
   const enhanceDocumentHeader = async () => {
     setErrorDeteccion(null)
 
@@ -715,7 +930,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
         if (!canvas) { setErrorDeteccion('Canvas no disponible'); return }
         const fullPts = [ {x:0,y:0}, {x:canvas.width,y:0}, {x:canvas.width,y:canvas.height}, {x:0,y:canvas.height} ]
         setPoints(fullPts)
-        setPreviewGenerated(false)
+        markPreviewGenerated(false)
         // Give time for preview generation
         await new Promise(r => setTimeout(r, 120))
       } else {
@@ -728,7 +943,12 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     // Ensure preview exists
     if (!previewGenerated) {
       generatePreview()
-      setPreviewGenerated(true)
+      if (typeof markPreviewGenerated === 'function') {
+        markPreviewGenerated(true)
+      } else {
+        previewGeneratedRef.current = true
+        if (typeof setPreviewGenerated === 'function') setPreviewGenerated(true)
+      }
       await new Promise(r => setTimeout(r, 160))
     }
 
@@ -801,7 +1021,12 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
           ctx.clearRect(0,0,enhCanvas.width, enhCanvas.height)
           ctx.drawImage(img, 0, 0, enhCanvas.width, enhCanvas.height)
 
-          setPreviewGenerated(true)
+          if (typeof markPreviewGenerated === 'function') {
+            markPreviewGenerated(true)
+          } else {
+            previewGeneratedRef.current = true
+            if (typeof setPreviewGenerated === 'function') setPreviewGenerated(true)
+          }
           // Store enhanced preview and file for later saving
           (async () => {
             try {
@@ -850,7 +1075,7 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
     const start = performance.now()
     if (!previewGenerated) {
       generatePreview()
-      setPreviewGenerated(true)
+      markPreviewGenerated(true)
       await new Promise(r => setTimeout(r, 120))
     }
     const orig = origPreviewRef.current || previewCanvasRef.current
@@ -1095,35 +1320,76 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
           </div>
           <div className="flex gap-2">
               <button
-                onClick={detectarAutomaticamente}
-                disabled={detectando}
-                className={`min-w-[180px] whitespace-nowrap flex items-center justify-center px-4 py-2.5 rounded-lg border transition-all duration-300 ${detectando ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'}`}
+                onClick={() => detectarAutomaticamente(false)}
+                disabled={detectando || userEditedPoints}
+                title={userEditedPoints ? 'Caja ajustada manualmente — usa "Reintentar" para ejecutar la detección' : ''}
+                className={`min-w-[180px] whitespace-nowrap flex items-center justify-center px-4 py-2.5 rounded-lg border transition-all duration-300 ${(detectando || userEditedPoints) ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-purple-600 text-white border-purple-600 hover:bg-purple-700 shadow-lg'}`}
               >
                 <span className="inline-flex items-center gap-2">
-                  {detectando && (
+                  {(detectando || userEditedPoints) && (
                     <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
                   )}
                   <span className="inline-block">🔍 Enfocar Documento</span>
                 </span>
               </button>
 
-              <button
-                onClick={enhanceDocumentHeader}
-                className={`min-w-[180px] whitespace-nowrap flex items-center justify-center px-4 py-2.5 rounded-lg border transition-all duration-300 ${enhancingHeader ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg'}`}
-                disabled={enhancingHeader}
-                title={yoloStatus && !yoloStatus.ok ? (yoloStatus.error || 'Servicio de mejora no disponible') : ''}
-              >
-                <span className="inline-flex items-center gap-2">
-                  {enhancingHeader && (
-                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                  )}
-                  <span className="inline-block">✨ Mejorar documento</span>
-                </span>
-              </button>
+              { enhancementAvailable ? (
+                <button
+                  onClick={enhanceDocumentHeader}
+                  className={`min-w-[180px] whitespace-nowrap flex items-center justify-center px-4 py-2.5 rounded-lg border transition-all duration-300 ${enhancingHeader ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 shadow-lg'}`}
+                  disabled={enhancingHeader}
+                  title={yoloStatus && !yoloStatus.ok ? (yoloStatus.error || 'Servicio de mejora no disponible') : ''}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {enhancingHeader && (
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                    )}
+                    <span className="inline-block">✨ Mejorar documento</span>
+                  </span>
+                </button>
+              ) : (
+                enhancedPreview ? (
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => {
+                      // backup then clear displayed enhancement (keep in features)
+                      setFeatures(prev => ({ ...prev, enhancedBackup: { preview: enhancedPreview, file: enhancedFile } }))
+                      setEnhancedPreview(null)
+                      setEnhancedFile(null)
+                    }} className="px-3 py-1.5 rounded-lg border bg-red-50 text-red-700 hover:bg-red-100">🗑 Eliminar mejora</button>
+                    <button onClick={() => {
+                      const b = features?.enhancedBackup
+                      if (b) {
+                        setEnhancedPreview(b.preview)
+                        setEnhancedFile(b.file)
+                        setFeatures(prev => ({ ...prev, enhancedBackup: undefined }))
+                      }
+                    }} className="px-3 py-1.5 rounded-lg border bg-gray-50 hover:bg-gray-100">↩️ Restaurar mejora</button>
+                  </div>
+                ) : null
+              ) }
 
             <button onClick={reset} className="px-3 py-1.5 rounded-lg border bg-gray-50 hover:bg-gray-100">🔄 Reset</button>
             <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border bg-red-50 text-red-700 hover:bg-red-100">✖ Cancelar</button>
           </div>
+
+          {/* Detección: mostrar método y controles para fallback */}
+          <div className="p-3 border-t border-gray-100">
+            {(lastDetectMethod || points.length > 0) && (
+              <div className="text-sm text-gray-700">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">Método detección:</span>
+                  <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{lastDetectMethod || 'manual'}</span>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-xs">Conf. YOLO</label>
+                  <input type="range" min="0" max="1" step="0.01" value={yoloConf} onChange={(e) => { const v = Number(e.target.value); setYoloConf(v); detectarAutomaticamente(false, v); }} />
+                  <span className="text-xs w-12">{yoloConf.toFixed(2)}</span>
+                  <button onClick={() => detectarAutomaticamente(true)} className="px-2 py-1 bg-yellow-100 rounded text-sm">Reintentar</button>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
 
         <div className="flex-1 overflow-auto p-4">
@@ -1145,26 +1411,34 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
             {/* Preview panel (side-by-side original / enhanced) */}
             {previewGenerated && (
               <div className="w-full md:w-1/3 flex flex-col items-center p-3 bg-white rounded shadow-sm relative">
-                <div className="relative w-full">
+                <div className="relative w-full" onWheel={handleWheel} onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp}>
                   <div className="flex gap-3">
                     <div className="flex-1 flex flex-col items-center">
                       <div className="text-xs font-semibold mb-1">Original</div>
                       <canvas ref={origPreviewRef} className="w-full h-auto border-2 border-gray-300 rounded shadow-sm" />
                     </div>
 
-                    <div className="flex-1 flex flex-col items-center relative">
-                      <div className="text-xs font-semibold mb-1">Mejorada</div>
-                      <canvas ref={enhancedPreviewRef} className="w-full h-auto border-2 border-green-400 rounded shadow-lg" />
+                    {(enhancedPreview || enhancementAvailable) && (
+                      <div className="flex-1 flex flex-col items-center relative">
+                        <div className="text-xs font-semibold mb-1">Mejorada</div>
+                        <canvas ref={enhancedPreviewRef} className="w-full h-auto border-2 border-green-400 rounded shadow-lg" />
 
-                      {processingPreview && (
-                        <div className="absolute right-0 top-6 w-1/2 h-[calc(100%-1.5rem)] bg-black bg-opacity-40 flex items-center justify-center rounded">
-                          <div className="text-center text-white">
-                            <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                            <div className="text-sm font-medium">Procesando...</div>
+                        {processingPreview && (
+                          <div className="absolute right-0 top-6 w-1/2 h-[calc(100%-1.5rem)] bg-black bg-opacity-40 flex items-center justify-center rounded">
+                            <div className="text-center text-white">
+                              <svg className="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
+                              <div className="text-sm font-medium">Procesando...</div>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Overlay controls: zoom level and reset */}
+                  <div className="absolute left-3 top-3 bg-white bg-opacity-80 px-2 py-1 rounded text-xs flex items-center gap-2">
+                    <div>Zoom: <span className="font-mono">{Math.round(viewScale * 100)}%</span></div>
+                    <button onClick={resetView} className="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded">Reset</button>
                   </div>
                 </div>
                 <p className="text-xs text-green-300 mt-2 font-medium">✓ Vista previa del crop enderezado</p>
@@ -1190,13 +1464,15 @@ function ManualVertexCropper({ src, onCrop, onCancel }) {
             <button 
               onClick={applyCrop} 
               disabled={points.length !== 4}
+              data-cy="boton-guardar-crop"
               className={`px-4 py-2 rounded-lg transition-colors ${
                 points.length === 4
-                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  ? 'bg-green-600 text-white hover:bg-green-700'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
+              title="Guardar imagen recortada (usar versión mejorada si existe)"
             >
-              ✂️ Aplicar crop y continuar
+              💾 Guardar
             </button>
             <RestoreButton 
               points={points} 

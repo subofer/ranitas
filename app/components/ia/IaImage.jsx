@@ -32,7 +32,6 @@ import {
   LoadingSkeletons,
   OptimizedImage,
   ImageColumn,
-  AdvancedImageActions,
   ModalMapeoAlias,
   ModalCrearProveedor
 } from './components'
@@ -57,16 +56,16 @@ export default function IaImage({ model, preloadModel }) {
   // const [tempFile, setTempFile] = useState(null)
   // const [tempPreview, setTempPreview] = useState(null)
 
-  // Live streaming preview states
-  const [streaming, setStreaming] = useState(false)
-  const [streamCrop, setStreamCrop] = useState(null)
-  const [streamCropPoints, setStreamCropPoints] = useState(null)
-  const [streamRestored, setStreamRestored] = useState(null)
-  const [streamInferPreview, setStreamInferPreview] = useState(null)
-  const [streamInferMeta, setStreamInferMeta] = useState(null)
-  const [streamOcr, setStreamOcr] = useState(null)
-  const [streamItems, setStreamItems] = useState(null)
-  const [streamError, setStreamError] = useState(null)
+  // Streaming preview removed — was unreliable. Kept code history in 'cementerio' if needed.
+  // const [streaming, setStreaming] = useState(false)
+  // const [streamCrop, setStreamCrop] = useState(null)
+  // const [streamCropPoints, setStreamCropPoints] = useState(null)
+  // const [streamRestored, setStreamRestored] = useState(null)
+  // const [streamInferPreview, setStreamInferPreview] = useState(null)
+  // const [streamInferMeta, setStreamInferMeta] = useState(null)
+  // const [streamOcr, setStreamOcr] = useState(null)
+  // const [streamItems, setStreamItems] = useState(null)
+  // const [streamError, setStreamError] = useState(null)
   
   const [proveedorEncontrado, setProveedorEncontrado] = useState(null)
   const [productosBuscados, setProductosBuscados] = useState({})
@@ -702,98 +701,7 @@ export default function IaImage({ model, preloadModel }) {
     }
   }
 
-  // Start a streaming preview from the vision microservice (SSE-like chunked JSON)
-  const startLiveProcessing = async () => {
-    if (!file) return
-    setStreaming(true)
-    setStreamCrop(null)
-    setStreamCropPoints(null)
-    setStreamRestored(null)
-    setStreamOcr(null)
-    setStreamItems(null)
-    setStreamError(null)
-
-    try {
-      const VISION_HOST = process.env.NEXT_PUBLIC_VISION_HOST || 'http://localhost:8000'
-      const form = new FormData()
-      form.append('image', file)
-      form.append('mode', mode)
-      form.append('enhance', '1')
-      form.append('auto_crop', '1')
-      form.append('stream', '1')
-
-      const res = await fetch(`${VISION_HOST}/restore`, { method: 'POST', body: form })
-      if (!res.ok) {
-        const txt = await res.text()
-        setStreamError(`Streaming request failed: ${res.status} ${res.statusText} - ${txt}`)
-        setStreaming(false)
-        return
-      }
-
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder('utf-8')
-      let buf = ''
-
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buf += decoder.decode(value, { stream: true })
-        // SSE-ish payloads separated by double newline
-        const parts = buf.split('\n\n')
-        for (let i = 0; i < parts.length - 1; i++) {
-          const part = parts[i].trim()
-          if (!part) continue
-          // Each event is expected as: data: <json>
-          const lines = part.split('\n').map(l => l.trim())
-          for (const ln of lines) {
-            if (ln.startsWith('data:')) {
-              const raw = ln.replace(/^data:\s*/, '')
-              try {
-                const ev = JSON.parse(raw)
-                // Handle stages
-                if (ev.stage === 'crop') {
-                  setStreamCrop(ev.crop_image_base64 || null)
-                  setStreamCropPoints(ev.crop_points || null)
-                } else if (ev.stage === 'restored') {
-                  setStreamRestored(ev.restored_image_base64 || null)
-                } else if (ev.stage === 'ocr') {
-                  setStreamOcr(ev.ocr_text || null)
-                  if (ev.infer_preview_base64) {
-                    setStreamInferPreview(ev.infer_preview_base64)
-                    setStreamInferMeta(ev.infer_preview_meta || null)
-                  }
-                } else if (ev.stage === 'formatted_items') {
-                  setStreamItems(ev.items || null)
-                } else if (ev.stage === 'final') {
-                  // Apply final parsed extraction to UI but keep streaming previews
-                  if (ev.extraction) {
-                    setParsedData(ev.extraction)
-                  }
-                  if (ev.restored_image_base64) setStreamRestored(ev.restored_image_base64)
-                  if (ev.crop_image_base64) setStreamCrop(ev.crop_image_base64)
-                  if (ev.inference_image_base64) {
-                    setStreamInferPreview(ev.inference_image_base64)
-                    setStreamInferMeta(ev.inference_image_meta || null)
-                  }
-                } else if (ev.stage === 'error') {
-                  setStreamError(ev.error || 'Unknown')
-                }
-              } catch (e) {
-                console.warn('Failed to parse stream event JSON:', e, raw)
-              }
-            }
-          }
-        }
-        buf = parts[parts.length - 1]
-      }
-
-    } catch (err) {
-      console.error('Streaming preview failed:', err)
-      setStreamError(err.message || String(err))
-    } finally {
-      setStreaming(false)
-    }
-  }
+  // Streaming preview feature retired — implementation removed from active UI (kept in repo history).
   
   const actualizarCampo = async (path, valorNuevo, valorAnterior) => {
     // Deep copy parsedData to modify
@@ -991,7 +899,8 @@ export default function IaImage({ model, preloadModel }) {
 
           {manualCropOpen && (
             <ManualVertexCropper
-              src={preview}
+              src={previewOriginal || preview}
+              detectOnMount={true}
               onCrop={handleCrop}
               onCancel={() => setManualCropOpen(false)}
             />
@@ -1162,14 +1071,7 @@ export default function IaImage({ model, preloadModel }) {
                       🚀 Analizar Factura
                     </button>
 
-                    <button
-                      className={`px-4 py-4 bg-white border border-blue-200 text-blue-700 rounded-xl hover:bg-blue-50 transition-colors font-bold text-lg shadow-sm ${!file ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      onClick={startLiveProcessing}
-                      disabled={!file || streaming}
-                      title="Muestra recorte y mejora en tiempo real"
-                    >
-                      {streaming ? '⏳ Vista previa...' : '👁️ Vista previa'}
-                    </button>
+                    {/* Streaming preview removed — unreliable feature */}
                   </div>
                 )}
                 
@@ -1179,23 +1081,9 @@ export default function IaImage({ model, preloadModel }) {
                   </div>
                 )}
                 
-                {(streamCrop || streamRestored || streamItems || streamOcr || streamError) && (
+                {/* Streaming previews removed — feature was unreliable and rarely used. */
                   <div className="mt-4 grid grid-cols-2 gap-3 items-start">
-                    {streamCrop && (
-                      <div className="text-center">
-                        <div className="text-xs text-gray-600 mb-1">✂️ Recorte (preview)</div>
-                        <div className="relative w-full" style={{ minHeight: 120 }}>
-                          <Image
-                            src={`data:image/png;base64,${streamCrop}`}
-                            alt="crop preview"
-                            unoptimized={true}
-                            className="rounded-lg border"
-                            width={800}
-                            height={600}
-                          />
-                        </div>
-                      </div>
-                    )}
+
 
                     {streamRestored && (
                       <div className="text-center">
@@ -1254,21 +1142,9 @@ export default function IaImage({ model, preloadModel }) {
                   </div>
                 )}
 
-                <AdvancedImageActions
-                  loading={loading}
-                  autoEnfoqueAplicado={autoEnfoqueAplicado}
-                  deshacerAutoEnfoque={deshacerAutoEnfoque}
-                  imagenOriginal={imagenOriginal}
-                  autoEnfocar={autoEnfocar}
-                  file={file}
-                  preview={preview}
-                  previewOriginal={previewOriginal}
-                  setFile={setFile}
-                  setPreview={setPreview}
-                  setAutoEnfoqueAplicado={setAutoEnfoqueAplicado}
-                  abrirCropper={abrirCropper}
-                />
-                
+                {/* Advanced options removed: Deshacer auto-enfoque / Re-aplicar auto-enfoque / Recortar manualmente moved to inline workflow.
+                    Tips box left for guidance. */}
+
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-gray-700">
                   <div className="font-medium mb-2">💡 Consejos:</div>
                   <ul className="list-disc list-inside space-y-1">
