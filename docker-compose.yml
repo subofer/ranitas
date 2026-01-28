@@ -35,10 +35,10 @@ services:
       - MASK_THRESHOLD=0.5
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
       - OLLAMA_HOST=http://127.0.0.1:11434
-+      # Set to 0 to avoid auto-pulling the configured OLLAMA model on every container start
-+      - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-1}
-+      # Container timezone (set TZ in your environment or .env to match host timezone, default UTC)
-+      - TZ=${TZ:-UTC}
+      # Set to 0 to avoid auto-pulling the configured OLLAMA model on every container start
+      - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-0}
+      # Container timezone (set TZ in your environment or .env to match host timezone, default UTC)
+      - TZ=${TZ:-UTC}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     runtime: nvidia
