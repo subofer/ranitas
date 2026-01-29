@@ -31,6 +31,7 @@ export function ModalCrearProveedor({ datosFactura, isOpen, onCancelar, onCreado
   // Estados para autocompletado
   const [autoCompleting, setAutoCompleting] = useState(false)
   const [autoCompleted, setAutoCompleted] = useState(false)
+  const [conflictContact, setConflictContact] = useState(null)
 
   // IVA - opciones y mapeador (normaliza variantes encontradas en factura o internet)
   const IVA_OPTIONS = [
@@ -106,6 +107,7 @@ export function ModalCrearProveedor({ datosFactura, isOpen, onCancelar, onCreado
       setDatosCuit(null)
       setError(null)
       setAutoGeoSearched(false)
+      setConflictContact(null)
     }
   }, [datosFactura, isOpen])
 
@@ -258,7 +260,11 @@ export function ModalCrearProveedor({ datosFactura, isOpen, onCancelar, onCreado
 
   // Resetear bandera cuando se cierra el modal
   useEffect(() => {
-    if (!isOpen) setAutoSearched(false)
+    if (!isOpen) {
+      setAutoSearched(false)
+      setConflictContact(null)
+      setError(null)
+    }
   }, [isOpen])
 
   const handleChange = (e) => {
@@ -329,6 +335,7 @@ export function ModalCrearProveedor({ datosFactura, isOpen, onCancelar, onCreado
     if (!conflictContact) return
     // Asociar el contacto existente al flujo (por ejemplo, asociar proveedor en la factura)
     onCreado(conflictContact)
+    setConflictContact(null)
   }
 
   const handleCrearAliasEnExistente = async () => {
@@ -348,6 +355,7 @@ export function ModalCrearProveedor({ datosFactura, isOpen, onCancelar, onCreado
       }
       // Éxito: cerrar modal y asociar el contacto existente
       onCreado(conflictContact)
+      setConflictContact(null)
     } catch (e) {
       console.error('Error creando alias para contacto existente:', e)
       setError(e.message || 'Error creando alias')

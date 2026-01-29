@@ -30,7 +30,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      - YOLO_MODEL_PATH=/app/models/yolo11n-seg.pt
+      - YOLO_MODEL_PATH=/app/models/yolov26l-seg.pt
       - YOLO_CONF=0.25
       - MASK_THRESHOLD=0.5
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}

@@ -7,7 +7,14 @@ import { seedDocumentTypes } from './seedDocumentTypes.js';
 const seedUsuarios = async () => {
   const data = [
     { nombre: 'subofer', password: '1234' },
+    { nombre: 'caro', password: '1234' },
+    { nombre: 'paula', password: '1234' },
+    { nombre: 'daniel', password: '1234' },
     { nombre: 'admin', password: 'admin' },
+    // Usuarios adicionales de prueba
+    { nombre: 'juan', password: '1234' },
+    { nombre: 'maria', password: '1234' },
+    { nombre: 'tester1', password: 'test' },
   ];
 
   for (const item of data) {
@@ -25,14 +32,14 @@ const seedUsuarios = async () => {
       console.log(`Usuario ${item.nombre} creado.`);
     } catch (error) {
       if(error.code== "P2002"){
-        console.log(`Usuario ya existente ${item.nombre}: no re realizaron cambios`);
+        console.log(`Usuario ya existente ${item.nombre}: no se realizaron cambios`);
       }else{
         console.log(`Error al crear el usuario ${item.nombre}:`, error);
       }
     }
   }
 
-  await prisma.$disconnect();
+  // No desconectar aquí: dejar la desconexión para el final del proceso de seed
 };
 
 
@@ -77,6 +84,11 @@ const seedCategorias = async () => {
 
 const crearProveedor = async (proveedorData) => {
   try {
+    // Mapear a los campos reales del schema: esProveedor, esInterno, esMarca
+    const esProveedor = proveedorData?.esProveedor ?? proveedorData?.proveedor ?? false;
+    const esInterno = proveedorData?.esInterno ?? proveedorData?.trabajador ?? false;
+    const esMarca = proveedorData?.esMarca ?? proveedorData?.marca ?? false;
+
     await prisma.contactos.upsert({
       where: { cuit: proveedorData.cuit },
       update: {}, // No actualizamos si ya existe
@@ -85,24 +97,24 @@ const crearProveedor = async (proveedorData) => {
         nombre: proveedorData.nombre,
         nombreFantasia: proveedorData.nombreFantasia || null,
         telefono: proveedorData.telefono || '0800-completar-telefono',
-        proveedor: proveedorData?.proveedor ?? proveedorData?.esProveedor ?? false,
-        trabajador: proveedorData?.trabajador ?? proveedorData?.esInterno ?? false,
-        marca: proveedorData?.marca ?? proveedorData?.esMarca ?? false,
-        cliente: proveedorData?.cliente ?? false,
+        esProveedor,
+        esInterno,
+        esMarca,
+        // Nota: no existe campo `cliente` en el modelo; para clientes usamos esProveedor=false
         iva: proveedorData?.iva || 'RESPONSABLE_INSCRIPTO',
         persona: proveedorData?.persona || 'JURIDICA',
-        emails: {
+        emails: proveedorData.emails && proveedorData.emails.length ? {
           create: proveedorData.emails.map((email) => ({ email })),
-        },
-        direcciones: {
-          create: proveedorData.direcciones?.map((direccion) => ({
+        } : undefined,
+        direcciones: proveedorData.direcciones && proveedorData.direcciones.length ? {
+          create: proveedorData.direcciones.map((direccion) => ({
             provincia: { connect: { id: direccion.idProvincia } },
             localidad: { connect: { id: direccion.idLocalidad } },
             calle: { connect: { id: direccion.idCalle } },
             numeroCalle: parseInt(direccion.numeroCalle),
             idLocalidadCensal: direccion.idLocalidadCensal,
           })),
-        },
+        } : undefined,
       },
     });
     console.log(`Proveedor ${proveedorData.nombre} creado o ya existente.`);
@@ -500,13 +512,11 @@ const seedMockData = async () => {
         update: {},
         create: {
           ...provFields,
-          proveedor: true,
+          esProveedor: true,
           cuit: `20${Math.random().toString().substr(2, 8)}9`,
           persona: 'JURIDICA',
           iva: 'RESPONSABLE_INSCRIPTO',
-          emails: {
-            create: emails.map(email => ({ email }))
-          }
+          emails: emails && emails.length ? { create: emails.map(email => ({ email })) } : undefined
         }
       });
     }
@@ -702,6 +712,19 @@ const seedMockData = async () => {
   }
 };
 
+const seedSettings = async () => {
+  try {
+    await prisma.setting.upsert({
+      where: { key: 'audit.login.enabled' },
+      update: { value: true, description: 'Enable/disable audit logging for login page access and attempts' },
+      create: { key: 'audit.login.enabled', value: true, description: 'Enable/disable audit logging for login page access and attempts' },
+    });
+    console.log('Setting seed: audit.login.enabled created or exists');
+  } catch (e) {
+    console.error('Error seeding audit.login.enabled setting', e);
+  }
+};
+
 await seed([
   seedUsuarios,
   seedTiposPresentacion,
@@ -711,4 +734,5 @@ await seed([
   seedCategorias,
   seedProductos,
   seedMockData, // Agregar los datos de prueba
+  seedSettings,
 ]);

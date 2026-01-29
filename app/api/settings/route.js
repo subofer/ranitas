@@ -42,7 +42,8 @@ export async function POST(req) {
         category: 'CONFIG',
         action: 'UPDATE_SETTING',
         message: `Updated setting ${key}`,
-        metadata: { key, value }
+        metadata: { key, value },
+        path: '/api/settings'
       }
     })
 

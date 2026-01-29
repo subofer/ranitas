@@ -1,0 +1,2977 @@
+#!/usr/bin/env python3
+"""FastAPI microservice to detect document corners using YOLOv11 segmentation on GPU.
+
+- Endpoint: POST /detect
+- Accepts multipart/form-data with field `image`.
+- Returns JSON:
+  { ok: true, points: [{x:..,y:..}, ...], debug_image_base64: "...", timing_ms: 123 }
+
+Fallback: returns ok: false and fallback rectangle (10% margin) if no clear quad found.
+
+Requirements: ultralytics, opencv-python, fastapi, uvicorn, numpy, pillow
+
+Usage: set YOLO_MODEL_PATH env var or put yolo11n-seg.pt next to this file. Run:
+  uvicorn services.yolo.detect_corners:app --host 127.0.0.1 --port 8000 --workers 1
+"""
+
+import os
+import io
+import time
+import base64
+import logging
+import asyncio
+from typing import Optional, Any
+
+from fastapi import FastAPI, File, UploadFile, HTTPException  # type: ignore[import]
+from fastapi.responses import JSONResponse  # type: ignore[import]
+from fastapi.responses import StreamingResponse  # type: ignore[import]
+import json
+from fastapi.middleware.cors import CORSMiddleware  # type: ignore[import]
+from pydantic import BaseModel  # type: ignore[import]
+
+try:
+    import cv2  # type: ignore[import]
+    import numpy as np  # type: ignore[import]
+    from PIL import Image  # type: ignore[import]
+    from ultralytics import YOLO  # type: ignore[import]
+    # Ensure torch allows loading ultralytics classes from older-style checkpoints
+    try:
+        import torch as _t
+        import ultralytics as _u
+        try:
+            _t.serialization.add_safe_globals([_u.nn.tasks.SegmentationModel])
+        except Exception:
+            # safe_globals may not exist on older torch versions; ignore
+            pass
+    except Exception:
+        pass
+except Exception as e:
+    # We'll handle missing deps at runtime and return clear messages
+    cv2 = None
+    np = None
+    Image = None
+    YOLO = None
+    missing_import = str(e)
+
+logger = logging.getLogger("yolo-detect")
+logging.basicConfig(level=logging.INFO)
+
+# Optional imports for Qwen/LLM and OCR
+_qwen_model = None
+_qwen_tokenizer = None
+try:
+    import torch  # type: ignore[import]
+    import requests  # type: ignore[import]  # used to call Ollama HTTP API when configured
+    from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig  # type: ignore[import]
+except Exception:
+    torch = None
+    requests = None
+    AutoTokenizer = None
+    AutoModelForCausalLM = None
+    BitsAndBytesConfig = None
+
+# Ollama configuration: when running Ollama inside docker, set OLLAMA_HOST and OLLAMA_MODEL
+OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'http://localhost:11434')
+OLLAMA_MODEL_DEFAULT = os.environ.get('OLLAMA_MODEL', 'qwen2.5vl:7b')
+# Toggle whether to prefer Ollama for parsing (default true in this deployment plan)
+USE_OLLAMA = str(os.environ.get('USE_OLLAMA', 'true')).lower() in ('1', 'true', 'yes')
+
+try:
+    import pytesseract  # type: ignore[import]
+except Exception:
+    pytesseract = None
+
+app = FastAPI(title="YOLO Document Corner Detector")
+
+# Allow configuring CORS origins via env var for flexible development setups.
+# VISION_ALLOW_ORIGINS may be a comma-separated list of origins (e.g. "http://localhost:3000,https://example.com").
+_raw_origins = os.environ.get('VISION_ALLOW_ORIGINS')
+if _raw_origins:
+    _origins = [o.strip() for o in _raw_origins.split(',') if o.strip()]
+    if not _origins:
+        _origins = ["*"]
+else:
+    # In development default to permissive to avoid "Failed to fetch" CORS issues when using various local dev ports
+    _origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', os.path.join(os.path.dirname(__file__), 'yolo11n-seg.pt'))
+CONFIDENCE = float(os.environ.get('YOLO_CONF', 0.25))
+MASK_THRESHOLD = float(os.environ.get('MASK_THRESHOLD', 0.5))
+# Time limit for YOLO inference (ms). If exceeded, fall back to OpenCV fast detector.
+YOLO_TIMEOUT_MS = int(os.environ.get('YOLO_TIMEOUT_MS', 800))
+# Max dimension for YOLO inference (downscale large images for speed)
+YOLO_INFER_MAX_DIM = int(os.environ.get('YOLO_INFER_MAX_DIM', 1024))
+# Preview / optimization parameters (controls size/quality of images used for previews or optimized uploads)
+PREVIEW_MAX_DIM = int(os.environ.get('PREVIEW_MAX_DIM', 1024))  # max side length for preview/infer images
+PREVIEW_QUALITY = int(os.environ.get('PREVIEW_QUALITY', 85))  # JPEG quality (1-100) for previews
+PREVIEW_CONVERT_GRAY = str(os.environ.get('PREVIEW_CONVERT_GRAY', '1')).lower() in ('1','true','yes')
+
+# Lazy load models
+_model = None
+_docres_model = None
+
+# Try import DocRes (document restoration model) optionally
+try:
+    from docres import DocRes  # type: ignore[import]
+except Exception:
+    DocRes = None
+
+# Support multiple DocRes variants (appearance enhancement / binarization)
+DOCRES_PATH = os.environ.get('DOCRES_MODEL_PATH', os.path.join(os.path.dirname(__file__), 'docres.pt'))
+DOCRES_APPEARANCE_PATH = os.environ.get('DOCRES_APPEARANCE_PATH', os.path.join(os.path.dirname(__file__), 'docres_appearance.pt'))
+DOCRES_BINARIZE_PATH = os.environ.get('DOCRES_BINARIZE_PATH', os.path.join(os.path.dirname(__file__), 'docres_binarize.pt'))
+
+# Cache possible docres models by mode
+_docres_models = {}
+
+
+def get_docres_model(mode: Optional[str] = None):
+    """Return a DocRes model instance for the given mode (None/default, 'appearance', 'binarize').
+    Caches per mode to avoid reloading.
+    """
+    global _docres_models
+    if DocRes is None:
+        return None
+
+    key = mode or 'default'
+    if key in _docres_models:
+        return _docres_models[key]
+
+    # Decide model path based on mode
+    path = DOCRES_PATH
+    if mode == 'appearance':
+        path = DOCRES_APPEARANCE_PATH
+    elif mode == 'binarize' or mode == 'binarization':
+        path = DOCRES_BINARIZE_PATH
+
+    if not os.path.exists(path):
+        logger.warning('DocRes model for mode %s not found at %s', mode, path)
+        return None
+
+    logger.info(f"Loading DocRes model for mode={mode} from {path}")
+    try:
+        t0 = time.time()
+        mdl = DocRes(path)
+        t1 = time.time()
+        logger.info('DocRes model (%s) loaded in %.1f ms', mode or 'default', (t1 - t0) * 1000.0)
+
+        # Warm-up
+        try:
+            warm0 = time.time()
+            dummy = np.zeros((64, 64, 3), dtype=np.float32)
+            if hasattr(mdl, 'restore'):
+                mdl.restore(dummy)
+            else:
+                mdl(dummy)
+            warm1 = time.time()
+            logger.info('DocRes warm-up (%s) completed in %.1f ms', mode or 'default', (warm1 - warm0) * 1000.0)
+        except Exception as e:
+            logger.warning('DocRes warm-up failed (non-fatal): %s', e)
+
+        _docres_models[key] = mdl
+        return mdl
+    except Exception as e:
+        logger.exception('Failed to load DocRes model (%s): %s', mode, e)
+        return None
+
+
+# --- Qwen (LLM) helpers ---
+
+def ensure_local_model(model_name: str, dest_root: str = '/app/models'):
+    """Ensure a local copy of the HF model exists under dest_root.
+    If missing, attempt to download using huggingface_hub.snapshot_download.
+    Returns the local path on success or raises an exception on failure.
+    """
+    short = model_name.replace('/', '_').replace(':', '_')
+    dest = os.path.join(dest_root, short)
+    if os.path.exists(dest):
+        logger.info('Local model already present: %s', dest)
+        return dest
+
+    # Try to import snapshot_download lazily (avoid hard dependency failures)
+    try:
+        from huggingface_hub import snapshot_download  # type: ignore
+    except Exception:
+        logger.warning('huggingface_hub not available; cannot auto-download %s', model_name)
+        raise RuntimeError('huggingface_hub not installed in the environment')
+
+    token = os.environ.get('HUGGINGFACE_HUB_TOKEN')
+    logger.info('Attempting to download model %s to %s (HF token present=%s)', model_name, dest, bool(token))
+    try:
+        # Some versions of huggingface_hub use 'use_auth_token', newer ones accept 'token'
+        try:
+            # Only pass token if it is truthy to avoid sending an empty 'Bearer ' header
+            if token:
+                try:
+                    tmp = snapshot_download(repo_id=model_name, use_auth_token=token)
+                except TypeError:
+                    tmp = snapshot_download(repo_id=model_name, token=token)
+            else:
+                tmp = snapshot_download(repo_id=model_name)
+        except TypeError:
+            # Final fallback: try without token argument
+            tmp = snapshot_download(repo_id=model_name)
+
+        # Copy files from HF cache to our models folder so subsequent loads can use local: path
+        import shutil
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+        shutil.copytree(tmp, dest)
+        logger.info('Downloaded model %s into %s', model_name, dest)
+        return dest
+    except Exception as e:
+        logger.exception('Failed to download model %s: %s', model_name, e)
+        raise
+
+def get_qwen_model(model_override: Optional[str] = None):
+    """Load and cache Qwen model (quantized 4-bit using bitsandbytes) and tokenizer.
+    Supports either HF repo ids (may require auth) or local paths with prefix `local:` or full path.
+    Returns (model, tokenizer) or (None,None) and meta on failure.
+    """
+    global _qwen_model, _qwen_tokenizer
+    name_to_use = model_override or os.environ.get('QWEN_MODEL', 'qwen/Qwen-2.5-VL')
+
+    # If caller requested a different model than the cached one, clear cache
+    if _qwen_model is not None and _qwen_tokenizer is not None and (os.environ.get('QWEN_MODEL') != name_to_use and model_override):
+        _qwen_model = None
+        _qwen_tokenizer = None
+
+    if _qwen_model is not None and _qwen_tokenizer is not None:
+        return _qwen_model, _qwen_tokenizer
+
+    if AutoModelForCausalLM is None:
+        logger.warning('Transformers/bitsandbytes not installed in this environment; Qwen disabled')
+        return None, None
+
+    model_name = name_to_use
+    try:
+        t0 = time.time()
+        # Prefer AutoGPTQ when available (K-Quants / GPTQ-style quantization). Fallback to bitsandbytes
+        use_autogptq = False
+        try:
+            # Local import to keep optional dependency
+            from auto_gptq import AutoGPTQForCausalLM  # type: ignore
+            use_autogptq = True
+            logger.info('AutoGPTQ is available: will attempt AutoGPTQ loads when applicable')
+        except Exception:
+            use_autogptq = False
+
+        # Configure BitsAndBytes with double-quant and bfloat16 compute to better emulate GGUF/NF4 precision
+        try:
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type='nf4',
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16 if hasattr(torch, 'bfloat16') else torch.float16
+            )
+        except Exception:
+            # Conservative fallback
+            bnb = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type='nf4',
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.float16
+            )
+
+        # If model_name starts with local: treat remainder as local path
+        try_local = False
+        local_path = None
+        if isinstance(model_name, str) and model_name.startswith('local:'):
+            try_local = True
+            local_path = model_name[len('local:'):]
+        else:
+            # also check if a directory under /app/models exists with a name matching the short name
+            short = model_name.replace('/', '_').replace(':', '_')
+            candidate = os.path.join('/app/models', short)
+            if os.path.exists(candidate):
+                try_local = True
+                local_path = candidate
+
+        if try_local and local_path:
+            logger.info('Loading Qwen model from local path: %s', local_path)
+            tokenizer = AutoTokenizer.from_pretrained(local_path, use_fast=True, trust_remote_code=True)
+
+            # If AutoGPTQ is available and the model looks like a GPTQ quantized repo, try AutoGPTQ loader
+            if use_autogptq:
+                try:
+                    from auto_gptq import AutoGPTQForCausalLM  # type: ignore
+                    logger.info('Attempting AutoGPTQ quantized load for local model %s', local_path)
+                    try:
+                        model = AutoGPTQForCausalLM.from_quantized(local_path, device_map='auto', use_safetensors=True, bf16=True)
+                        logger.info('Loaded AutoGPTQ quantized model from %s', local_path)
+                    except Exception as e:
+                        logger.warning('AutoGPTQ.from_quantized failed (%s), falling back to transformers/bnb loaders', e)
+                        raise
+                except Exception:
+                    # If any of the AutoGPTQ steps fail, fall through to existing loaders
+                    model = None
+            else:
+                model = None
+
+            if model is None:
+                try:
+                    model = AutoModelForCausalLM.from_pretrained(local_path, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                except Exception as e:
+                    logger.warning('AutoModelForCausalLM failed for local model (%s); attempting fallback to AutoModel', e)
+                    try:
+                        from transformers import AutoModel
+                        model = AutoModel.from_pretrained(local_path, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                        logger.info('AutoModel fallback succeeded for local model %s', local_path)
+                    except Exception as e2:
+                        logger.exception('AutoModel fallback failed for local model %s: %s', local_path, e2)
+                        raise
+        else:
+            logger.info('Loading Qwen model from hub: %s', model_name)
+
+            # First: attempt to download a local copy automatically if it's missing
+            try:
+                try_local_candidate = ensure_local_model(model_name)
+                if try_local_candidate:
+                    logger.info('Auto-downloaded model %s -> %s; will attempt local load', model_name, try_local_candidate)
+                    # Try local path flow using the same logic as 'local:' branch
+                    tokenizer = AutoTokenizer.from_pretrained(try_local_candidate, use_fast=True, trust_remote_code=True)
+                    model = None
+
+                    # Try AutoGPTQ for downloaded candidate if available
+                    if use_autogptq:
+                        try:
+                            from auto_gptq import AutoGPTQForCausalLM  # type: ignore
+                            logger.info('Attempting AutoGPTQ quantized load for downloaded candidate %s', try_local_candidate)
+                            try:
+                                model = AutoGPTQForCausalLM.from_quantized(try_local_candidate, device_map='auto', use_safetensors=True, bf16=True)
+                                logger.info('Loaded AutoGPTQ quantized model from %s', try_local_candidate)
+                            except Exception as e:
+                                logger.warning('AutoGPTQ.from_quantized failed for %s (%s)', try_local_candidate, e)
+                                model = None
+                        except Exception as e:
+                            logger.warning('AutoGPTQ not usable for %s: %s', try_local_candidate, e)
+
+                    if model is None:
+                        try:
+                            model = AutoModelForCausalLM.from_pretrained(try_local_candidate, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                            logger.info('Loaded local copy of model %s (quantized) from %s', model_name, try_local_candidate)
+                        except Exception as e_local:
+                            logger.warning('AutoModelForCausalLM failed for local downloaded model (%s); attempting AutoModel and fallbacks: %s', try_local_candidate, e_local)
+                            try:
+                                from transformers import AutoModel
+                                # First attempt quantized fallback
+                                try:
+                                    model = AutoModel.from_pretrained(try_local_candidate, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                                    logger.info('AutoModel (quantized) fallback succeeded for local model %s', try_local_candidate)
+                                except Exception:
+                                    # As last resort, try un-quantized load (may need more memory but increases compatibility)
+                                    model = AutoModel.from_pretrained(try_local_candidate, device_map='auto', trust_remote_code=True)
+                                    logger.info('AutoModel (non-quantized) fallback succeeded for local model %s (loaded in full precision)', try_local_candidate)
+                            except Exception as e2_local:
+                                logger.exception('Local AutoModel fallback failed for %s: %s', try_local_candidate, e2_local)
+                                raise
+                    # If local load succeeded, proceed to warmup below
+                else:
+                    # No local candidate available (download may have failed); continue to use hub loaders
+                    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, trust_remote_code=True)
+                    model = None
+                    # Try AutoGPTQ from hub if available
+                    if use_autogptq:
+                        try:
+                            from auto_gptq import AutoGPTQForCausalLM  # type: ignore
+                            logger.info('Attempting AutoGPTQ quantized load for hub model %s', model_name)
+                            try:
+                                model = AutoGPTQForCausalLM.from_quantized(model_name, device_map='auto', use_safetensors=True, bf16=True)
+                                logger.info('Loaded AutoGPTQ quantized model from hub %s', model_name)
+                            except Exception as e:
+                                logger.warning('AutoGPTQ.from_quantized failed for hub model %s (%s)', model_name, e)
+                                model = None
+                        except Exception as e:
+                            logger.warning('AutoGPTQ not available for hub model %s: %s', model_name, e)
+
+                    if model is None:
+                        try:
+                            # Prefer causal LM loader when possible
+                            model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                        except Exception as e:
+                            logger.warning('AutoModelForCausalLM failed (%s); attempting fallback to AutoModel', e)
+                            try:
+                                from transformers import AutoModel
+                                # Try quantized AutoModel first
+                                try:
+                                    model = AutoModel.from_pretrained(model_name, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                                    logger.info('AutoModel (quantized) fallback succeeded for %s', model_name)
+                                except Exception:
+                                    # Final attempt: try without quantization (may be heavy but increases compatibility)
+                                    model = AutoModel.from_pretrained(model_name, device_map='auto', trust_remote_code=True)
+                                    logger.info('AutoModel (non-quantized) fallback succeeded for %s (loaded in full precision)', model_name)
+                            except Exception as e2:
+                                logger.exception('AutoModel fallback failed for %s: %s', model_name, e2)
+                                raise
+            except Exception as e_download:
+                # If downloading or hub loading fails, raise with helpful message
+                logger.exception('Failed to ensure or load hub model %s: %s', model_name, e_download)
+                raise
+
+                logger.warning('AutoModelForCausalLM failed (%s); attempting fallback to AutoModel', e)
+                try:
+                    from transformers import AutoModel  # local import to avoid top-level changes
+                    model = AutoModel.from_pretrained(model_name, quantization_config=bnb, device_map='auto', trust_remote_code=True)
+                    logger.info('AutoModel fallback succeeded for %s', model_name)
+                except Exception as e2:
+                    logger.exception('AutoModel fallback failed for %s: %s', model_name, e2)
+                    raise
+
+        t1 = time.time()
+        logger.info('Qwen model (%s) loaded in %.1f ms', model_name, (t1 - t0) * 1000.0)
+
+        # Try to steer the model to use the most optimized attention implementation available
+        try:
+            if hasattr(model, 'config'):
+                # Preferred attn impl used by Ollama for speed & context handling
+                try:
+                    setattr(model.config, 'attn_implementation', 'flash_attention_2')
+                    logger.info('Set model.config.attn_implementation = flash_attention_2')
+                except Exception:
+                    logger.info('Could not set model.config.attn_implementation (ignored)')
+                # Ensure caching is enabled for smoother token generation
+                try:
+                    model.config.use_cache = True
+                except Exception:
+                    pass
+            # Heuristic speed flags
+            try:
+                torch.backends.cudnn.benchmark = True
+                if hasattr(torch, 'set_float32_matmul_precision'):
+                    torch.set_float32_matmul_precision('high')
+            except Exception:
+                pass
+        except Exception as e:
+            logger.warning('Could not apply attention/perf flags: %s', e)
+
+        # Warmup a tiny generation to reduce first-call latency using Ollama-like defaults
+        try:
+            warm_prompt = os.environ.get('QWEN_SYSTEM_PROMPT', 'Eres un asistente experto en extracción de facturas. Responde SOLO con JSON válido.') + "\nExtrae campos de factura y devuelve JSON estricto."
+            warm_inputs = tokenizer(warm_prompt, return_tensors='pt', truncation=True, max_length=128).to(model.device)
+            warm_gen = {
+                'max_new_tokens': 8,
+                'temperature': float(os.environ.get('QWEN_TEMPERATURE', 0.7)),
+                'top_p': float(os.environ.get('QWEN_TOP_P', 0.9)),
+                'repetition_penalty': float(os.environ.get('QWEN_REPETITION_PENALTY', 1.1)),
+                'use_cache': True,
+                'do_sample': True,
+                'pad_token_id': getattr(tokenizer, 'eos_token_id', getattr(tokenizer, 'pad_token_id', 0))
+            }
+            with torch.no_grad():
+                model.generate(**warm_inputs, **warm_gen)
+        except Exception as e:
+            logger.warning('Qwen warmup failed (non-fatal): %s', e)
+
+        _qwen_model = model
+        _qwen_tokenizer = tokenizer
+        return _qwen_model, _qwen_tokenizer
+    except Exception as e:
+        logger.exception('Failed to load Qwen model (%s): %s', model_name, e)
+        _qwen_model = None
+        _qwen_tokenizer = None
+        return None, None
+
+
+def call_ollama(prompt: str, model: Optional[str] = None, max_tokens: int = 1024, timeout: int = 30):
+    """Call Ollama REST API to generate text for given prompt. Tries several common endpoints and returns (text, meta).
+    If requests isn't available or all endpoints fail, returns (None, { 'error': ... })."""
+    if requests is None:
+        return None, {'error': 'requests_unavailable'}
+    model_name = model or OLLAMA_MODEL_DEFAULT
+    host = OLLAMA_HOST.rstrip('/')
+    payload = {'model': model_name, 'prompt': prompt, 'max_tokens': max_tokens}
+    endpoints = [f"{host}/api/generate", f"{host}/api/models/{model_name}/generate", f"{host}/v1/generate"]
+    for ep in endpoints:
+        try:
+            resp = requests.post(ep, json=payload, timeout=timeout)
+            if resp.status_code == 200:
+                try:
+                    data = resp.json()
+                    # Ollama/hub responses vary: try common keys
+                    if isinstance(data, dict):
+                        # Typical Ollama returns 'results': [{'content': '...'}]
+                        if 'results' in data and isinstance(data['results'], list) and len(data['results']) > 0:
+                            content = data['results'][0].get('content') or data['results'][0].get('text') or data['results'][0]
+                            if isinstance(content, dict):
+                                content = content.get('text') or json.dumps(content)
+                            return content, {'endpoint': ep, 'status': resp.status_code}
+                        if 'output' in data:
+                            return data['output'], {'endpoint': ep, 'status': resp.status_code}
+                        if 'text' in data:
+                            return data['text'], {'endpoint': ep, 'status': resp.status_code}
+                        # fallback: first string value
+                        for v in data.values():
+                            if isinstance(v, str):
+                                return v, {'endpoint': ep, 'status': resp.status_code}
+                    return resp.text, {'endpoint': ep, 'status': resp.status_code}
+                except Exception as e:
+                    return resp.text, {'endpoint': ep, 'status': resp.status_code, 'parse_error': str(e)}
+        except Exception:
+            # Try next endpoint
+            continue
+    return None, {'error': 'ollama_all_endpoints_failed'}
+
+
+def simple_invoice_parser(ocr_text: str):
+    """Heuristic/local parser to extract invoice-like fields from OCR text when LLM is unavailable.
+    Improved: repairs broken line-breaks/hyphenation, normalizes money formats to floats and
+    uses multiple item extraction patterns to better capture qty/price/subtotal.
+    Returns (parsed_dict, meta)
+    """
+    import re
+    meta = {'model': 'heuristic', 'parsed': True, 'method': 'heuristic', 'numerics_normalized': True}
+    text = ocr_text or ''
+
+    # Basic normalization: replace common OCR artifacts
+    text = text.replace('\r\n', '\n')
+    text = text.replace('\r', '\n')
+
+    # Split raw lines
+    raw_lines = [l.rstrip() for l in re.split(r'\n', text) if l is not None]
+
+    # Repair simple hyphenation and broken lines: join lines that end with '-' or lines where next starts lowercase
+    lines = []
+    i = 0
+    while i < len(raw_lines):
+        cur = raw_lines[i].strip()
+        if cur.endswith('-') and i + 1 < len(raw_lines):
+            nxt = raw_lines[i+1].lstrip()
+            cur = cur[:-1] + nxt
+            i += 1
+            while i + 1 < len(raw_lines) and cur.endswith('-'):
+                cur = cur[:-1] + raw_lines[i+1].lstrip()
+                i += 1
+        elif i + 1 < len(raw_lines) and cur and raw_lines[i+1].lstrip() and cur[-1].isalpha() and raw_lines[i+1].lstrip()[0].islower():
+            cur = cur + ' ' + raw_lines[i+1].lstrip()
+            i += 1
+        lines.append(cur.strip())
+        i += 1
+
+    # Helper regexes
+    date_re = re.compile(r'(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})')
+    cuit_re = re.compile(r'\b(\d{2}-\d{8}-\d|\d{11})\b')
+    # Match numbers with optional thousand separators and optional decimals. Examples: 1619.77, 1.619,77, 6724
+    money_re = re.compile(r'\d+(?:[\.,]\d{3})*(?:[\.,]\d{2})?')
+    nro_re = re.compile(r'(?:Nro|Nº|Numero|Factura)[:\s]*([A-Za-z0-9\-\/]+)', re.I)
+
+    def normalize_money_str(s: str):
+        if s is None:
+            return None
+        s0 = str(s).strip()
+        s0 = s0.replace('\u2212', '-')  # minus sign
+        s0 = s0.replace('$', '').replace(' ', '')
+        if '.' in s0 and ',' in s0:
+            if s0.find('.') < s0.find(','):
+                s0 = s0.replace('.', '').replace(',', '.')
+            else:
+                s0 = s0.replace(',', '')
+        elif ',' in s0 and '.' not in s0:
+            s0 = s0.replace(',', '.')
+        else:
+            if s0.count('.') > 1:
+                parts = s0.split('.')
+                s0 = ''.join(parts[:-1]) + '.' + parts[-1]
+        s0 = re.sub(r'[^0-9\.\-]', '', s0)
+        return s0
+
+    def parse_money(s: str):
+        try:
+            ns = normalize_money_str(s)
+            if ns is None or ns == '':
+                return None
+            if '.' not in ns and len(ns) > 4:
+                return float(int(ns))
+            return float(ns)
+        except Exception:
+            return None
+
+    parsed = {
+        'emisor': {'nombre': None, 'cuit': None},
+        'documento': {'numero': None, 'fecha': None, 'totales': {}},
+        'items': []
+    }
+
+    # Find provider/name: first line that doesn't look like header
+    for ln in lines:
+        if ln and not re.search(r'factura|factu|numero|fecha|subtotal|total|iva', ln, re.I):
+            parsed['emisor']['nombre'] = ln.strip()
+            break
+
+    # CUIT
+    for l in lines[:12]:
+        m = cuit_re.search(l)
+        if m:
+            parsed['emisor']['cuit'] = m.group(0)
+            break
+
+    # Number & date
+    for l in lines[:14]:
+        m = nro_re.search(l)
+        if m and not parsed['documento']['numero']:
+            parsed['documento']['numero'] = m.group(1)
+        d = date_re.search(l)
+        if d and not parsed['documento']['fecha']:
+            parsed['documento']['fecha'] = d.group(1)
+
+    # Totals: prefer explicit 'total' lines (scan bottom-up)
+    totals = {}
+    for l in reversed(lines[-18:]):
+        if 'total' in l.lower() or 'importe' in l.lower():
+            m = money_re.findall(l)
+            if m:
+                for cand in reversed(m):
+                    val = parse_money(cand)
+                    if val is not None:
+                        totals['total'] = val
+                        totals['total_str'] = cand
+                        break
+                if 'total' in totals:
+                    break
+
+    if 'total' not in totals:
+        bottom = lines[max(0, len(lines) - 18):]
+        amounts = []
+        for l in bottom:
+            for mm in money_re.findall(l):
+                val = parse_money(mm)
+                if val is not None:
+                    amounts.append((val, mm))
+        if amounts:
+            amounts.sort(key=lambda x: x[0])
+            totals['total'] = amounts[-1][0]
+            totals['total_str'] = amounts[-1][1]
+
+    parsed['documento']['totales'] = totals
+
+    # Item extraction: several patterns
+    item_patterns = [
+        re.compile(r'^(?P<qty>\d+)\s*[xX]?\s*(?P<desc>.+?)\s+(?P<cantidad>\d+)\s+(?P<precio>[\d\.,]+)\s+(?P<subtotal>[\d\.,]+)$'),
+        re.compile(r'^(?P<desc>.+?)\s+(?P<precio>[\d\.,]+)\s+(?P<subtotal>[\d\.,]+)$'),
+        re.compile(r'^(?P<desc>.+?)\s+(?P<cantidad>\d+)\s+(?P<precio>[\d\.,]+)$')
+    ]
+
+    for l in lines[1:]:
+        s = l.strip()
+        matched = False
+        for pat in item_patterns:
+            m = pat.match(s)
+            if m:
+                gd = m.groupdict()
+                desc = gd.get('desc', '').strip()
+                cantidad = None
+                if gd.get('cantidad'):
+                    try:
+                        cantidad = int(re.sub(r'[^0-9]', '', gd.get('cantidad')))
+                    except Exception:
+                        cantidad = None
+                precio = parse_money(gd.get('precio')) if gd.get('precio') else None
+                subtotal = parse_money(gd.get('subtotal')) if gd.get('subtotal') else None
+                desc_clean = re.sub(r'\s{2,}', ' ', re.sub(r'[^\x00-\x7F]', ' ', desc)).strip()
+                parsed['items'].append({
+                    'descripcion': desc,
+                    'descripcion_limpia': desc_clean,
+                    'cantidad': cantidad,
+                    'precio_unitario': precio,
+                    'subtotal': subtotal
+                })
+                matched = True
+                break
+        if not matched:
+            money_tokens = money_re.findall(s)
+            if len(money_tokens) >= 2:
+                precio = parse_money(money_tokens[-2])
+                subtotal = parse_money(money_tokens[-1])
+                idx = s.find(money_tokens[0])
+                desc = s[:idx].strip() if idx != -1 else s
+                desc_clean = re.sub(r'\s{2,}', ' ', re.sub(r'[^\x00-\x7F]', ' ', desc)).strip()
+                parsed['items'].append({
+                    'descripcion': desc or s,
+                    'descripcion_limpia': desc_clean,
+                    'cantidad': None,
+                    'precio_unitario': precio,
+                    'subtotal': subtotal
+                })
+
+    if not parsed['items'] and len(lines) > 3:
+        sample = lines[1: min(10, len(lines))]
+        for s in sample:
+            if len(s.split()) > 3 and not date_re.search(s) and not cuit_re.search(s):
+                parsed['items'].append({'descripcion': s, 'descripcion_limpia': s, 'cantidad': None, 'precio_unitario': None, 'subtotal': None})
+
+    # Compute subtotal of parsed items when available
+    subtotal_items = 0.0
+    subtotal_count = 0
+    for it in parsed['items']:
+        st = it.get('subtotal')
+        if isinstance(st, (int, float)):
+            subtotal_items += float(st)
+            subtotal_count += 1
+    if subtotal_count > 0:
+        parsed['documento']['totales']['subtotal_items'] = subtotal_items
+    else:
+        parsed['documento']['totales']['subtotal_items'] = None
+
+    # If we have both subtotal and total, provide a mismatch hint in meta
+    try:
+        tot = parsed['documento'].get('totales', {})
+        total_val = tot.get('total')
+        if isinstance(total_val, (int, float)) and parsed['documento']['totales'].get('subtotal_items') is not None:
+            diff = abs(total_val - parsed['documento']['totales']['subtotal_items'])
+            if parsed['documento']['totales']['subtotal_items'] > 0 and (diff / parsed['documento']['totales']['subtotal_items']) > 0.05:
+                meta['total_mismatch'] = {
+                    'total_detected': total_val,
+                    'subtotal_items': parsed['documento']['totales']['subtotal_items'],
+                    'diff': diff
+                }
+    except Exception:
+        pass
+
+    return parsed, meta
+
+
+def parse_invoice_with_qwen(ocr_text: str, max_new_tokens: int = 512, prompt_override: Optional[str] = None, model_override: Optional[str] = None):
+    """Given OCR text, use Qwen to extract invoice fields as JSON. Returns (extracted_obj_or_text, meta)
+    meta contains: model, raw_output, error if any.
+    If Qwen is unavailable, falls back to a local heuristic parser.
+    """
+    meta = {'model': model_override or os.environ.get('QWEN_MODEL', 'qwen/Qwen-2.5-VL')}
+
+    # If configured to use Ollama, delegate to it and AVOID loading heavy python LLMs into VRAM
+    if USE_OLLAMA:
+        try:
+            logger.info('USE_OLLAMA=true; delegating invoice parsing to Ollama service %s', OLLAMA_HOST)
+            default_prompt = "Extrae de forma estricta los campos de la factura del siguiente texto OCR y devuelve EXCLUSIVAMENTE un JSON válido que cumpla exactamente con el esquema descrito. Responde SOLO con JSON." 
+            full_prompt = (prompt_override.strip() + "\n\n" + ocr_text) if prompt_override and isinstance(prompt_override, str) else (default_prompt + "\n---\n" + ocr_text)
+            text, ometa = call_ollama(full_prompt, model=(model_override or OLLAMA_MODEL_DEFAULT), max_tokens=max_new_tokens, timeout=60)
+            if text:
+                candidate_json = None
+                try:
+                    candidate_json = extract_balanced_json(text)
+                except Exception:
+                    candidate_json = None
+                if candidate_json:
+                    try:
+                        parsed = json.loads(candidate_json)
+                        return parsed, {**meta, 'model': 'ollama', 'raw_output': text[:2000], 'endpoint_meta': ometa, 'parsed': True}
+                    except Exception as e:
+                        return None, {**meta, 'model': 'ollama', 'raw_output': text[:2000], 'error': str(e), 'parsed': False}
+                # If no JSON found, return raw text for debugging
+                return text, {**meta, 'model': 'ollama', 'raw_output': text[:2000], 'parsed': False}
+        except Exception as e:
+            logger.warning('Ollama parse attempt failed: %s', e)
+            # fall through to other parsers
+
+    # If not using Ollama, attempt local Qwen load (lazy) and then fall back to heuristic parser
+    model, tokenizer = get_qwen_model(model_override)
+
+    if model is None or tokenizer is None:
+        logger.info('Qwen unavailable, using heuristic parser')
+        try:
+            parsed, hmeta = simple_invoice_parser(ocr_text)
+            return parsed, {**meta, **hmeta, 'parsed': True}
+        except Exception as e:
+            logger.exception('Heuristic parser failed: %s', e)
+            return None, {**meta, 'error': 'heuristic_failed', 'error_details': str(e)}
+
+
+# -----------------------------
+# Invoice validation and tuning helpers
+# -----------------------------
+
+def validate_invoice(parsed: Any):
+    """Return (bool, details) indicating whether parsed invoice has required fields for UI."""
+    details = {'missing': []}
+    try:
+        if not isinstance(parsed, dict):
+            details['missing'].append('parsed_not_object')
+            return False, details
+        em = parsed.get('emisor', {}) if isinstance(parsed.get('emisor', {}), dict) else {}
+        doc = parsed.get('documento', {}) if isinstance(parsed.get('documento', {}), dict) else {}
+        items = parsed.get('items', []) if isinstance(parsed.get('items', []), list) else []
+
+        # emisor.nombre
+        if not em.get('nombre') or len(str(em.get('nombre')).strip()) < 3:
+            details['missing'].append('emisor.nombre')
+
+        # cuit
+        cuit = em.get('cuit')
+        if cuit:
+            import re
+            if not re.match(r'^(\d{2}-\d{8}-\d|\d{11})$', str(cuit).strip()):
+                details['missing'].append('emisor.cuit.invalid')
+        else:
+            details['missing'].append('emisor.cuit')
+
+        # documento.numero
+        if not doc.get('numero'):
+            details['missing'].append('documento.numero')
+
+        # documento.fecha
+        import re
+        fecha = doc.get('fecha')
+        if fecha:
+            if not re.search(r'\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}', str(fecha)):
+                details['missing'].append('documento.fecha.format')
+        else:
+            details['missing'].append('documento.fecha')
+
+        # total
+        tot = doc.get('totales', {}) if isinstance(doc.get('totales', {}), dict) else {}
+        total_impreso = tot.get('total_impreso') or tot.get('total') or tot.get('total_impreso')
+        try:
+            if total_impreso is None or float(total_impreso) <= 0:
+                details['missing'].append('totales.total_impreso')
+        except Exception:
+            details['missing'].append('totales.total_impreso')
+
+        # items
+        if not items or len(items) == 0:
+            details['missing'].append('items.empty')
+        else:
+            for i, it in enumerate(items[:5]):
+                if not it.get('descripcion_exacta') and not it.get('descripcion') and not it.get('descripcion_limpia'):
+                    details.setdefault('items_missing', []).append(i)
+
+        ok = len(details['missing']) == 0 and ('items_missing' not in details)
+        return ok, details
+    except Exception as e:
+        logger.exception('validate_invoice failed: %s', e)
+        return False, {'error': str(e)}
+
+
+def tune_invoice_extraction(img_bgr: np.ndarray, existing_ocr: Optional[str] = None, initial_meta: Optional[dict] = None, max_attempts: int = 6):
+    """Iteratively apply conservative image transforms, try different OCR configs and re-run parsing.
+    Returns (best_parsed, meta) where meta contains attempts and debug images.
+    """
+    attempts = []
+    best = None
+    best_meta = None
+
+    def run_ocr_and_parse(img_try, ocr_config=None, gen_max_tokens=1024):
+        try:
+            rgb = cv2.cvtColor(img_try, cv2.COLOR_BGR2RGB)
+            cfg = ocr_config or '--psm 6 --oem 1'
+            ocr_text = None
+            try:
+                ocr_text = pytesseract.image_to_string(rgb, config=cfg)
+            except Exception as e:
+                logger.warning('Tesseract failed with config %s: %s', cfg, e)
+                try:
+                    ocr_text = pytesseract.image_to_string(rgb)
+                except Exception as e2:
+                    logger.warning('Tesseract fallback failed: %s', e2)
+                    ocr_text = ''
+
+            # Try Qwen parsing with a larger max token budget and prompt hinting
+            try:
+                parsed, meta = parse_invoice_with_qwen(ocr_text, max_new_tokens=gen_max_tokens)
+            except Exception as e:
+                logger.warning('parse_invoice_with_qwen failed in tuner: %s', e)
+                parsed, meta = None, {'error': str(e)}
+
+            return ocr_text, parsed, meta
+        except Exception as e:
+            logger.exception('run_ocr_and_parse error: %s', e)
+            return None, None, {'error': str(e)}
+
+    # Define transforms to try (name, func)
+    transforms = [
+        ('orig', lambda im: im),
+        ('clahe_high', lambda im: apply_clahe_color(im, clip=6.0, tile=(8,8))),
+        ('binarize_adaptive', lambda im: cv2.cvtColor(cv2.adaptiveThreshold(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 3), cv2.COLOR_GRAY2BGR)),
+        ('bright_plus', lambda im: np.clip((1.15 * im + 10), 0, 255).astype('uint8')),
+        ('unsharp', lambda im: (cv2.addWeighted(im, 1.2, cv2.GaussianBlur(im, (0,0), 3), -0.2, 0)).astype('uint8')),
+        ('morph_open', lambda im: cv2.morphologyEx(im, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))))
+    ]
+
+    ocr_configs = ['--psm 6 --oem 1', '--psm 4 --oem 1', '--psm 11 --oem 3']
+
+    attempt_idx = 0
+    for tname, tfunc in transforms:
+        if attempt_idx >= max_attempts:
+            break
+        attempt_idx += 1
+        try:
+            img_try = tfunc(img_bgr.copy())
+        except Exception as e:
+            logger.warning('Transform %s failed: %s', tname, e)
+            img_try = img_bgr
+
+        # Normalize size and letterbox as before
+        try:
+            img_try = letterbox_resize(img_try, max_dim=1024)
+        except Exception:
+            pass
+
+        for cfg in ocr_configs:
+            if attempt_idx >= max_attempts:
+                break
+            attempt_idx += 1
+            ocr_text, parsed, meta = run_ocr_and_parse(img_try, ocr_config=cfg, gen_max_tokens=1024)
+            att = {
+                'transform': tname,
+                'ocr_config': cfg,
+                'ocr_preview': (ocr_text[:500] if ocr_text else ''),
+                'parsed_preview': (str(parsed)[:500] if parsed else ''),
+                'meta': meta
+            }
+            attempts.append(att)
+
+            # Validate parsed result
+            ok, details = validate_invoice(parsed) if parsed else (False, {'reason': 'no_parsed'})
+            if ok:
+                # Prepare debug image as base64
+                try:
+                    _, dbg_png = cv2.imencode('.png', img_try)
+                    dbg_b64 = base64.b64encode(dbg_png.tobytes()).decode()
+                except Exception:
+                    dbg_b64 = None
+                meta_out = {'tuned': True, 'attempts': attempts, 'debug_image': dbg_b64}
+                return parsed, meta_out
+
+    # If we reach here, no validated parse found; return best heuristic attempt (prefer parsed over heuristic)
+    # Try heuristic on original OCR or original image if needed
+    try:
+        # If we had any parsed candidate, return the last parsed
+        for a in reversed(attempts):
+            if a.get('meta') and a['meta'].get('parsed'):
+                parsed = a['meta']
+                return a.get('parsed') if a.get('parsed') else None, {'tuned': True, 'attempts': attempts}
+    except Exception:
+        pass
+
+    # Fallback: run simple heuristic on OCR from original image
+    try:
+        rgb_orig = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        try:
+            ocr_orig = pytesseract.image_to_string(rgb_orig, config='--psm 6 --oem 1')
+        except Exception:
+            ocr_orig = existing_ocr or ''
+        parsed_h, hmeta = simple_invoice_parser(ocr_orig)
+        attempts.append({'transform': 'heuristic_fallback', 'ocr_preview': ocr_orig[:400], 'parsed_preview': str(parsed_h)[:400], 'meta': hmeta})
+        return parsed_h, {'tuned': True, 'attempts': attempts}
+    except Exception as e:
+        logger.exception('tune_invoice_extraction final heuristic failed: %s', e)
+        return None, {'error': str(e), 'attempts': attempts}
+
+    default_prompt = ("""
+Extrae de forma estricta los campos de la factura del siguiente texto OCR y devuelve EXCLUSIVAMENTE un JSON válido que cumpla exactamente con el esquema descrito más abajo. Responde SOLO con JSON, sin texto adicional ni explicaciones. Si un campo no aplica, devuelve 0, false, "" o [] según corresponda.
+
+REGLAS IMPORTANTES:
+- NUMÉRICOS: Devuelve todos los montos como numbers (p.ej. 1234.56). Interpreta formatos argentinos ("1.234,50" -> 1234.50). Elimina símbolos como "$" y espacios.
+- DEVOLUCIONES: Si hay indicio de nota de crédito o devolución, marca el ítem con "es_devolucion": true y entrega subtotales negativos. Suma sus valores absolutos en totales.devoluciones_total.
+- DESCUENTOS: Extrae descuentos por ítem en "descuento" y el total en "totales.descuento_total". Si hay detalle, devuélvelo en "totales.descuentos" como array de {"nombre","monto"}.
+- IMPUESTOS: Devuelve desagregado en "totales.impuestos" (nombre,tipo,monto) y suma en "totales.impuestos_total".
+- CALCULOS: Incluye "totales.total_calculado" = suma(items.subtotal_calculado) - descuentos + impuestos + recargos. Si hay un total impreso, colócalo en "totales.total_impreso" y calcula "totales.diferencia".
+
+CONVERSIÓN A PRESENTACIONES (CRÍTICO): Por cada ítem intenta normalizar la presentación y devuelve candidatos de mapeo:
+  - presentacion_normalizada: string (p.ej. "CAJA 12x500g")
+  - tipo_presentacion_nombre: string (CAJA, PACK, UNIDAD, BOLSON, etc.)
+  - unidades_por_presentacion: number
+  - presentacion_base: string (p.ej. "500g", "1L")
+  - presentacion_candidates: [{ "nombre":"","unidades_por_presentacion":0,"presentacion_base":"","confidence":0.0,"match_tokens":"" }]
+  - producto_candidates: [{ "nombre":"","codigo_proveedor":"","confidence":0.0 }]
+
+SALIDA (JSON estricta):
+{
+  "documento": { "tipo":"", "numero":"", "fecha":"DD/MM/AAAA", "estado_pago":"", "monto_pagado":0, "cuenta_corriente": {"estado":"","monto":0}, "anotaciones_marginales":"" },
+  "emisor": { "nombre":"", "cuit":"", "telefono":"", "iva":"", "direccion_completa_manual":"", "emails":[], "datos_bancarios": {"banco":"","cbu":"","alias":""} },
+  "items": [{ "ordenEnFactura":0, "descripcion_exacta":"", "descripcion_limpia":"", "nombre_producto":"", "presentacion_normalizada":"", "tipo_presentacion_nombre":"", "unidades_por_presentacion":1, "presentacion_base":"", "cantidad_documento":0, "precio_unitario":0, "descuento":0, "subtotal_original":0, "subtotal_calculado":0, "es_devolucion":false, "observaciones":"", "presentacion_candidates":[], "producto_candidates":[] }],
+  "totales": { "subtotal_items":0, "devoluciones_total":0, "descuento_total":0, "descuentos":[], "recargos_total":0, "impuestos_total":0, "impuestos":[{"nombre":"","tipo":"","monto":0}], "total_impreso":0, "total_calculado":0, "diferencia":0, "detalle_diferencia":"" },
+  "candidatos_presentaciones": [],
+  "candidatos_productos": [],
+  "extras": { "texto_mano":"" }
+}
+
+IMPORTANTE: Responde solo con el JSON exacto. Usa valores numéricos para montos. Para candidatos usa un campo "confidence" entre 0.0 y 1.0. Si no podés inferir algo con confianza, devuelve valores neutros (0 o "").
+
+EJEMPLO (para guiar formato de items):
+
+OCR snippet:
+```text
+1x Pan de Molde 500g       2   20,08   40,16
+3x Mermelada 330g         1   8,06    8,06
+Caja 12x200g Producto X   1   208,78  208,78
+```
+
+Esperado (parcial, items):
+{
+  "items": [
+    { "ordenEnFactura": 1, "descripcion_exacta": "Pan de Molde 500g", "descripcion_limpia": "Pan de Molde", "cantidad_documento": 2, "precio_unitario": 20.08, "subtotal_original": 40.16, "subtotal_calculado": 40.16, "presentacion_normalizada": "500g", "tipo_presentacion_nombre": "UNIDAD", "unidades_por_presentacion": 1 },
+    { "ordenEnFactura": 2, "descripcion_exacta": "Mermelada 330g", "cantidad_documento": 1, "precio_unitario": 8.06, "subtotal_original": 8.06 },
+    { "ordenEnFactura": 3, "descripcion_exacta": "Caja 12x200g Producto X", "cantidad_documento": 1, "precio_unitario": 208.78, "subtotal_original": 208.78, "presentacion_normalizada": "CAJA 12x200g", "tipo_presentacion_nombre": "CAJA", "unidades_por_presentacion": 12, "presentacion_base": "200g" }
+  ]
+}
+""")
+
+    # Determine final prompt: prefer explicit prompt_override passed from client
+    if prompt_override and isinstance(prompt_override, str) and prompt_override.strip():
+        full_prompt = prompt_override.strip() + "\n\n" + ocr_text
+    else:
+        full_prompt = default_prompt + "\n---\n" + ocr_text
+
+    # Honor a special directive to force the local heuristic parser (useful for debugging/fallback)
+    try:
+        if prompt_override and isinstance(prompt_override, str) and 'FORCE_HEURISTIC' in prompt_override.upper():
+            logger.info('Prompt directive FORCE_HEURISTIC detected: using local heuristic parser')
+            parsed, hmeta = simple_invoice_parser(ocr_text)
+            return parsed, {**meta, **hmeta, 'parsed': True, 'forced_heuristic': True}
+    except Exception as e:
+        logger.warning('Heuristic directive handling failed (non-fatal): %s', e)
+
+    try:
+        # Inject persistent system prompt if provided (mimics Ollama Modelfile behavior)
+        system_prompt = os.environ.get('QWEN_SYSTEM_PROMPT', '').strip()
+        if system_prompt:
+            prompt_for_model = system_prompt + "\n\n" + full_prompt
+        else:
+            prompt_for_model = full_prompt
+
+        inputs = tokenizer(prompt_for_model, return_tensors='pt', truncation=True, max_length=8192).to(model.device)
+
+        import time
+        gen_attempts = []
+
+        def extract_balanced_json(s: str):
+            # Find a balanced JSON object by locating the first '{' and scanning for matching braces.
+            start = s.find('{')
+            if start == -1:
+                return None
+            depth = 0
+            for i in range(start, len(s)):
+                if s[i] == '{':
+                    depth += 1
+                elif s[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        candidate = s[start:i+1]
+                        return candidate
+            return None
+
+        # Stage 1: deterministic generation (often cleaner for strict JSON)
+        stage1 = {
+            'max_new_tokens': min(max_new_tokens, 512),
+            'temperature': 0.0,
+            'top_p': 1.0,
+            'do_sample': False,
+            'use_cache': True,
+            'pad_token_id': getattr(tokenizer, 'eos_token_id', getattr(tokenizer, 'pad_token_id', 0)),
+            'repetition_penalty': 1.0
+        }
+
+        try:
+            t0 = time.time()
+            with torch.no_grad():
+                out1 = model.generate(**inputs, **stage1)
+            latency = (time.time() - t0)
+            gen_attempts.append({'stage': 1, 'kwargs': stage1, 'latency': latency})
+            if hasattr(out1, 'sequences'):
+                seq1 = out1.sequences[0]
+            else:
+                seq1 = out1[0]
+            text1 = tokenizer.decode(seq1, skip_special_tokens=True)
+            meta.setdefault('gen_attempts', []).append({'stage': 1, 'output_preview': text1[:500]})
+            candidate_json = extract_balanced_json(text1)
+            if candidate_json:
+                try:
+                    parsed = json.loads(candidate_json)
+                    meta['raw_output'] = text1[:2000]
+                    return parsed, {**meta, 'parsed': True, 'strategy': 'deterministic'}
+                except Exception as e:
+                    meta.setdefault('errors', []).append({'stage': 1, 'error': str(e)})
+        except Exception as e:
+            logger.warning('Stage 1 deterministic generation failed (non-fatal): %s', e)
+
+        # Stage 2: sampled generation with Ollama-like params (configurable via env)
+        stage2 = {
+            'max_new_tokens': max_new_tokens,
+            'temperature': float(os.environ.get('QWEN_TEMPERATURE', 0.7)),
+            'top_p': float(os.environ.get('QWEN_TOP_P', 0.9)),
+            'repetition_penalty': float(os.environ.get('QWEN_REPETITION_PENALTY', 1.1)),
+            'do_sample': True,
+            'use_cache': True,
+            'pad_token_id': getattr(tokenizer, 'eos_token_id', getattr(tokenizer, 'pad_token_id', 0)),
+            'no_repeat_ngram_size': 3
+        }
+        for attempt in range(2):
+            try:
+                t0 = time.time()
+                with torch.no_grad():
+                    out2 = model.generate(**inputs, **stage2)
+                latency = (time.time() - t0)
+                gen_attempts.append({'stage': 2, 'attempt': attempt + 1, 'kwargs': stage2, 'latency': latency})
+                if hasattr(out2, 'sequences'):
+                    seq2 = out2.sequences[0]
+                else:
+                    seq2 = out2[0]
+                text2 = tokenizer.decode(seq2, skip_special_tokens=True)
+                meta.setdefault('gen_attempts', []).append({'stage': 2, 'attempt': attempt + 1, 'output_preview': text2[:500]})
+                candidate_json = extract_balanced_json(text2)
+                if candidate_json:
+                    try:
+                        parsed = json.loads(candidate_json)
+                        meta['raw_output'] = text2[:2000]
+                        return parsed, {**meta, 'parsed': True, 'strategy': f'sampled_attempt_{attempt+1}'}
+                    except Exception as e:
+                        meta.setdefault('errors', []).append({'stage': 2, 'attempt': attempt + 1, 'error': str(e)})
+            except Exception as e:
+                logger.warning('Stage 2 generation attempt %d failed: %s', attempt + 1, e)
+
+        # If all attempts failed, return last sampled output and meta for debugging
+        # Use last available text preview
+        last_preview = None
+        if meta.get('gen_attempts'):
+            last_preview = meta['gen_attempts'][-1].get('output_preview')
+        return last_preview or text1 or '', {**meta, 'parsed': False, 'error': 'no_valid_json_after_attempts'}
+    except Exception as e:
+        logger.exception('Qwen parsing failed: %s', e)
+        return None, {**meta, 'error': str(e)}
+def get_model():
+    global _model
+    if _model is None:
+        if YOLO is None:
+            raise RuntimeError(f"Missing dependencies: {missing_import}")
+        if not os.path.exists(MODEL_PATH):
+            raise RuntimeError(f"YOLO model not found at {MODEL_PATH}. Set YOLO_MODEL_PATH env or place the model file there.")
+        logger.info(f"Loading YOLO model from {MODEL_PATH} onto device 0 (GPU)")
+        try:
+            _model = YOLO(MODEL_PATH)
+        except Exception as e:
+            # Workaround for PyTorch "WeightsUnpickler error: Unsupported global" when loading
+            # ultralytics checkpoints under newer torch versions which enable weights_only.
+            msg = str(e)
+            logger.warning('YOLO load initial attempt failed: %s', msg)
+            if 'Unsupported global' in msg and 'ultralytics' in msg:
+                try:
+                    import torch as _torch
+                    import ultralytics as _ultra
+                    logger.info('Retrying YOLO load using torch.serialization.safe_globals to allow ultralytics classes')
+                    try:
+                        # allowlist the class referenced by the checkpoint
+                        with _torch.serialization.safe_globals([_ultra.nn.tasks.SegmentationModel]):
+                            _model = YOLO(MODEL_PATH)
+                    except Exception:
+                        # second fallback: try to load a known-good ultralytics hub model instead
+                        logger.info('safe_globals failed, attempting to load a hub-provided model (yolov8n-seg) as fallback')
+                        try:
+                            _model = YOLO('yolov8n-seg')
+                        except Exception as ex2:
+                            logger.exception('Fallback hub model failed: %s', ex2)
+                            # final fallback: try to load with weights_only=False (trusted file)
+                            logger.info('Attempting torch.load with weights_only=False (use only if model is trusted)')
+                            state = _torch.load(MODEL_PATH, map_location='cpu', weights_only=False)
+                            _model = YOLO(MODEL_PATH)
+                except Exception as ex:
+                    logger.exception('YOLO retry with safe_globals failed: %s', ex)
+                    raise
+            else:
+                raise
+    return _model
+
+
+def order_corners(pts):
+    # pts: Nx2 numpy array
+    pts = np.array(pts).reshape(-1, 2)
+    s = pts.sum(axis=1)
+    diff = np.diff(pts, axis=1).reshape(-1)
+    tl = pts[np.argmin(s)]
+    br = pts[np.argmax(s)]
+    tr = pts[np.argmin(diff)]
+    bl = pts[np.argmax(diff)]
+    ordered = [tuple(map(int, tl)), tuple(map(int, tr)), tuple(map(int, br)), tuple(map(int, bl))]
+    return ordered
+
+
+def polygon_touches_edge(pts, w, h, tol=3):
+    """Return True if polygon points touch or are very close to image edges."""
+    if pts is None:
+        return False
+    pts = np.array(pts).reshape(-1, 2)
+    if pts.size == 0:
+        return False
+    xs = pts[:, 0]
+    ys = pts[:, 1]
+    return xs.min() <= tol or ys.min() <= tol or xs.max() >= (w - tol) or ys.max() >= (h - tol)
+
+
+# -----------------------------
+# Document detection & warp helpers
+# -----------------------------
+
+def four_point_warp(img, pts):
+    """Warp a quadrilateral defined by pts (TL, TR, BR, BL) into a straight rectangle.
+    pts: iterable of 4 (x,y) points ordered TL,TR,BR,BL
+    Returns warped image (BGR uint8)"""
+    try:
+        src = np.array(pts, dtype='float32')
+        (tl, tr, br, bl) = src
+        # compute widths and heights
+        widthA = np.linalg.norm(br - bl)
+        widthB = np.linalg.norm(tr - tl)
+        maxWidth = max(int(widthA), int(widthB))
+        heightA = np.linalg.norm(tr - br)
+        heightB = np.linalg.norm(tl - bl)
+        maxHeight = max(int(heightA), int(heightB))
+        dst = np.array([[0, 0], [maxWidth - 1, 0], [maxWidth - 1, maxHeight - 1], [0, maxHeight - 1]], dtype='float32')
+        M = cv2.getPerspectiveTransform(src, dst)
+        warped = cv2.warpPerspective(img, M, (maxWidth, maxHeight), flags=cv2.INTER_LINEAR)
+        return warped
+    except Exception as e:
+        logger.exception('four_point_warp failed: %s', e)
+        return img
+
+
+def find_document_polygon(img, prefer_yolo=True, conf=0.25, timeout_ms=None):
+    """Attempt to find a 4-point polygon representing the document in the image.
+    Tries YOLO segmentation first (if available), then falls back to an OpenCV contour-based method.
+    Returns (ordered_points (TL,TR,BR,BL) or None, debug_image_or_None)
+    """
+    h, w = img.shape[:2]
+    try:
+        proc = preprocess_image(img)
+    except Exception:
+        proc = img
+
+    # Try YOLO first if requested and model present
+    if prefer_yolo:
+        try:
+            model = None
+            try:
+                model = get_model()
+            except Exception:
+                model = None
+            if model is not None:
+                # Prepare a resized image for inference (avoid huge images)
+                infer_img = cv2.resize(proc, (min(1280, w), int(h * min(1280, w) / w)), interpolation=cv2.INTER_LINEAR)
+                # call YOLO with timeout
+                try:
+                    # run model inference synchronously (this helper is typically run inside a thread)
+                    results = model(infer_img, device=0, conf=conf, verbose=False)
+                except Exception as ye:
+                    logger.warning('YOLO inference in find_document_polygon failed (non-fatal): %s', ye)
+                    results = None
+
+                if results:
+                    # iterate results; prefer large mask with convex hull approx to 4 points
+                    try:
+                        best = None
+                        best_area = 0
+                        for r in results:
+                            if hasattr(r, 'masks') and r.masks is not None:
+                                try:
+                                    mask = r.masks.data[0].cpu().numpy() if hasattr(r.masks, 'data') else np.asarray(r.masks[0])
+                                except Exception:
+                                    mask = None
+                                if mask is None:
+                                    continue
+                                # threshold and find contours
+                                mm = (mask > 0.5).astype('uint8') * 255
+                                contours, _ = cv2.findContours(mm, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                                for c in contours:
+                                    area = cv2.contourArea(c)
+                                    if area < best_area:
+                                        continue
+                                    peri = cv2.arcLength(c, True)
+                                    approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+                                    if approx.shape[0] == 4 and area > best_area:
+                                        best_area = area
+                                        best = approx.reshape(4, 2)
+                        if best is not None:
+                            ordered = order_corners(best)
+                            return ordered, None
+                    except Exception as e:
+                        logger.warning('YOLO mask parsing failed in find_document_polygon: %s', e)
+        except Exception as e:
+            logger.warning('YOLO attempt in find_document_polygon raised: %s', e)
+
+    # Fallback: OpenCV contour method (robust and deterministic)
+    try:
+        gray = cv2.cvtColor(proc, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(blurred, 50, 150)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+        dilated = cv2.dilate(edges, kernel)
+        contours, _ = cv2.findContours(dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        # sort by area
+        contours = sorted(contours, key=lambda c: cv2.contourArea(c), reverse=True)
+        for c in contours[:12]:
+            area = cv2.contourArea(c)
+            if area < (w * h) * 0.02:
+                continue
+            peri = cv2.arcLength(c, True)
+            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+            if approx is None or approx.shape[0] < 4:
+                continue
+            # If more than 4 points, try to pick the best 4-vertex approximation
+            if approx.shape[0] == 4:
+                ordered = order_corners(approx.reshape(4, 2))
+                return ordered, None
+            else:
+                # Try progressive approximation tolerances
+                for eps in [0.04, 0.06, 0.08]:
+                    a2 = cv2.approxPolyDP(c, eps * peri, True)
+                    if a2 is not None and a2.shape[0] == 4:
+                        ordered = order_corners(a2.reshape(4, 2))
+                        return ordered, None
+    except Exception as e:
+        logger.warning('OpenCV fallback detection failed in find_document_polygon: %s', e)
+
+    return None, None
+
+def preprocess_image(img_np):
+    """Apply subtle contrast and sharpening to improve detection robustness.
+    Uses CLAHE on the L channel and a gentle unsharp mask. Non-destructive and conservative."""
+    try:
+        lab = cv2.cvtColor(img_np, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        l2 = clahe.apply(l)
+        lab2 = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+
+        # Slight unsharp mask (subtle sharpening)
+        blurred = cv2.GaussianBlur(img_clahe, (0, 0), sigmaX=1.0)
+        sharpened = cv2.addWeighted(img_clahe, 1.12, blurred, -0.12, 0)
+        return sharpened
+    except Exception:
+        # If any step fails, return the original image
+        return img_np
+
+
+# -----------------------------
+# CLAHE and letterbox utilities
+# -----------------------------
+
+def is_image_grayish(img, sat_thresh=25):
+    try:
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        s = hsv[:, :, 1]
+        mean_s = float(s.mean())
+        return mean_s < sat_thresh
+    except Exception:
+        return False
+
+
+def apply_clahe_color(img, clip=3.0, tile=(8, 8)):
+    try:
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=clip, tileGridSize=tile)
+        cl = clahe.apply(l)
+        merged = cv2.merge((cl, a, b))
+        res = cv2.cvtColor(merged, cv2.COLOR_LAB2BGR)
+        return res
+    except Exception as e:
+        logger.warning('apply_clahe_color failed: %s', e)
+        return img
+
+
+def letterbox_resize(img, max_dim=1024, divisor=28, color=(255, 255, 255)):
+    h, w = img.shape[:2]
+    max_side = max(h, w)
+    if max_side <= max_dim:
+        # pad to nearest multiple of divisor
+        new_h = ((h + divisor - 1) // divisor) * divisor
+        new_w = ((w + divisor - 1) // divisor) * divisor
+        if new_h == h and new_w == w:
+            return img
+        canvas = np.full((new_h, new_w, 3), color, dtype=np.uint8)
+        canvas[0:h, 0:w] = img
+        return canvas
+    scale = max_dim / float(max_side)
+    new_w = int(round(w * scale))
+    new_h = int(round(h * scale))
+    resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+    # pad to multiples of divisor
+    pad_h = ((new_h + divisor - 1) // divisor) * divisor
+    pad_w = ((new_w + divisor - 1) // divisor) * divisor
+    canvas = np.full((pad_h, pad_w, 3), color, dtype=np.uint8)
+    canvas[0:new_h, 0:new_w] = resized
+    return canvas
+
+
+
+def fallback_rect(w, h, margin=0.1):
+    m = margin
+    return [
+        {"x": int(m * w), "y": int(m * h)},
+        {"x": int((1 - m) * w), "y": int(m * h)},
+        {"x": int((1 - m) * w), "y": int((1 - m) * h)},
+        {"x": int(m * w), "y": int((1 - m) * h)},
+    ]
+
+
+def restore_fallback(img_np):
+    """A conservative restoration pipeline when DocRes model is not available.
+    - Convert to LAB and apply gentle CLAHE on L channel
+    - Use morphological closing and background subtraction to reduce shadows/folds
+    - Denoise with fastNlMeansDenoisingColored
+    - Return restored BGR image
+    """
+    try:
+        # CLAHE on L
+        lab = cv2.cvtColor(img_np, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        l2 = clahe.apply(l)
+        lab2 = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+
+        # Shadow removal: approximate background by large closing and subtract
+        gray = cv2.cvtColor(img_clahe, cv2.COLOR_BGR2GRAY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61,61))
+        bg = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+        diff = cv2.subtract(bg, gray)
+        norm = cv2.normalize(diff, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+        mask = cv2.threshold(norm, 30, 255, cv2.THRESH_BINARY)[1]
+        mask = cv2.GaussianBlur(mask, (21,21), 0)
+        mask3 = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR).astype(float)/255.0
+
+        # Blend the image with a version with increased brightness where shadow suspected
+        brighten = cv2.addWeighted(img_clahe, 1.08, cv2.GaussianBlur(img_clahe, (0,0), 2.0), -0.08, 0)
+        restored = (img_clahe.astype(float) * (1 - mask3) + brighten.astype(float) * mask3).astype('uint8')
+
+        # Denoise mildly
+        denoised = cv2.fastNlMeansDenoisingColored(restored, None, h=7, hColor=7, templateWindowSize=7, searchWindowSize=21)
+        return denoised
+    except Exception as e:
+        logger.exception('restore_fallback failed: %s', e)
+        return img_np
+
+
+def enhanced_restore(img_np, params=None):
+    """Parametrizable restoration pipeline that preserves text while improving contrast.
+    
+    Parámetros configurables:
+    - clahe_clip: 1.0-4.0, controla el límite de contraste adaptativo (mayor = más contraste)
+    - kernel_size: 15-61 (impar), tamaño del kernel para detección de sombras (mayor = menos detalle)
+    - shadow_threshold: 10-40, umbral para detectar sombras (mayor = menos corrección)
+    - brightness_boost: 1.0-1.15, multiplicador de brillo en zonas oscuras
+    - denoise_strength: 3-12, fuerza del denoising (mayor = más suavizado, puede perder texto)
+    - sharpen_amount: 1.0-1.3, cantidad de sharpening (mayor = más nitidez)
+    - contrast_boost: 1.0-1.1, boost final de contraste
+    """
+    # Valores por defecto MUY conservadores (ajustados para evitar over-enhancement)
+    if params is None:
+        params = {}
+    
+    clahe_clip = params.get('clahe_clip', 1.6)
+    kernel_size = params.get('kernel_size', 31)
+    shadow_threshold = params.get('shadow_threshold', 25)
+    brightness_boost = params.get('brightness_boost', 1.02)
+    denoise_strength = params.get('denoise_strength', 3)
+    sharpen_amount = params.get('sharpen_amount', 1.04)
+    contrast_boost = params.get('contrast_boost', 1.005)
+    
+    # Validar rangos
+    clahe_clip = max(1.0, min(4.0, clahe_clip))
+    kernel_size = max(15, min(61, kernel_size))
+    if kernel_size % 2 == 0: kernel_size += 1  # Asegurar impar
+    shadow_threshold = max(10, min(40, shadow_threshold))
+    brightness_boost = max(1.0, min(1.15, brightness_boost))
+    denoise_strength = max(3, min(12, denoise_strength))
+    sharpen_amount = max(1.0, min(1.3, sharpen_amount))
+    contrast_boost = max(1.0, min(1.1, contrast_boost))
+    
+    try:
+        img = img_np.copy()
+
+        # CLAHE adaptativo
+        lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
+        l2 = clahe.apply(l)
+        lab2 = cv2.merge((l2, a, b))
+        img_clahe = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+
+        # Detección y corrección de sombras
+        gray = cv2.cvtColor(img_clahe, cv2.COLOR_BGR2GRAY)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        bg = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, kernel)
+        diff = cv2.subtract(bg, gray)
+        norm = cv2.normalize(diff, None, 0, 255, cv2.NORM_MINMAX)
+        mask = cv2.threshold(norm, shadow_threshold, 255, cv2.THRESH_BINARY)[1]
+        blur_size = kernel_size // 2
+        if blur_size % 2 == 0: blur_size += 1
+        mask = cv2.GaussianBlur(mask, (blur_size, blur_size), 0)
+        mask3 = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR).astype(float)/255.0
+
+        # Corrección de brillo en sombras
+        brighten = cv2.addWeighted(img_clahe, brightness_boost, cv2.GaussianBlur(img_clahe, (0,0), 2.0), -(brightness_boost-1.0), 0)
+        restored = (img_clahe.astype(float) * (1 - mask3) + brighten.astype(float) * mask3).astype('uint8')
+
+        # Denoising
+        denoised = cv2.fastNlMeansDenoisingColored(restored, None, h=denoise_strength, hColor=denoise_strength, templateWindowSize=7, searchWindowSize=15)
+
+        # Sharpening
+        blurred = cv2.GaussianBlur(denoised, (0,0), sigmaX=0.8)
+        final = cv2.addWeighted(denoised, sharpen_amount, blurred, -(sharpen_amount-1.0), 0)
+        
+        # Boost de contraste final
+        final = cv2.convertScaleAbs(final, alpha=contrast_boost, beta=0)
+
+        return final
+    except Exception as e:
+        logger.exception('enhanced_restore failed: %s', e)
+        return img_np
+
+
+# --- DocRes pre/post-processing helpers ---
+def _round_up_to_multiple(x, m=32):
+    return ((x + m - 1) // m) * m
+
+
+def prepare_docres_input(img_bgr, letterbox=True, letterbox_color='auto', auto_brightness=False, brightness_threshold=0.35, brightness_target=0.6):
+    """Prepare image for DocRes model with options:
+    - letterbox: pad using constant border (black/white) to keep aspect ratio and avoid rescale
+    - letterbox_color: 'auto'|'black'|'white'
+    - auto_brightness: if True, boost brightness for very dark images before normalization
+
+    Returns (prepared_np, orig_shape, prepared_shape, resize_scale, pad)
+    pad is (top, bottom, left, right) or None
+    """
+    try:
+        h, w = img_bgr.shape[:2]
+        new_h = _round_up_to_multiple(h, 32)
+        new_w = _round_up_to_multiple(w, 32)
+        pad = None
+        resize_scale = (1.0, 1.0)
+
+        prepared_bgr = img_bgr.copy()
+
+        if (new_h != h) or (new_w != w):
+            pad_top = (new_h - h) // 2
+            pad_bottom = new_h - h - pad_top
+            pad_left = (new_w - w) // 2
+            pad_right = new_w - w - pad_left
+            pad = (pad_top, pad_bottom, pad_left, pad_right)
+
+            if letterbox:
+                # Determine border color
+                if letterbox_color == 'auto':
+                    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+                    mean_g = float(np.mean(gray) / 255.0)
+                    # If image is bright, use white border, else black
+                    border_val = 255 if mean_g > 0.6 else 0
+                elif letterbox_color == 'white':
+                    border_val = 255
+                else:
+                    border_val = 0
+                prepared_bgr = cv2.copyMakeBorder(img_bgr, pad_top, pad_bottom, pad_left, pad_right, borderType=cv2.BORDER_CONSTANT, value=[border_val, border_val, border_val])
+            else:
+                # fallback to reflect to avoid hard borders
+                prepared_bgr = cv2.copyMakeBorder(img_bgr, pad_top, pad_bottom, pad_left, pad_right, borderType=cv2.BORDER_REFLECT_101)
+
+        # Optional auto-brightness: compute mean in grayscale and scale if too dark
+        if auto_brightness:
+            gray = cv2.cvtColor(prepared_bgr, cv2.COLOR_BGR2GRAY)
+            mean_g = float(np.mean(gray) / 255.0)
+            if mean_g < brightness_threshold:
+                # Scale so mean becomes brightness_target (linear scaling)
+                factor = brightness_target / max(mean_g, 1e-6)
+                prepared_bgr = cv2.convertScaleAbs(prepared_bgr.astype('float32') * factor)
+
+        # Convert BGR->RGB, to float32, normalize to [0,1]
+        prepared = cv2.cvtColor(prepared_bgr, cv2.COLOR_BGR2RGB).astype('float32') / 255.0
+
+        # Statistical normalization (mean/std) used by DocRes: (x - mean) / std
+        mean = np.array([0.5, 0.5, 0.5], dtype='float32')
+        std = np.array([0.5, 0.5, 0.5], dtype='float32')
+        prepared = (prepared - mean) / std
+
+        return prepared, (h, w), prepared.shape[:2], resize_scale, pad
+    except Exception as e:
+        logger.exception('prepare_docres_input failed: %s', e)
+        # Fallback: return normalized original
+        try:
+            base = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).astype('float32') / 255.0
+            mean = np.array([0.5, 0.5, 0.5], dtype='float32')
+            std = np.array([0.5, 0.5, 0.5], dtype='float32')
+            return (base - mean) / std, (h, w), (h, w), (1.0,1.0), None
+        except Exception:
+            base = img_bgr.astype('float32') / 255.0
+            mean = np.array([0.5, 0.5, 0.5], dtype='float32')
+            std = np.array([0.5, 0.5, 0.5], dtype='float32')
+            return (base - mean) / std, (h, w), (h, w), (1.0,1.0), None
+
+
+def postprocess_docres_output(out_np, orig_shape, prepared_shape, resize_scale, pad=None, apply_clahe=False, clahe_clip=2.0, apply_unsharp=False, unsharp_amount=0.12):
+    """Convert DocRes output back to BGR uint8 of orig_shape and optionally enhance contrast/text.
+    """
+    try:
+        arr = out_np
+        # If model returned torch tensor, convert to numpy
+        if hasattr(arr, 'cpu'):
+            arr = arr.detach().cpu().numpy()
+        arr = np.asarray(arr)
+        # If channels first, convert
+        if arr.ndim == 3 and arr.shape[0] <= 4 and arr.shape[0] != prepared_shape[0]:
+            # (C,H,W) -> (H,W,C)
+            arr = np.transpose(arr, (1,2,0))
+
+        # If float, assume it's normalized ((x - 0.5)/0.5) and invert it
+        if np.issubdtype(arr.dtype, np.floating):
+            arr = arr.astype('float32')
+            arr = (arr * 0.5) + 0.5
+            arr = np.clip(arr, 0.0, 1.0)
+            arr = (arr * 255.0).round().astype('uint8')
+        else:
+            arr = arr.astype('uint8')
+
+        # Now arr is uint8 RGB or BGR depending on model; assume RGB
+        prepared_h, prepared_w = prepared_shape
+        orig_h, orig_w = orig_shape
+        if (arr.shape[0] != prepared_h) or (arr.shape[1] != prepared_w):
+            arr = cv2.resize(arr, (prepared_w, prepared_h), interpolation=cv2.INTER_LINEAR)
+
+        # If padding was used, crop the central original area
+        if pad is not None:
+            top, bottom, left, right = pad
+            h0, w0 = orig_shape
+            y0 = top
+            y1 = top + h0
+            x0 = left
+            x1 = left + w0
+            arr = arr[y0:y1, x0:x1]
+
+        # Convert RGB->BGR
+        if arr.ndim == 3 and arr.shape[2] == 3:
+            arr_bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        else:
+            arr_bgr = arr
+
+        # Optional contrast enhancements
+        if apply_clahe:
+            try:
+                lab = cv2.cvtColor(arr_bgr, cv2.COLOR_BGR2LAB)
+                l, a, b = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(8,8))
+                l2 = clahe.apply(l)
+                lab2 = cv2.merge((l2, a, b))
+                arr_bgr = cv2.cvtColor(lab2, cv2.COLOR_LAB2BGR)
+            except Exception as e:
+                logger.warning('CLAHE postprocess failed: %s', e)
+        if apply_unsharp:
+            try:
+                blurred = cv2.GaussianBlur(arr_bgr, (0,0), sigmaX=1.0)
+                amount = float(unsharp_amount)
+                arr_bgr = cv2.addWeighted(arr_bgr, 1.0 + amount, blurred, -amount, 0)
+            except Exception as e:
+                logger.warning('Unsharp postprocess failed: %s', e)
+
+        # If size mismatches orig (unlikely after cropping), resize
+        if (arr_bgr.shape[0], arr_bgr.shape[1]) != (orig_h, orig_w):
+            arr_bgr = cv2.resize(arr_bgr, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+        # Final clamp to avoid saturation
+        arr_bgr = np.clip(arr_bgr, 0, 255).astype('uint8')
+        return arr_bgr
+    except Exception as e:
+        logger.exception('postprocess_docres_output failed: %s', e)
+        # Fallback: return resized uint8 of the input shape
+        try:
+            out_img = (out_np * 255.0).astype('uint8') if out_np.dtype in [np.float32, np.float64] else out_np.astype('uint8')
+            out_img = cv2.resize(out_img, (orig_shape[1], orig_shape[0]), interpolation=cv2.INTER_LINEAR)
+            return out_img
+        except Exception:
+            return (np.clip(out_np, 0, 255).astype('uint8'))
+            arr_bgr = cv2.resize(arr_bgr, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
+
+        # Final clamp to avoid saturation
+        arr_bgr = np.clip(arr_bgr, 0, 255).astype('uint8')
+        return arr_bgr
+    except Exception as e:
+        logger.exception('postprocess_docres_output failed: %s', e)
+        # Fallback: return resized uint8 of the input shape
+        try:
+            out_img = (out_np * 255.0).astype('uint8') if out_np.dtype in [np.float32, np.float64] else out_np.astype('uint8')
+            out_img = cv2.resize(out_img, (orig_shape[1], orig_shape[0]), interpolation=cv2.INTER_LINEAR)
+            return out_img
+        except Exception:
+            return (np.clip(out_np, 0, 255).astype('uint8'))
+
+
+
+def is_destructive(original, candidate, diff_thresh=None, pct_thresh=None):
+    """Heuristic detector to decide if candidate has destroyed a large portion of content.
+    Compara la diferencia en escala de grises y calcula porcentaje de píxeles con cambio mayor a diff_thresh.
+    Retorna (is_destructive:bool, changed_pct:float)
+    """
+    try:
+        if diff_thresh is None:
+            diff_thresh = int(os.getenv('DESTRUCTIVE_DIFF_THRESHOLD', '25'))
+        if pct_thresh is None:
+            pct_thresh = float(os.getenv('DESTRUCTIVE_PCT', '0.05'))
+        g1 = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+        g2 = cv2.cvtColor(candidate, cv2.COLOR_BGR2GRAY)
+        diff = cv2.absdiff(g1, g2)
+        changed = np.mean((diff > diff_thresh).astype(float))
+        return (changed > pct_thresh), float(changed)
+    except Exception as e:
+        logger.exception('is_destructive failed: %s', e)
+        return False, 0.0
+
+
+@app.post('/detect')
+async def detect_corners(image: UploadFile = File(...)):
+    start = time.time()
+    if cv2 is None:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "Missing Python requirements (opencv, ultralytics, pillow)"})
+
+    try:
+        contents = await image.read()
+        # Support data URLs as well as raw binary uploads
+        try:
+            # If the upload is a data URI (starts with 'data:'), decode the base64 suffix
+            safe_contents = contents.lstrip()
+            if safe_contents.startswith(b'data:'):
+                comma = safe_contents.find(b',')
+                if comma != -1:
+                    b64 = safe_contents[comma+1:]
+                    try:
+                        contents = base64.b64decode(b64)
+                        logger.info('Decoded data URI image from upload (size=%d)', len(contents))
+                    except Exception as be:
+                        logger.warning('Failed to decode data URI: %s', be)
+
+            pil = Image.open(io.BytesIO(contents)).convert('RGB')
+            img = np.array(pil)[:, :, ::-1]  # PIL RGB -> BGR
+        except Exception as e:
+            logger.warning('PIL failed to open image, attempting cv2.imdecode fallback: %s', e)
+            try:
+                arr = np.frombuffer(contents, np.uint8)
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if img is None:
+                    # Try writing to temp file and re-open with PIL (handles some odd encodings)
+                    logger.warning('cv2.imdecode returned None, attempting temp-file PIL open')
+                    import tempfile
+                    try:
+                        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tf:
+                            tf.write(contents)
+                            tf.flush()
+                            logger.warning('Wrote temp file for debugging: %s (size=%d)', tf.name, len(contents))
+                            logger.warning('First bytes: %s', contents[:16].hex())
+                            pil = Image.open(tf.name).convert('RGB')
+                            img = np.array(pil)[:, :, ::-1]
+                    except Exception as e_temp:
+                        logger.exception('Temp-file PIL fallback failed: %s', e_temp)
+                        raise RuntimeError(f'cv2.imdecode returned None; PIL temp-file fallback also failed: {e_temp}')
+            except Exception as e2:
+                logger.exception('Failed to decode image with PIL and OpenCV: %s', e2)
+                return JSONResponse(status_code=400, content={"ok": False, "error": f"cannot identify image file {e2}"})
+        h, w = img.shape[:2]
+
+        # Preprocess image subtly to improve detection (CLAHE + light sharpen)
+        img_proc = preprocess_image(img)
+
+        # Try to load YOLO and use it; if not available or fails, fall back to OpenCV-based contour detection
+        use_yolo = True
+        try:
+            model = get_model()
+        except Exception as e:
+            logger.warning('YOLO model not available, falling back to OpenCV: %s', e)
+            use_yolo = False
+
+        def opencv_detect(img_np):
+            # Grayscale, blur, edge detection, contours
+            gray = cv2.cvtColor(img_np, cv2.COLOR_BGR2GRAY)
+            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+            edges = cv2.Canny(blurred, 50, 150)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            dilated = cv2.dilate(edges, kernel)
+            contours, _ = cv2.findContours(dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+            contour_info = []
+            for i, c in enumerate(contours):
+                area = cv2.contourArea(c)
+                perimeter = cv2.arcLength(c, True)
+                approx = cv2.approxPolyDP(c, 0.02 * perimeter, True)
+                pts = []
+                for p in range(min(approx.shape[0], 20)):
+                    pts.append({'x': int(approx[p][0][0]), 'y': int(approx[p][0][1])})
+                contour_info.append({'index': i, 'area': area, 'approxRows': approx.shape[0], 'perimeter': perimeter, 'approxPoints': pts})
+
+            contour_info.sort(key=lambda x: x['area'], reverse=True)
+
+            # Try to use a large contour and approx to 4 points
+            best = None
+            for ci in contour_info[:10]:
+                if ci['area'] < (w * h) * 0.01:
+                    continue
+                # try to reconstruct contour from approxPoints
+                approx_pts = np.array([[p['x'], p['y']] for p in ci['approxPoints']], dtype=np.int32)
+                if approx_pts.shape[0] == 0:
+                    continue
+                per = cv2.arcLength(approx_pts.astype(np.float32), True)
+                for eps_ratio in [0.02, 0.04, 0.06, 0.08]:
+                    approx2 = cv2.approxPolyDP(approx_pts.astype(np.float32), eps_ratio * per, True)
+                    if approx2.shape[0] == 4:
+                        best = approx2.reshape(4, 2)
+                        break
+                if best is not None:
+                    break
+
+            if best is not None:
+                # If detected polygon touches image edges or covers a big fraction, prefer full-image rectangle
+                try:
+                    best_area = cv2.contourArea(best)
+                    if polygon_touches_edge(best, w, h, tol=6) or (best_area >= 0.55 * (w * h)):
+                        logger.info('Contour touches edge or covers large area - snapping to full image rectangle')
+                        full = [{'x': 0, 'y': 0}, {'x': w, 'y': 0}, {'x': w, 'y': h}, {'x': 0, 'y': h}]
+                        dbg = img_np.copy()
+                        cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                        _, png = cv2.imencode('.png', dbg)
+                        debug_b64 = base64.b64encode(png.tobytes()).decode()
+                        return {'ok': True, 'points': full, 'debug_image_base64': debug_b64}
+                except Exception:
+                    pass
+
+                ordered = order_corners(best)
+                dbg = img_np.copy()
+                for i, (x, y) in enumerate(ordered):
+                    cv2.circle(dbg, (x, y), 10, (0, 255, 0), -1)
+                    cv2.putText(dbg, str(i + 1), (x + 12, y + 6), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                cv2.polylines(dbg, [np.array(ordered, dtype=np.int32)], True, (0, 255, 0), 4)
+                _, png = cv2.imencode('.png', dbg)
+                debug_b64 = base64.b64encode(png.tobytes()).decode()
+                return {'ok': True, 'points': [{'x': int(x), 'y': int(y)} for x, y in ordered], 'debug_image_base64': debug_b64}
+
+            # No quad found
+            # If the largest contour touches edges and covers a big area, assume document spans full image
+            if contour_info and contour_info[0]['area'] >= 0.55 * (w * h):
+                try:
+                    candidate = contour_info[0]
+                    pts_arr = np.array([[p['x'], p['y']] for p in candidate['approxPoints']], dtype=np.int32)
+                    if polygon_touches_edge(pts_arr, w, h, tol=6):
+                        full = [{'x': 0, 'y': 0}, {'x': w, 'y': 0}, {'x': w, 'y': h}, {'x': 0, 'y': h}]
+                        dbg = img_np.copy()
+                        cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                        _, png = cv2.imencode('.png', dbg)
+                        debug_b64 = base64.b64encode(png.tobytes()).decode()
+                        return {'ok': True, 'points': full, 'debug_image_base64': debug_b64}
+                except Exception:
+                    pass
+
+            # If no quad found, fall back to a centered rectangle of 10% margins
+            fb = fallback_rect(w, h)
+            dbg = img_np.copy()
+            for i, p in enumerate(fb):
+                cv2.circle(dbg, (p['x'], p['y']), 8, (0, 165, 255), -1)
+                cv2.putText(dbg, str(i + 1), (p['x'] + 10, p['y'] + 6), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            cv2.polylines(dbg, [np.array([[p['x'], p['y']] for p in fb], dtype=np.int32)], True, (0, 165, 255), 3)
+            _, png = cv2.imencode('.png', dbg)
+            debug_b64 = base64.b64encode(png.tobytes()).decode()
+            return {'ok': False, 'points': None, 'fallback': fb, 'debug_image_base64': debug_b64}
+
+        # If YOLO available, try it first but with a short timeout and downscale for speed
+        if use_yolo:
+            try:
+                # Prepare inference-sized image (downscale large images for faster inference)
+                ih, iw = img_proc.shape[:2]
+                maxdim = max(ih, iw)
+                scale = 1.0
+                infer_img = img_proc
+                if maxdim > YOLO_INFER_MAX_DIM:
+                    scale = YOLO_INFER_MAX_DIM / float(maxdim)
+                    new_w = int(iw * scale)
+                    new_h = int(ih * scale)
+                    infer_img = cv2.resize(img_proc, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                    logger.info('Downscaled image for YOLO inference: %dx%d -> %dx%d (scale=%.3f)', iw, ih, new_w, new_h, scale)
+
+                # Run YOLO inference in a thread with a short timeout to avoid long waits
+                try:
+                    results = await asyncio.wait_for(asyncio.to_thread(lambda: model(infer_img, device=0, conf=CONFIDENCE, verbose=False)), timeout=YOLO_TIMEOUT_MS / 1000.0)
+                except asyncio.TimeoutError:
+                    logger.warning('YOLO inference timed out after %d ms; using OpenCV fallback', YOLO_TIMEOUT_MS)
+                    oc_res = opencv_detect(img_proc)
+                    elapsed = int((time.time() - start) * 1000)
+                    return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
+
+                # Iterate results and look for masks
+                for r in results:
+                    masks = getattr(r, 'masks', None)
+                    if masks is None:
+                        continue
+                    polys = getattr(masks, 'xy', None)
+                    if not polys:
+                        continue
+
+                    best_poly = None
+                    best_area = 0
+                    for poly in polys:
+                        pts = np.array(poly)
+                        # pts are in infer_img coordinates, map back to original
+                        if scale != 1.0:
+                            pts = (pts / scale).astype(np.float32)
+                        area = cv2.contourArea(pts.astype(np.int32))
+                        if area > best_area:
+                            best_area = area
+                            best_poly = pts
+
+                    if best_poly is None or best_area <= 0:
+                        continue
+
+                    per = cv2.arcLength(best_poly.astype(np.float32), True)
+                    for eps_ratio in [0.02, 0.04, 0.06, 0.08]:
+                        eps = eps_ratio * per
+                        approx = cv2.approxPolyDP(best_poly.astype(np.float32), eps, True)
+                        if len(approx) == 4:
+                            approx_pts = approx.reshape(4, 2)
+                            try:
+                                area_approx = cv2.contourArea(approx_pts.astype(np.int32))
+                                if polygon_touches_edge(approx_pts, w, h, tol=6) or (area_approx >= 0.55 * (w * h)):
+                                    # Prefer full-image rectangle when mask touches edges or covers most of image
+                                    full = [{'x': 0, 'y': 0}, {'x': w, 'y': 0}, {'x': w, 'y': h}, {'x': 0, 'y': h}]
+                                    dbg = img.copy()
+                                    cv2.polylines(dbg, [np.array([[0,0],[w,0],[w,h],[0,h]], dtype=np.int32)], True, (0, 165, 255), 3)
+                                    _, png = cv2.imencode('.png', dbg)
+                                    debug_b64 = base64.b64encode(png.tobytes()).decode()
+                                    elapsed = int((time.time() - start) * 1000)
+                                    return {
+                                        'ok': True,
+                                        'points': full,
+                                        'debug_image_base64': debug_b64,
+                                        'model': os.path.basename(MODEL_PATH),
+                                        'timing_ms': elapsed,
+                                    }
+                            except Exception:
+                                pass
+
+                            ordered = order_corners(approx.reshape(4, 2))
+                            dbg = img.copy()
+                            for i, (x, y) in enumerate(ordered):
+                                cv2.circle(dbg, (x, y), 10, (0, 255, 0), -1)
+                                cv2.putText(dbg, str(i + 1), (x + 12, y + 6), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                            cv2.polylines(dbg, [np.array(ordered, dtype=np.int32)], True, (0, 255, 0), 4)
+                            _, png = cv2.imencode('.png', dbg)
+                            debug_b64 = base64.b64encode(png.tobytes()).decode()
+                            elapsed = int((time.time() - start) * 1000)
+                            return {
+                                'ok': True,
+                                'points': [{'x': int(x), 'y': int(y)} for x, y in ordered],
+                                'debug_image_base64': debug_b64,
+                                'model': os.path.basename(MODEL_PATH),
+                                'timing_ms': elapsed,
+                            }
+
+                # If YOLO didn't find a polygon, fallback to OpenCV
+                oc_res = opencv_detect(img_proc)
+                elapsed = int((time.time() - start) * 1000)
+                return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
+
+            except Exception as e:
+                logger.exception('YOLO inference failed, falling back to OpenCV: %s', e)
+                oc_res = opencv_detect(img_proc)
+                elapsed = int((time.time() - start) * 1000)
+                return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
+
+        # If not using YOLO, use OpenCV fallback on the preprocessed image
+        oc_res = opencv_detect(img_proc)
+        elapsed = int((time.time() - start) * 1000)
+        return {**oc_res, 'model': 'opencv_fallback', 'timing_ms': elapsed}
+
+    except Exception as e:
+        logger.exception('Error in detect endpoint')
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+from fastapi import Form  # add Form import
+
+
+@app.post('/restore')
+async def restore_document(
+    image: UploadFile = File(...), 
+    enhance: Optional[str] = Form(None),
+    auto_crop: Optional[str] = Form(None),
+    mode: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
+    prompt: Optional[str] = Form(None),
+    # DocRes pre/post options
+    letterbox: Optional[str] = Form(None),
+    letterbox_color: Optional[str] = Form(None),
+    auto_brightness: Optional[str] = Form(None),
+    apply_clahe: Optional[str] = Form(None),
+    clahe_clip: Optional[float] = Form(None),
+    apply_unsharp: Optional[str] = Form(None),
+    unsharp_amount: Optional[float] = Form(None),
+    
+    # Parámetros de mejora tradicionales
+    clahe_clip_old: Optional[float] = Form(None),
+    kernel_size: Optional[int] = Form(None),
+    shadow_threshold: Optional[int] = Form(None),
+    brightness_boost: Optional[float] = Form(None),
+    denoise_strength: Optional[int] = Form(None),
+    sharpen_amount: Optional[float] = Form(None),
+    contrast_boost: Optional[float] = Form(None),
+    stream: Optional[str] = Form(None)
+):
+    start = time.time()
+    if cv2 is None:
+        return JSONResponse(status_code=500, content={"ok": False, "error": "Missing Python requirements (opencv, ultralytics, pillow)"})
+    try:
+        contents = await image.read()
+
+        # Support data-URI inputs (some fixtures or clients may upload a data URI string)
+        try:
+            snippet = contents[:256].lower()
+            if isinstance(snippet, bytes) and (snippet.startswith(b'data:') or b'data:image' in snippet):
+                logger.info('Detected data URI payload in upload; attempting to decode base64')
+                import re, base64
+                m = re.search(b'data:.*?;base64,(.+)', contents, re.DOTALL)
+                if m:
+                    try:
+                        contents = base64.b64decode(m.group(1))
+                    except Exception as e:
+                        logger.warning('Failed to base64-decode data URI: %s', e)
+        except Exception as e:
+            logger.warning('Error while checking for data URI: %s', e)
+
+        try:
+            pil = Image.open(io.BytesIO(contents)).convert('RGB')
+        except Exception as e:
+            logger.exception('Failed to open image with PIL (restore): %s', e)
+            # Return a clear error to caller so fallback flows can trigger
+            return JSONResponse(status_code=400, content={"ok": False, "error": f"cannot identify image file (restore): {str(e)}"})
+
+        img = np.array(pil)[:, :, ::-1]  # PIL RGB -> BGR
+        # Keep a copy of original image bytes so the frontend can revert or modify crop
+        try:
+            _, orig_png = cv2.imencode('.png', img)
+            original_image_b64 = base64.b64encode(orig_png.tobytes()).decode()
+        except Exception:
+            original_image_b64 = None
+
+        # Streaming requested? If so, return an SSE stream with progressive events
+        want_stream = False
+        if stream is not None:
+            try:
+                if isinstance(stream, str):
+                    if stream.lower() in ('1','true','yes','on'):
+                        want_stream = True
+                elif bool(stream):
+                    want_stream = True
+            except Exception:
+                want_stream = False
+
+        if want_stream:
+            async def event_stream():
+                def sse(obj):
+                    # FastAPI StreamingResponse can stream strings as SSE-like 'data:' payloads
+                    return f"data: {json.dumps(obj, ensure_ascii=False)}\n\n"
+
+                # 1) Original image immediate preview
+                yield sse({"stage": "original", "original_image_base64": original_image_b64})
+
+                # 2) Auto-crop (attempt detection and fallback) → send crop_preview
+                try:
+                    pts, dbg = await asyncio.to_thread(find_document_polygon, img, True, float(os.getenv('DETECT_CONF', '0.25')))
+                    crop_b64 = None
+                    crop_points = None
+                    if pts is not None:
+                        warped = four_point_warp(img, pts)
+                        try:
+                            _, crop_png = cv2.imencode('.png', warped)
+                            crop_b64 = base64.b64encode(crop_png.tobytes()).decode()
+                        except Exception:
+                            crop_b64 = None
+                        try:
+                            warped_proc = preprocess_image(warped)
+                        except Exception:
+                            warped_proc = warped
+                        local_img = warped_proc
+                        crop_points = [{'x': int(x), 'y': int(y)} for x, y in pts]
+                        yield sse({"stage": "crop", "crop_image_base64": crop_b64, "crop_points": crop_points})
+                    else:
+                        # Center fallback crop
+                        if max(img.shape[0], img.shape[1]) >= 200:
+                            mh = int(min(img.shape[0], img.shape[1]) * 0.03)
+                            warped = img[mh:img.shape[0]-mh, mh:img.shape[1]-mh]
+                            try:
+                                _, crop_png = cv2.imencode('.png', warped)
+                                crop_b64 = base64.b64encode(crop_png.tobytes()).decode()
+                            except Exception:
+                                crop_b64 = None
+                            try:
+                                warped_proc = preprocess_image(warped)
+                            except Exception:
+                                warped_proc = warped
+                            local_img = warped_proc
+                            h, w = warped.shape[:2]
+                            crop_points = [{'x': int(mh), 'y': int(mh)}, {'x': int(w+mh-1), 'y': int(mh)}, {'x': int(w+mh-1), 'y': int(h+mh-1)}, {'x': int(mh), 'y': int(h+mh-1)}]
+                            yield sse({"stage": "crop", "crop_image_base64": crop_b64, "crop_points": crop_points})
+                        else:
+                            local_img = img
+                            yield sse({"stage": "crop", "crop_image_base64": None, "crop_points": None})
+                except Exception as e:
+                    yield sse({"stage": "error", "error": f"Auto-crop failed: {str(e)}"})
+                    return
+
+                # 3) Attempt DocRes or fallback restore → send restored preview
+                try:
+                    doc_model_local = get_docres_model()
+                    restored = None
+                    if doc_model_local:
+                        try:
+                            prepared, orig_shape, prepared_shape, resize_scale, pad = prepare_docres_input(local_img, letterbox=True, letterbox_color='auto')
+                        except Exception:
+                            prepared = local_img.astype('float32') / 255.0
+                            orig_shape = (local_img.shape[0], local_img.shape[1])
+                            prepared_shape = orig_shape
+                            resize_scale = (1.0, 1.0)
+                        try:
+                            out = doc_model_local.restore(prepared) if hasattr(doc_model_local, 'restore') else doc_model_local(prepared)
+                            restored = postprocess_docres_output(out, orig_shape, prepared_shape, resize_scale, pad)
+                        except Exception:
+                            restored = restore_fallback(local_img)
+                    else:
+                        restored = restore_fallback(local_img)
+
+                    try:
+                        _, restored_png = cv2.imencode('.png', restored)
+                        restored_b64 = base64.b64encode(restored_png.tobytes()).decode()
+                    except Exception:
+                        restored_b64 = None
+
+                    yield sse({"stage": "restored", "restored_image_base64": restored_b64})
+                except Exception as e:
+                    yield sse({"stage": "error", "error": f"Restore failed: {str(e)}"})
+                    return
+
+                # 4) OCR on restored image → send ocr text
+                try:
+                    ocr_text_local = None
+                    ocr_infer_b64 = None
+                    ocr_infer_meta = None
+                    if pytesseract is not None:
+                        ocr_img = restored.copy()
+                        try:
+                            if is_image_grayish(ocr_img):
+                                ocr_img = apply_clahe_color(ocr_img, clip=3.0, tile=(8,8))
+                        except Exception:
+                            pass
+
+                        # Honor preview overrides passed by client (fallback to env defaults)
+                        try:
+                            p_max = int(preview_max_dim) if preview_max_dim is not None else PREVIEW_MAX_DIM
+                        except Exception:
+                            p_max = PREVIEW_MAX_DIM
+                        try:
+                            p_quality = int(preview_quality) if preview_quality is not None else PREVIEW_QUALITY
+                        except Exception:
+                            p_quality = PREVIEW_QUALITY
+                        try:
+                            p_gray = str(preview_gray).lower() in ('1','true','yes') if preview_gray is not None else PREVIEW_CONVERT_GRAY
+                        except Exception:
+                            p_gray = PREVIEW_CONVERT_GRAY
+
+                        # Prepare the image used for OCR (resized for Tesseract stability)
+                        try:
+                            ocr_img = letterbox_resize(ocr_img, max_dim=1024)
+                        except Exception:
+                            pass
+
+                        # Build a smaller preview of the exact image sent to OCR/LLM for inspection
+                        try:
+                            preview_img = ocr_img.copy()
+                            if p_gray:
+                                preview_img = cv2.cvtColor(preview_img, cv2.COLOR_BGR2GRAY)
+                                preview_img = cv2.cvtColor(preview_img, cv2.COLOR_GRAY2BGR)
+
+                            # Resize to preview_max_dim for lightweight transmission
+                            try:
+                                preview_img = letterbox_resize(preview_img, max_dim=p_max)
+                            except Exception:
+                                pass
+
+                            # Encode as JPEG with requested quality
+                            _, pj = cv2.imencode('.jpg', preview_img, [int(cv2.IMWRITE_JPEG_QUALITY), max(10, min(100, int(p_quality)))])
+                            infer_bytes = pj.tobytes()
+                            ocr_infer_b64 = base64.b64encode(infer_bytes).decode()
+                            h, w = preview_img.shape[:2]
+                            ocr_infer_meta = {
+                                'width': w,
+                                'height': h,
+                                'size_bytes': len(infer_bytes),
+                                'quality': p_quality,
+                                'gray': bool(p_gray)
+                            }
+                        except Exception as e:
+                            logger.warning('Failed to build infer preview: %s', e)
+
+                        # Finally run Tesseract OCR
+                        ocr_text_local = pytesseract.image_to_string(cv2.cvtColor(ocr_img, cv2.COLOR_BGR2RGB))
+
+                    # Send OCR result and the infer preview (if available) so frontend can show what was sent to the models
+                    yield sse({"stage": "ocr", "ocr_text": ocr_text_local, "infer_preview_base64": ocr_infer_b64, "infer_preview_meta": ocr_infer_meta})
+                except Exception as e:
+                    yield sse({"stage": "error", "error": f"OCR failed: {str(e)}"})
+
+                # 5) Quick formatting of OCR into items (heuristic) → send formatted items
+                try:
+                    items_preview = format_ocr_to_items(ocr_text_local)
+                    yield sse({"stage": "formatted_items", "items": items_preview})
+                except Exception as e:
+                    yield sse({"stage": "error", "error": f"Formatting failed: {str(e)}"})
+
+                # 6) Run LLM parse & tuner as finalization, then send final
+                try:
+                    extraction = None
+                    extraction_meta = None
+                    if ocr_text_local:
+                        try:
+                            parsed, meta = parse_invoice_with_qwen(ocr_text_local, prompt_override=prompt, model_override=model)
+                            extraction = parsed
+                            extraction_meta = meta
+                        except Exception as e:
+                            extraction = None
+                            extraction_meta = { 'error': str(e) }
+
+                    # Validation + tuning
+                    try:
+                        ok, vdetails = validate_invoice(extraction)
+                    except Exception:
+                        ok, vdetails = False, {'error': 'validation_failed'}
+
+                    if not ok:
+                        try:
+                            tuned_parsed, tuned_meta = tune_invoice_extraction(restored, existing_ocr=ocr_text_local, initial_meta=extraction_meta)
+                        except Exception as e:
+                            tuned_parsed, tuned_meta = None, {'error': str(e)}
+
+                        if tuned_parsed:
+                            extraction = tuned_parsed
+                            extraction_meta = {**(extraction_meta or {}), **(tuned_meta or {}), 'tuned': True}
+                        else:
+                            extraction_meta = {**(extraction_meta or {}), **(tuned_meta or {}), 'tuned': False}
+
+                    # Final event includes current previews and parsed invoice (best-effort)
+                    yield sse({
+                        "stage": "final",
+                        "original_image_base64": original_image_b64,
+                        "crop_image_base64": crop_b64 if 'crop_b64' in locals() else None,
+                        "restored_image_base64": restored_b64,
+                        "ocr_text": ocr_text_local,
+                        "extraction": extraction,
+                        "extraction_meta": extraction_meta
+                    })
+                except Exception as e:
+                    yield sse({"stage": "error", "error": f"Finalization failed: {str(e)}"})
+
+            return StreamingResponse(event_stream(), media_type='text/event-stream')
+
+        want_enhance = False
+        if enhance is not None:
+            try:
+                if isinstance(enhance, str):
+                    if enhance.lower() in ('1', 'true', 'yes', 'on'):
+                        want_enhance = True
+                elif bool(enhance):
+                    want_enhance = True
+            except Exception:
+                want_enhance = False
+
+        # Construir diccionario de parámetros
+        params = {}
+        if clahe_clip is not None: params['clahe_clip'] = clahe_clip
+        if kernel_size is not None: params['kernel_size'] = kernel_size
+        if shadow_threshold is not None: params['shadow_threshold'] = shadow_threshold
+        if brightness_boost is not None: params['brightness_boost'] = brightness_boost
+        if denoise_strength is not None: params['denoise_strength'] = denoise_strength
+        if sharpen_amount is not None: params['sharpen_amount'] = sharpen_amount
+        if contrast_boost is not None: params['contrast_boost'] = contrast_boost
+
+        logger.info('Restore called with params: %s', params)
+
+        # Determine auto-crop default: if the client doesn't send explicit auto_crop, enable by default
+        want_auto_crop = True
+        try:
+            if isinstance(auto_crop, str):
+                if auto_crop.lower() in ('0','false','no','off'):
+                    want_auto_crop = False
+                else:
+                    want_auto_crop = True
+            elif auto_crop is not None:
+                want_auto_crop = bool(auto_crop)
+        except Exception:
+            want_auto_crop = True
+
+        auto_crop_applied = False
+        crop_points = None
+        crop_image_b64 = None
+
+        # If auto-crop requested, attempt to detect document polygon and crop immediately (early enhancement)
+        if want_auto_crop:
+            try:
+                pts, dbg = await asyncio.to_thread(find_document_polygon, img, True, float(os.getenv('DETECT_CONF', '0.25')))
+                if pts is not None:
+                    try:
+                        warped = four_point_warp(img, pts)
+                        # Save crop preview (before further processing) so the UI can show and allow edits/revert
+                        try:
+                            _, crop_png = cv2.imencode('.png', warped)
+                            crop_image_b64 = base64.b64encode(crop_png.tobytes()).decode()
+                        except Exception:
+                            crop_image_b64 = None
+
+                        # Apply a conservative preprocess so DocRes / OCR receives a better input
+                        try:
+                            warped_proc = preprocess_image(warped)
+                        except Exception:
+                            warped_proc = warped
+                        img = warped_proc
+                        h, w = img.shape[:2]
+                        auto_crop_applied = True
+                        crop_points = [{'x': int(x), 'y': int(y)} for x, y in pts]
+                        logger.info('Auto-crop applied with polygon: %s', crop_points)
+                    except Exception as e:
+                        logger.warning('Auto-crop warp failed (non-fatal): %s', e)
+                        crop_image_b64 = None
+                else:
+                    # No polygon detected. Apply a conservative center crop as a fallback for mobile photos
+                    try:
+                        if max(img.shape[0], img.shape[1]) >= 200:
+                            mh = int(min(img.shape[0], img.shape[1]) * 0.03)
+                            warped = img[mh:img.shape[0]-mh, mh:img.shape[1]-mh]
+                            try:
+                                _, crop_png = cv2.imencode('.png', warped)
+                                crop_image_b64 = base64.b64encode(crop_png.tobytes()).decode()
+                            except Exception:
+                                crop_image_b64 = None
+                            try:
+                                warped_proc = preprocess_image(warped)
+                            except Exception:
+                                warped_proc = warped
+                            img = warped_proc
+                            h, w = img.shape[:2]
+                            auto_crop_applied = True
+                            crop_points = [{'x': int(mh), 'y': int(mh)}, {'x': int(w+mh-1), 'y': int(mh)}, {'x': int(w+mh-1), 'y': int(h+mh-1)}, {'x': int(mh), 'y': int(h+mh-1)}]
+                            logger.info('Auto-crop fallback center crop applied (margin=%d) ', mh)
+                        else:
+                            logger.info('Auto-crop: image too small for fallback crop, skipping')
+                    except Exception as e:
+                        logger.warning('Auto-crop fallback center crop failed (non-fatal): %s', e)
+            except Exception as e:
+                logger.warning('Auto-crop detection raised an error (non-fatal): %s', e)
+
+        # Attach auto-crop info to params for downstream visibility
+        params['auto_crop_requested'] = want_auto_crop
+        params['auto_crop_applied'] = auto_crop_applied
+        if crop_points is not None:
+            params['crop_points'] = crop_points
+
+        # Try DocRes model first (if installed and model file present)
+        doc_model = get_docres_model()
+        if doc_model:
+            try:
+                # Prepare input: normalize and resize to multiple of 32
+                # Build prepare options
+                p_letterbox = True if (letterbox is None or letterbox.lower() in ('1','true','yes','on')) else False
+                p_letterbox_color = letterbox_color or 'auto'
+                p_auto_brightness = True if (auto_brightness and auto_brightness.lower() in ('1','true','yes','on')) else False
+                try:
+                    prepared, orig_shape, prepared_shape, resize_scale, pad = prepare_docres_input(img, letterbox=p_letterbox, letterbox_color=p_letterbox_color, auto_brightness=p_auto_brightness)
+                    logger.info('DocRes input prepared: orig=%s prepared=%s resize_scale=%s pad=%s', orig_shape, prepared_shape, resize_scale, pad)
+                except Exception as e:
+                    logger.exception('Failed to prepare DocRes input, falling back to raw: %s', e)
+                    prepared = img.astype('float32') / 255.0
+                    orig_shape = (img.shape[0], img.shape[1])
+                    prepared_shape = orig_shape
+                    resize_scale = (1.0, 1.0)
+
+                # Load model by mode
+                doc_model_mode = mode.lower() if isinstance(mode, str) else None
+                doc_model = get_docres_model(doc_model_mode)
+                if not doc_model:
+                    logger.warning('Requested DocRes mode "%s" not available, falling back to default', doc_model_mode)
+                    doc_model = get_docres_model()
+
+                out = None
+                try:
+                    doc_start = time.time()
+                    if hasattr(doc_model, 'restore'):
+                        out = doc_model.restore(prepared)
+                    elif callable(doc_model):
+                        out = doc_model(prepared)
+                    else:
+                        raise RuntimeError('DocRes model loaded but has no usable interface')
+                    doc_end = time.time()
+                    logger.info('DocRes inference time: %.1f ms (mode=%s)', (doc_end - doc_start) * 1000.0, doc_model_mode)
+                except Exception as e:
+                    logger.info('DocRes direct call failed (%s), trying fallback with uint8 input', e)
+                    try:
+                        fb_start = time.time()
+                        out = doc_model((img).astype('uint8'))
+                        fb_end = time.time()
+                        logger.info('DocRes fallback inference time: %.1f ms', (fb_end - fb_start) * 1000.0)
+                    except Exception as ee:
+                        logger.exception('DocRes call failed on fallback too: %s', ee)
+                        raise
+
+                # Normalize output to BGR uint8 at original size and apply optional CLAHE/unsharp
+                apply_clahe_flag = True if (apply_clahe and (str(apply_clahe).lower() in ('1','true','yes','on'))) else False
+                apply_unsharp_flag = True if (apply_unsharp and (str(apply_unsharp).lower() in ('1','true','yes','on'))) else False
+                try:
+                    if isinstance(out, tuple):
+                        out = out[0]
+                    restored = postprocess_docres_output(out, orig_shape, prepared_shape, resize_scale, pad, apply_clahe=apply_clahe_flag, clahe_clip=(clahe_clip or 2.0), apply_unsharp=apply_unsharp_flag, unsharp_amount=(unsharp_amount if unsharp_amount is not None else 0.12))
+                except Exception as e:
+                    logger.exception('Failed to postprocess DocRes output: %s', e)
+                    if hasattr(out, 'cpu'):
+                        outc = out.detach().cpu().numpy()
+                        outc = np.transpose(outc, (1,2,0)) if outc.shape[0] <= 4 else outc
+                        outc = np.clip(outc, 0, 255).astype('uint8')
+                        restored = cv2.resize(outc, (orig_shape[1], orig_shape[0]), interpolation=cv2.INTER_LINEAR)
+                    else:
+                        restored = img
+
+                # If user requested enhancement, run enhanced postprocessing
+                if want_enhance:
+                    try:
+                        candidate = enhanced_restore(restored, params)
+                        # Safety check: if enhanced candidate is destructive, fallback
+                        destructive, changed_pct = is_destructive(restored, candidate)
+                        if destructive:
+                            logger.warning('Enhanced post-DocRes result considered destructive (changed_pct=%.4f); falling back to conservative restore', changed_pct)
+                            restored = restore_fallback(restored)
+                            fallback_applied = True
+                            fallback_reason = 'enhanced_result_destructive'
+                        else:
+                            restored = candidate
+                            fallback_applied = False
+                            fallback_reason = None
+                    except Exception:
+                        logger.exception('Post enhancement after DocRes failed')
+                        fallback_applied = False
+                        fallback_reason = None
+                else:
+                    fallback_applied = False
+                    fallback_reason = None
+
+                elapsed = int((time.time() - start) * 1000)
+                _, png = cv2.imencode('.png', restored)
+
+                # Run OCR on restored image (if available)
+                ocr_text = None
+                try:
+                    if pytesseract is not None:
+                        # If DocRes output is grayish, apply CLAHE to enhance text contrast
+                        ocr_img = restored.copy()
+                        try:
+                            if is_image_grayish(ocr_img):
+                                logger.info('DocRes output looks grayish - applying CLAHE before OCR')
+                                ocr_img = apply_clahe_color(ocr_img, clip=3.0, tile=(8,8))
+                        except Exception as _e:
+                            logger.warning('Grayness check or CLAHE failed: %s', _e)
+
+                        # Resize with letterbox (max 1024) to avoid Tesseract deformation
+                        try:
+                            ocr_img = letterbox_resize(ocr_img, max_dim=1024)
+                        except Exception as _e:
+                            logger.warning('Letterbox resize failed: %s', _e)
+
+                        ocr_text = pytesseract.image_to_string(cv2.cvtColor(ocr_img, cv2.COLOR_BGR2RGB))
+                        logger.info('OCR extracted %d chars from restored image (post-enhance)', len(ocr_text or ''))
+                    else:
+                        logger.warning('pytesseract not installed; skipping OCR')
+                except Exception as e:
+                    logger.warning('OCR failed on restored image: %s', e)
+
+                # Run Qwen parsing on the OCR text (if available)
+                extraction = None
+                extraction_meta = None
+                if ocr_text:
+                    try:
+                        parsed, meta = parse_invoice_with_qwen(ocr_text, prompt_override=prompt, model_override=model)
+                        extraction = parsed
+                        extraction_meta = meta
+                    except Exception as e:
+                        logger.warning('Qwen extraction failed: %s', e)
+
+                # Validate parsed result; if it doesn't satisfy UI requirements, attempt iterative tuning
+                try:
+                    ok, vdetails = validate_invoice(extraction)
+                except Exception:
+                    ok, vdetails = False, {'error': 'validation_failed'}
+
+                if not ok:
+                    logger.info('Initial parse did not validate (%s): running tuner', vdetails)
+                    try:
+                        tuned_parsed, tuned_meta = tune_invoice_extraction(restored, existing_ocr=ocr_text, initial_meta=extraction_meta)
+                    except Exception as e:
+                        logger.warning('Invoice tuning routine failed: %s', e)
+                        tuned_parsed, tuned_meta = None, {'error': str(e)}
+
+                    if tuned_parsed:
+                        logger.info('Tuner returned parsed invoice (applying)')
+                        extraction = tuned_parsed
+                        # Merge meta and include tuning attempts
+                        extraction_meta = {**(extraction_meta or {}), **(tuned_meta or {}), 'tuned': True}
+                    else:
+                        # Keep original extraction, but append tuning attempts to meta for debugging
+                        extraction_meta = {**(extraction_meta or {}), **(tuned_meta or {}), 'tuned': False}
+
+                return {
+                    "ok": True,
+                    "original_image_base64": original_image_b64,
+                    "crop_image_base64": crop_image_b64 if auto_crop_applied else None,
+                    "restored_image_base64": base64.b64encode(png.tobytes()).decode(),
+                    "inference_image_base64": (ocr_infer_b64 if 'ocr_infer_b64' in locals() else None),
+                    "inference_image_meta": (ocr_infer_meta if 'ocr_infer_meta' in locals() else None),
+                    "model": 'DocRes' + ("+enhanced" if want_enhance else ""),
+                    "timing_ms": elapsed,
+                    "params": params,
+                    "auto_crop_applied": auto_crop_applied,
+                    "can_modify_crop": True,
+                    "labels": {"original": "Original", "crop": "Auto-crop", "restored": "Procesada"},
+                    "fallback": fallback_applied,
+                    "fallback_reason": fallback_reason,
+                    "ocr_text": ocr_text,
+                    "extraction": extraction,
+                    "extraction_meta": extraction_meta
+                }
+            except Exception as e:
+                logger.exception('DocRes model failed, falling back: %s', e)
+                # fall through to fallback
+
+        # Choose fallback based on requested mode
+        if want_enhance:
+            candidate = enhanced_restore(img, params)
+            destructive, changed_pct = is_destructive(img, candidate)
+            if destructive:
+                logger.warning('Enhanced result considered destructive (changed_pct=%.4f); falling back to conservative restore', changed_pct)
+                restored = restore_fallback(img)
+                model_name = 'enhanced_fallback_rejected'
+                fallback_applied = True
+                fallback_reason = 'enhanced_result_destructive'
+            else:
+                restored = candidate
+                model_name = 'enhanced_fallback'
+                fallback_applied = False
+                fallback_reason = None
+        else:
+            restored = restore_fallback(img)
+            model_name = 'fallback'
+            fallback_applied = False
+            fallback_reason = None
+
+        elapsed = int((time.time() - start) * 1000)
+        _, png = cv2.imencode('.png', restored)
+
+        # Run OCR on restored image (if available)
+        ocr_text = None
+        ocr_infer_b64 = None
+        ocr_infer_meta = None
+        try:
+            # Build an inference preview for fallback path as well (so clients get the same visibility)
+            try:
+                p_max = int(preview_max_dim) if preview_max_dim is not None else PREVIEW_MAX_DIM
+            except Exception:
+                p_max = PREVIEW_MAX_DIM
+            try:
+                p_quality = int(preview_quality) if preview_quality is not None else PREVIEW_QUALITY
+            except Exception:
+                p_quality = PREVIEW_QUALITY
+            try:
+                p_gray = str(preview_gray).lower() in ('1','true','yes') if preview_gray is not None else PREVIEW_CONVERT_GRAY
+            except Exception:
+                p_gray = PREVIEW_CONVERT_GRAY
+
+            try:
+                preview_img = restored.copy()
+                if p_gray:
+                    preview_img = cv2.cvtColor(preview_img, cv2.COLOR_BGR2GRAY)
+                    preview_img = cv2.cvtColor(preview_img, cv2.COLOR_GRAY2BGR)
+                try:
+                    preview_img = letterbox_resize(preview_img, max_dim=p_max)
+                except Exception:
+                    pass
+                _, pj = cv2.imencode('.jpg', preview_img, [int(cv2.IMWRITE_JPEG_QUALITY), max(10, min(100, int(p_quality)))])
+                infer_bytes = pj.tobytes()
+                ocr_infer_b64 = base64.b64encode(infer_bytes).decode()
+                h, w = preview_img.shape[:2]
+                ocr_infer_meta = {'width': w, 'height': h, 'size_bytes': len(infer_bytes), 'quality': p_quality, 'gray': bool(p_gray)}
+            except Exception as e:
+                logger.info('Fallback preview build failed: %s', e)
+
+            if pytesseract is not None:
+                ocr_text = pytesseract.image_to_string(cv2.cvtColor(restored, cv2.COLOR_BGR2RGB))
+                logger.info('OCR extracted %d chars from fallback restored image', len(ocr_text or ''))
+            else:
+                logger.warning('pytesseract not installed; skipping OCR')
+        except Exception as e:
+            logger.warning('OCR failed on fallback restored image: %s', e)
+
+        extraction = None
+        extraction_meta = None
+        if ocr_text:
+            try:
+                parsed, meta = parse_invoice_with_qwen(ocr_text, prompt_override=prompt, model_override=model)
+                extraction = parsed
+                extraction_meta = meta
+            except Exception as e:
+                logger.warning('Qwen extraction failed (fallback): %s', e)
+
+        return {
+            "ok": True,
+            "original_image_base64": original_image_b64,
+            "crop_image_base64": crop_image_base64 if auto_crop_applied else None,
+            "restored_image_base64": base64.b64encode(png.tobytes()).decode(),
+            "inference_image_base64": ocr_infer_b64,
+            "inference_image_meta": ocr_infer_meta,
+            "model": model_name,
+            "timing_ms": elapsed,
+            "params": params,
+            "auto_crop_applied": auto_crop_applied,
+            "can_modify_crop": True,
+            "labels": {"original": "Original", "crop": "Auto-crop", "restored": "Procesada"},
+            "fallback": fallback_applied,
+            "fallback_reason": fallback_reason,
+            "ocr_text": ocr_text,
+            "extraction": extraction,
+            "extraction_meta": extraction_meta
+        }
+    except Exception as e:
+        logger.exception('Error in restore endpoint')
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+# Optional endpoint to explicitly warm up DocRes model (loads model and runs a tiny forward pass)
+@app.post('/warmup')
+async def warmup_docres():
+    doc = get_docres_model()
+    qtimer = None
+    if not doc:
+        return JSONResponse(status_code=400, content={"ok": False, "error": "DocRes not available or model not found"})
+    try:
+        t0 = time.time()
+        dummy = np.zeros((64,64,3), dtype=np.float32)
+        if hasattr(doc, 'restore'):
+            doc.restore(dummy)
+        else:
+            doc(dummy)
+        t1 = time.time()
+        resp = {"ok": True, "timing_ms": int((t1 - t0) * 1000)}
+
+        # Also try to warmup Qwen if available
+        try:
+            qm, qt = get_qwen_model()
+            if qm is not None:
+                q0 = time.time()
+                # prompt tiny warmup
+                tok = qt('Hola', return_tensors='pt').to(qm.device)
+                with torch.no_grad():
+                    qm.generate(**tok, max_new_tokens=8)
+                q1 = time.time()
+                resp['qwen_warmup_ms'] = int((q1 - q0) * 1000)
+        except Exception as qe:
+            logger.warning('Qwen warmup failed (non-fatal): %s', qe)
+
+        return resp
+    except Exception as e:
+        logger.exception('Warmup failed: %s', e)
+        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+
+
+# Lightweight endpoint to run a prompt on a specific LLM (supports local folder with local:<path> or HF id)
+@app.post('/llm/generate')
+async def llm_generate(payload: dict):
+    try:
+        prompt = payload.get('prompt') if isinstance(payload, dict) else None
+        model = payload.get('model') if isinstance(payload, dict) else None
+        max_new_tokens = int(payload.get('max_new_tokens', 256)) if isinstance(payload, dict) else 256
+
+        if not prompt:
+            return JSONResponse(status_code=400, content={ 'ok': False, 'error': 'prompt required' })
+
+        qmod, qtok = get_qwen_model(model_override=model) if model else get_qwen_model()
+        if qmod is None or qtok is None:
+            return JSONResponse(status_code=503, content={ 'ok': False, 'error': 'qwen_unavailable', 'message': 'Qwen model not available. Place local weights in /app/models or set QWEN_MODEL env or provide HF token.' })
+
+        try:
+            inputs = qtok(prompt, return_tensors='pt', truncation=True, max_length=8192).to(qmod.device)
+            with torch.no_grad():
+                out = qmod.generate(**inputs, max_new_tokens=max_new_tokens, temperature=0.0, do_sample=False)
+            text = qtok.decode(out[0], skip_special_tokens=True)
+            return JSONResponse(content={ 'ok': True, 'response': text, 'model': model or os.environ.get('QWEN_MODEL') })
+        except Exception as e:
+            logger.exception('LLM generation failed: %s', e)
+            return JSONResponse(status_code=500, content={ 'ok': False, 'error': str(e) })
+
+    except Exception as e:
+        logger.exception('LLM endpoint error: %s', e)
+        return JSONResponse(status_code=500, content={ 'ok': False, 'error': str(e) })
+
+
+# --- Models management endpoints -------------------------------------------------
+@app.get('/models')
+async def list_models():
+    """Return a list of IA components and which models are loaded.
+    Example response:
+      { available: [{name,type,loaded, present}], suggested: 'qwen/Qwen-2.5-VL', service: 'ranitas-vision' }
+    """
+    try:
+        models = []
+        # YOLO
+        try:
+            y = bool(get_model())
+        except Exception:
+            y = False
+        models.append({ 'name': 'yolo/seg', 'type': 'vision', 'loaded': y, 'present': os.path.exists(MODEL_PATH) })
+
+        # DocRes variants
+        models.append({ 'name': 'docres/default', 'type': 'docres', 'loaded': bool(get_docres_model()), 'present': os.path.exists(DOCRES_PATH) })
+        models.append({ 'name': 'docres/appearance', 'type': 'docres', 'loaded': bool(get_docres_model(mode="appearance")), 'present': os.path.exists(DOCRES_APPEARANCE_PATH) })
+        models.append({ 'name': 'docres/binarize', 'type': 'docres', 'loaded': bool(get_docres_model(mode="binarize")), 'present': os.path.exists(DOCRES_BINARIZE_PATH) })
+
+        # Qwen (python) — may be disabled when using Ollama
+        # Only attempt to load local Qwen if Ollama is not configured to handle LLM tasks
+        if not USE_OLLAMA:
+            try:
+                qmod, qtok = get_qwen_model()
+                q_loaded = qmod is not None
+                q_type = os.environ.get('QWEN_MODEL', None)
+            except Exception:
+                q_loaded = False
+                q_type = os.environ.get('QWEN_MODEL', None)
+            models.append({ 'name': q_type or 'qwen/unknown', 'type': 'qwen', 'loaded': q_loaded, 'present': q_loaded })
+
+            # If Qwen isn't present, expose a local heuristic parser as an available fallback
+            if not q_loaded:
+                models.append({ 'name': 'heuristic/parser', 'type': 'qwen', 'loaded': True, 'present': True, 'note': 'local fallback parser' })
+        else:
+            # Indicate Ollama-supplied LLMs will handle parsing
+            models.append({ 'name': 'ollama', 'type': 'llm_service', 'loaded': True, 'present': True, 'note': f"ollama_host={OLLAMA_HOST}, model={OLLAMA_MODEL_DEFAULT}" })
+
+        # Ollama service and models (runs separately inside Docker); include status and remote model list when available
+        ollama_info = { 'available': False, 'host': OLLAMA_HOST, 'models': [] }
+        if USE_OLLAMA and requests is not None:
+            try:
+                ollama_info['available'] = True
+                resp = requests.get(f"{OLLAMA_HOST.rstrip('/')}/api/models", timeout=3)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # support both list or dict {'models': [...]}
+                    if isinstance(data, list):
+                        ollama_info['models'] = data
+                    elif isinstance(data, dict) and 'models' in data:
+                        ollama_info['models'] = data['models']
+                    else:
+                        ollama_info['models'] = data
+            except Exception as e:
+                logger.warning('Failed to query Ollama models at %s: %s', OLLAMA_HOST, e)
+                ollama_info['available'] = False
+
+        return JSONResponse(content={ 'ok': True, 'available': models, 'ollama': ollama_info, 'service': 'ranitas-vision', 'suggested': os.environ.get('QWEN_MODEL', None) })
+    except Exception as e:
+        logger.exception('Error listing models: %s', e)
+        return JSONResponse(status_code=500, content={ 'ok': False, 'error': str(e) })
+
+
+@app.post('/models/load')
+async def load_model(payload: dict):
+    """Load a model on demand. Payload: { model: 'qwen/Qwen-2.5-VL' }
+    Supports: qwen types, docres/*, yolo/seg
+    """
+    try:
+        model = payload.get('model') if isinstance(payload, dict) else None
+        if not model:
+            return JSONResponse(status_code=400, content={ 'ok': False, 'error': 'No model specified' })
+
+        t0 = time.time()
+        # Support both 'qwen/...' and vendor-prefixed variants like 'nvidia/Qwen2.5-VL-7B-Instruct-NVFP4'
+        if 'qwen' in model.lower() or model.startswith('nvidia/'):
+            # Set env var and try to load using the explicit identifier
+            os.environ['QWEN_MODEL'] = model
+            qmod, qtok = get_qwen_model(model_override=model)
+            if qmod is None:
+                # Provide actionable error message to the user
+                err = f'Failed to load Qwen model: {model}. Possible causes: gated/private HF repo (requires HUGGINGFACE_HUB_TOKEN), incompatible model type (multimodal/config not supported by AutoModelForCausalLM), or missing local weights.\n'
+                if not os.environ.get('HUGGINGFACE_HUB_TOKEN'):
+                    err += 'No HUGGINGFACE_HUB_TOKEN found in environment - if this model is gated, set the token in your compose/env and restart the service.\n'
+                err += "You can also provide local weights by placing the model folder under './services/yolo/models' and then load it with model='local:/app/models/<foldername>'\n"
+                err += 'If you want, you can upload the weights/dir and I can help load it locally.'
+                logger.error(err)
+                raise RuntimeError(err)
+            t1 = time.time()
+            return { 'ok': True, 'model': model, 'loaded': True, 'timing_ms': int((t1 - t0) * 1000) }
+
+        if model.startswith('docres'):
+            # docres/default, docres/appearance, docres/binarize
+            mode = None
+            if 'appearance' in model:
+                mode = 'appearance'
+            elif 'binarize' in model:
+                mode = 'binarize'
+            d = get_docres_model(mode)
+            if d is None:
+                raise RuntimeError(f'DocRes model {model} not available')
+            t1 = time.time()
+            return { 'ok': True, 'model': model, 'loaded': True, 'timing_ms': int((t1 - t0) * 1000) }
+
+        if model.startswith('yolo'):
+            # Ensure ultralytics classes are allowlisted for torch.load if needed
+            try:
+                import torch as _t
+                import ultralytics as _u
+                try:
+                    _t.serialization.add_safe_globals([_u.nn.tasks.SegmentationModel])
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+            m = get_model()
+            if m is None:
+                raise RuntimeError('Failed to load YOLO model')
+            t1 = time.time()
+            return { 'ok': True, 'model': 'yolo/seg', 'loaded': True, 'timing_ms': int((t1 - t0) * 1000) }
+
+        return JSONResponse(status_code=400, content={ 'ok': False, 'error': 'Model type not supported' })
+    except Exception as e:
+        logger.exception('Error loading model %s: %s', model, e)
+        return JSONResponse(status_code=500, content={ 'ok': False, 'error': str(e) })
+
+
+@app.get('/status')
+async def status():
+    """Return environment and model status for debugging and health checks."""
+    info = {
+        'ok': True,
+        'cv2_installed': cv2 is not None,
+        'numpy_installed': np is not None,
+        'pil_installed': Image is not None,
+        'ultralytics_installed': YOLO is not None,
+        'yolo_model_path': MODEL_PATH,
+        'yolo_model_exists': os.path.exists(MODEL_PATH),
+    }
+
+    # Torch availability check
+    try:
+        import importlib
+        torch_spec = importlib.util.find_spec('torch')
+        if torch_spec is not None:
+            import torch
+            info['torch_installed'] = True
+            info['torch_version'] = getattr(torch, '__version__', None)
+            try:
+                info['torch_cuda_available'] = torch.cuda.is_available()
+                info['cuda_device_count'] = torch.cuda.device_count()
+            except Exception:
+                info['torch_cuda_available'] = False
+                info['cuda_device_count'] = 0
+
+            # Qwen model status (avoid auto-loading heavy local Qwen when Ollama is configured)
+            try:
+                if USE_OLLAMA:
+                    info['use_ollama'] = True
+                    info['qwen_model_loaded'] = False
+                    info['qwen_model_type'] = None
+                    # Query Ollama for available models if possible
+                    if requests is not None:
+                        try:
+                            resp = requests.get(f"{OLLAMA_HOST.rstrip('/')}/api/models", timeout=3)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                info['ollama_models'] = data
+                                info['ollama_available'] = True
+                                # Detect whether the configured model appears ready in Ollama's model list
+                                try:
+                                    model_name = OLLAMA_MODEL_DEFAULT or ''
+                                    found = False
+                                    # data can be list of models or dict depending on Ollama version
+                                    models_list = data if isinstance(data, list) else data.get('models') if isinstance(data, dict) else []
+                                    names = [ (m.get('name') if isinstance(m, dict) else str(m)) for m in models_list ]
+                                    for n in names:
+                                        if n and (model_name in n or model_name.split(':')[0] in n):
+                                            found = True
+                                            break
+                                    info['ollama_model_loaded'] = found
+                                except Exception:
+                                    info['ollama_model_loaded'] = False
+                        except Exception as oe:
+                            info['ollama_available'] = False
+                            info['ollama_error'] = str(oe)
+                else:
+                    qmod, qtok = get_qwen_model()
+                    info['qwen_model_loaded'] = (qmod is not None)
+                    info['qwen_model_type'] = os.environ.get('QWEN_MODEL', None)
+            except Exception as e:
+                info['qwen_model_loaded'] = False
+                info['qwen_model_type'] = None
+                info['qwen_load_error'] = str(e)
+                logger.warning('Qwen load diagnostic: %s', str(e))
+        else:
+            info['torch_installed'] = False
+            info['torch_version'] = None
+            info['torch_cuda_available'] = False
+            info['cuda_device_count'] = 0
+    except Exception as e:
+        info['torch_error'] = str(e)
+
+    # DocRes status (attempt to load lazily)
+    info['docres_installed'] = DocRes is not None
+    info['docres_model_path'] = DOCRES_PATH
+    info['docres_model_exists'] = os.path.exists(DOCRES_PATH)
+    try:
+        doc = get_docres_model()
+        info['docres_loaded'] = doc is not None
+    except Exception as e:
+        info['docres_loaded'] = False
+        info['docres_load_error'] = str(e)
+
+    # YOLO model load quick test (don't force heavy init if missing)
+    try:
+        if info['ultralytics_installed'] and os.path.exists(MODEL_PATH):
+            _ = get_model()
+            info['yolo_loaded'] = _ is not None
+        else:
+            info['yolo_loaded'] = False
+    except Exception as e:
+        info['yolo_loaded'] = False
+        info['yolo_load_error'] = str(e)
+
+    # Provide a list of loaded models for the frontend to consume
+    loaded = []
+    try:
+        if info.get('yolo_loaded'):
+            loaded.append({'name': 'yolo/seg', 'type': 'vision'})
+        if info.get('docres_loaded'):
+            loaded.append({'name': 'docres/default', 'type': 'docres'})
+
+        # If Ollama is configured, include it as a model service and list its models (without loading local Qwen)
+        
+        if USE_OLLAMA:
+            loaded.append({'name': 'ollama', 'type': 'llm_service'})
+            # If we fetched model list above, include individual ollama models for UI convenience
+            om = info.get('ollama_models')
+            if isinstance(om, list):
+                for m in om:
+                    if isinstance(m, str):
+                        loaded.append({'name': m, 'type': 'ollama_model'})
+                    elif isinstance(m, dict) and m.get('name'):
+                        loaded.append({'name': m.get('name'), 'type': 'ollama_model'})
+        else:
+            # If qwen is loaded (actual model), add it, else expose heuristic parser as loaded
+            try:
+                qmod, qtok = get_qwen_model()
+                if qmod is not None:
+                    loaded.append({'name': os.environ.get('QWEN_MODEL'), 'type': 'qwen'})
+                else:
+                    loaded.append({'name': 'heuristic/parser', 'type': 'qwen'})
+            except Exception:
+                loaded.append({'name': 'heuristic/parser', 'type': 'qwen'})
+    except Exception as e:
+        # If anything in the loaded-model aggregation fails, fall back to a minimal heuristic entry
+        loaded.append({'name': 'heuristic/parser', 'type': 'qwen'})
+
+    # Attach detected loaded models and return full status
+    info['loaded_models'] = loaded
+    return JSONResponse(status_code=200, content=info)

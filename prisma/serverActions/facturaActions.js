@@ -329,10 +329,10 @@ export async function guardarAuditoriaEdicion(datos) {
 }
 
 /**
- * Guarda un evento de auditoría cuando un modelo (Ollama) falla al procesar una imagen
+ * Guarda un evento de auditoría cuando la IA local falla al procesar una imagen
  * @param {Object} datos - Información del fallo
  */
-export async function guardarAuditoriaOllamaFailure(datos) {
+export async function guardarAuditoriaIaFailure(datos) {
   try {
     const {
       model,
@@ -345,13 +345,12 @@ export async function guardarAuditoriaOllamaFailure(datos) {
     } = datos
 
     // Log por ahora (podemos mover a una tabla de auditoría más adelante)
-    console.error('🔴 Auditoría OLLAMA_FAILURE:', {
+    console.error('🔴 Auditoría IA_FAILURE:', {
       model,
       mode,
       fileName,
       fileSize,
-      responseStatus,
-      errorSnippet: (String(errorText || '')).substring(0, 200),
+      responseSnippet: (String(errorText || '')).substring(0, 200),
       timing,
       timestamp: new Date().toISOString()
     })

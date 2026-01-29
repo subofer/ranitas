@@ -30,20 +30,14 @@ export async function buscarAliasPorItem({ proveedorId, item }) {
         ].filter(Boolean)
       },
       include: {
+        // No existe una relación "unidad" en Presentaciones; evitar seleccionar campos conflictivos
+        // Incluir las presentaciones completas para mantener compatibilidad con el frontend
         producto: {
           include: {
-            presentaciones: {
-              include: {
-                unidad: true
-              }
-            }
+            presentaciones: true
           }
         },
-        presentacion: {
-          include: {
-            unidad: true
-          }
-        }
+        presentacion: true
       }
     })
 

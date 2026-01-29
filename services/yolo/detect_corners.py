@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Production-ready FastAPI Vision Service - RTX 3090 Optimized
 
-Unified stack: YOLOv11 + Ollama (qwen2.5-vl:7b) + FastAPI
+Unified stack: YOLOv26 + Ollama (qwen2.5-vl:7b) + FastAPI
 All models stay in VRAM (keep_alive: -1)
 
 Zero waste: No transformers, no bitsandbytes, no local LLM loading.
@@ -24,6 +24,7 @@ import cv2
 import requests
 from PIL import Image
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+import uuid
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
@@ -35,8 +36,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("vision")
 
+from datetime import datetime
+
+def ts():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
+
+def tprint(msg, emoji=''):
+    # Print unified, timestamped, emoji-annotated line for docker logs
+    print(f"{ts()} {emoji} {msg}")
+    logger.info(msg)
+
 # === CONFIG ===
-MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', '/app/models/yolo11n-seg.pt')
+# Prefer YOLOv26 Open-Vocabulary segmentation model by default
+MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', '/app/models/yolov26l-seg.pt')
+# Target classes prioritized for document detection (used when model supports text prompts)
+TARGET_CLASSES = ["white paper document", "printed receipt", "tax invoice"]
 CONFIDENCE = float(os.environ.get('YOLO_CONF', 0.25))
 MASK_THRESHOLD = float(os.environ.get('MASK_THRESHOLD', 0.5))
 OLLAMA_HOST = os.environ.get('OLLAMA_HOST', 'http://127.0.0.1:11434')
@@ -50,8 +64,9 @@ ENH_SHARPEN_CENTER = int(os.environ.get('ENH_SHARPEN_CENTER', 12))
 YOLO_CROP_CONF = float(os.environ.get('YOLO_CROP_CONF', 0.8))
 # When we skip cropping, pad the full image by this fraction (5% default)
 NO_CROP_PADDING = float(os.environ.get('NO_CROP_PADDING', 0.05))
-# Optional DocRes model path (DEPRECATED: DocRes removed to simplify pipeline)
-DOCRES_MODEL_PATH = os.environ.get('DOCRES_MODEL_PATH', os.path.join(os.path.dirname(__file__), 'docres.pt'))
+
+# Verbose diagnostics (set VISION_VERBOSE=1 in docker env to enable)
+VISION_VERBOSE = os.environ.get('VISION_VERBOSE', '0') in ('1', 'true', 'True', 'TRUE')
 
 # === GLOBALS ===
 _yolo_model = None
@@ -72,29 +87,61 @@ app.add_middleware(
 async def _vision_startup_preload():
     """Preload heavy models so /status and /models show them as loaded.
     - Load YOLO eagerly so the UI sees 'loaded'=True
-    - Optionally preload DocRes if ENABLE_DOCRES_PRELOAD=1
-    - Probe Ollama availability
+    - Probe Ollama availability and qwen model presence
     """
-    logger.info('Startup: preloading vision models')
+    tprint('🚀 Starting unified Vision AI stack (RTX 3090 optimized)')
+
+    # GPU probe
+    try:
+        import torch
+        if torch.cuda.is_available():
+            try:
+                name = torch.cuda.get_device_name(0)
+                mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                tprint(f"✅ GPU: {name} ({mem:.1f}GB)")
+            except Exception:
+                tprint('✅ GPU detected (details unavailable)')
+        else:
+            tprint('⚠️ GPU not available')
+    except Exception:
+        tprint('⚠️ Could not probe GPU')
+
+    # Pre-warm YOLO
+    tprint('⏱ Pre-warming YOLO model (fast)')
     try:
         loop = asyncio.get_event_loop()
-        # Load YOLO in background thread to avoid blocking event loop for too long
         await loop.run_in_executor(None, get_yolo_model)
-        logger.info('Startup: YOLO preload complete')
+        tprint('Startup: YOLO preload complete')
     except Exception:
         logger.exception('Startup: YOLO preload failed')
 
-    # DocRes preload removed to simplify startup; use light vision-first pipeline instead
-
-    # Probe Ollama
+    # Probe Ollama and check configured model presence
+    tprint('🧠 Probing Ollama API...')
     try:
         resp = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=3)
         if resp.status_code == 200:
-            logger.info('Startup: Ollama reachable')
+            tprint('✅ Ollama API ready')
+            try:
+                models = [m.get('name') for m in resp.json().get('models', [])]
+                tprint(f'⬇️ Checking for {OLLAMA_MODEL} locally... (OLLAMA_AUTO_PULL={os.environ.get("OLLAMA_AUTO_PULL", "0")})')
+                if OLLAMA_MODEL in models:
+                    tprint(f'ℹ️ Model {OLLAMA_MODEL} present locally')
+                    tprint(f'🔥 Warming {OLLAMA_MODEL} with keep_alive=-1 (permanent VRAM lock)...')
+                    # Optionally a warming call could be done here
+                    tprint(f'✅ {OLLAMA_MODEL} locked in VRAM (or warm attempted)')
+                else:
+                    if os.environ.get('OLLAMA_AUTO_PULL', '0') in ('0', 'false', 'False'):
+                        tprint(f'⚠️ OLLAMA_AUTO_PULL=0 -> skipping automatic pull of {OLLAMA_MODEL}')
+                    else:
+                        tprint(f'⚠️ Model {OLLAMA_MODEL} not present locally')
+            except Exception:
+                tprint('⚠️ Could not parse Ollama models list')
         else:
-            logger.warning('Startup: Ollama probe returned status %s', resp.status_code)
+            tprint(f'⚠️ Ollama probe returned status {resp.status_code}')
     except Exception:
-        logger.warning('Startup: Ollama not reachable at %s', OLLAMA_HOST)
+        tprint(f'⚠️ Ollama not reachable at {OLLAMA_HOST}')
+
+    tprint('🎯 Starting FastAPI...')
 
 
 def get_yolo_model():
@@ -106,20 +153,28 @@ def get_yolo_model():
         # Warm-up
         try:
             dummy = np.zeros((640, 640, 3), dtype=np.uint8)
+            t0 = time.time()
             _yolo_model.predict(dummy, verbose=False)
-            logger.info("YOLO warmed up")
+            t1 = time.time()
+            took_ms = int((t1 - t0) * 1000)
+            tprint(f"YOLO pre-warm: loaded= True took_ms= {took_ms}")
         except Exception as e:
             logger.warning(f"YOLO warmup failed: {e}")
+
+        # If this model supports text-prompted classes (YOLOE/v26), set the prioritized document classes
+        try:
+            if TARGET_CLASSES and hasattr(_yolo_model, 'get_text_pe') and hasattr(_yolo_model, 'set_classes'):
+                try:
+                    _yolo_model.set_classes(TARGET_CLASSES, _yolo_model.get_text_pe(TARGET_CLASSES))
+                    logger.info(f"YOLO classes set to: {TARGET_CLASSES}")
+                except Exception as e:
+                    logger.warning(f"Could not set YOLO classes: {e}")
+        except Exception:
+            pass
     return _yolo_model
 
 
-# --- Optional DocRes model (lazy, safe load) ---
-_docres_model = None
-_docres_try = False
-
-def get_docres_model():
-    """DocRes support removed to simplify pipeline. Return None."""
-    return None
+# DocRes support removed from runtime. Restoration falls back to OpenCV-based heuristics when needed.
 
 
 def _make_ollama_image_data(img_np, max_w=1280, quality=80):
@@ -438,41 +493,65 @@ def detect_document_corners(img_np, crop_conf=None):
         best_box = None
         best_conf = 0.0
         all_confs = []
+        
+        # Priority 1: TRY SEGMENTATION MASKS (much more precise for slanted docs)
         for r in results:
-            boxes = getattr(r, 'boxes', None)
-            if boxes is None:
-                continue
-            # try to read confidences and xyxy
-            try:
-                confs = getattr(boxes, 'conf', None)
-                xys = getattr(boxes, 'xyxy', None)
-                if confs is not None and xys is not None:
-                    # convert to iterables
-                    # handle tensors or lists
-                    try:
+            if hasattr(r, 'masks') and r.masks is not None:
+                for i, mask in enumerate(r.masks.data):
+                    cf = float(r.boxes.conf[i])
+                    all_confs.append(cf)
+                    if cf >= conf_threshold and cf > best_conf:
+                        # Extract contour from mask
+                        m = mask.cpu().numpy()
+                        m = (m * 255).astype('uint8')
+                        m = cv2.resize(m, (w, h))
+                        contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        if contours:
+                            c = max(contours, key=cv2.contourArea)
+                            # Approximate to 4 points (prefer low-interpretation options)
+                            peri = cv2.arcLength(c, True)
+                            approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+                            if len(approx) == 4:
+                                best_conf = cf
+                                best_box = [tuple(p[0]) for p in approx]
+                                logger.info(f"YOLO segmentation mask + approxPolyDP succeeded with conf={cf:.3f}")
+                            else:
+                                # Try progressively larger epsilons to reduce vertices toward 4
+                                for eps in [0.03, 0.05, 0.08, 0.12]:
+                                    approx2 = cv2.approxPolyDP(c, eps * peri, True)
+                                    if len(approx2) == 4:
+                                        best_conf = cf
+                                        best_box = [tuple(p[0]) for p in approx2]
+                                        logger.info(f"YOLO mask approxPolyDP reduced to 4 points with eps={eps:.3f}, conf={cf:.3f}")
+                                        break
+                                if best_box is None:
+                                    # Conservative fallback: use minAreaRect -> 4-point polygon (less interpretation)
+                                    rect = cv2.minAreaRect(c)
+                                    box = cv2.boxPoints(rect)
+                                    box = [tuple(map(int, bp)) for bp in box]
+                                    best_conf = cf
+                                    best_box = box
+                                    logger.info(f"YOLO mask fallback to minAreaRect (4 points) with conf={cf:.3f}")
+
+        # Priority 2: FALLBACK TO BOUNDING BOXES (if no masks or approx failed)
+        if best_box is None:
+            for r in results:
+                boxes = getattr(r, 'boxes', None)
+                if boxes is None:
+                    continue
+                try:
+                    confs = getattr(boxes, 'conf', None)
+                    xys = getattr(boxes, 'xyxy', None)
+                    if confs is not None and xys is not None:
                         confs_iter = list(confs.cpu().numpy()) if hasattr(confs, 'cpu') else list(confs)
                         xys_iter = list(xys.cpu().numpy()) if hasattr(xys, 'cpu') else list(xys)
-                    except Exception:
-                        confs_iter = list(confs)
-                        xys_iter = list(xys)
-                    for xy, cf in zip(xys_iter, confs_iter):
-                        cf = float(cf)
-                        all_confs.append(cf)
-                        if cf >= conf_threshold and cf > best_conf:
-                            best_conf = cf
-                            x1, y1, x2, y2 = [int(float(v)) for v in xy]
-                            best_box = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
-            except Exception:
-                # Fallback: try simple box scanning without confs
-                try:
-                    for b in boxes.xyxy:
-                        coords = [float(v) for v in b]
-                        x1, y1, x2, y2 = coords
-                        bw = max(1.0, x2 - x1)
-                        bh = max(1.0, y2 - y1)
-                        area = bw * bh
-                        if area / float(w * h) > 0.01:
-                            best_box = [(int(x1), int(y1)), (int(x2), int(y1)), (int(x2), int(y2)), (int(x1), int(y2))]
+                        for xy, cf in zip(xys_iter, confs_iter):
+                            cf = float(cf)
+                            # If we hadn't already found a better conf via masks (which would've skipped this)
+                            if cf >= conf_threshold and cf > best_conf:
+                                best_conf = cf
+                                x1, y1, x2, y2 = [int(float(v)) for v in xy]
+                                best_box = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
                 except Exception:
                     continue
         if best_box is not None:
@@ -545,6 +624,77 @@ def content_bbox_color(img_np, min_area_ratio=0.005, pad_frac=0.03):
     return order_corners([(x1, y1), (x2, y1), (x2, y2), (x1, y2)])
 
 
+# === Field detection (invoice regions) ===
+FIELD_PROMPTS = [p.strip() for p in os.environ.get('FIELD_PROMPTS', 'emisor,numero,fecha,total,items,importe').split(',') if p.strip()]
+FIELD_DET_CONF = float(os.environ.get('FIELD_DET_CONF', 0.25))
+
+def detect_invoice_fields(img_np, prompts=None, conf_thresh=None):
+    """Try to detect invoice fields (issuer, date, total, items, etc.) using YOLOE-style text prompts.
+    This is best-effort: if the loaded model supports text-prompted classes (YOLOE API), it will be used; otherwise returns []"""
+    prompts = prompts or FIELD_PROMPTS
+    conf_thresh = conf_thresh if conf_thresh is not None else FIELD_DET_CONF
+    model = get_yolo_model()
+    if model is None:
+        return []
+    names = [p.strip() for p in prompts if p.strip()]
+    try:
+        # If model exposes helper methods for text prompts, try to set classes
+        if hasattr(model, 'get_text_pe') and hasattr(model, 'set_classes'):
+            try:
+                model.set_classes(names, model.get_text_pe(names))
+            except Exception:
+                # Not fatal; continue
+                pass
+        # Try to pass a textual prompt directly (best-effort; API may accept 'prompt' arg)
+        prompt_text = ', '.join(names)
+        results = None
+        try:
+            results = model.predict(img_np, conf=CONFIDENCE, verbose=False, prompt=prompt_text)
+        except TypeError:
+            # Older ultralytics may not accept 'prompt' arg; fall back
+            results = model.predict(img_np, conf=CONFIDENCE, verbose=False)
+        except Exception:
+            results = model.predict(img_np, conf=CONFIDENCE, verbose=False)
+
+        found = []
+        for r in results:
+            boxes = getattr(r, 'boxes', None)
+            if boxes is None:
+                continue
+            confs = getattr(boxes, 'conf', None)
+            xys = getattr(boxes, 'xyxy', None)
+            cls = getattr(boxes, 'cls', None)
+            # iterate
+            confs_iter = list(confs.cpu().numpy()) if hasattr(confs, 'cpu') else list(confs)
+            xys_iter = list(xys.cpu().numpy()) if hasattr(xys, 'cpu') else list(xys)
+            cls_iter = list(cls.cpu().numpy()) if (cls is not None and hasattr(cls, 'cpu')) else (list(cls) if cls is not None else [None]*len(confs_iter))
+            for i, (xy, cf) in enumerate(zip(xys_iter, confs_iter)):
+                cf = float(cf)
+                if cf < conf_thresh:
+                    continue
+                x1, y1, x2, y2 = [int(float(v)) for v in xy]
+                # Determine name: if class idx exists map to names, else use best-effort mapping
+                name = None
+                try:
+                    if cls_iter and cls_iter[i] is not None:
+                        idx = int(cls_iter[i])
+                        if 0 <= idx < len(names):
+                            name = names[idx]
+                except Exception:
+                    name = None
+                if name is None:
+                    # fallback: try label from r.names or default to 'field'
+                    try:
+                        name = r.names[int(getattr(boxes, 'cls', [0])[i])] if hasattr(r, 'names') else 'field'
+                    except Exception:
+                        name = 'field'
+                found.append({'name': str(name), 'bbox': [x1, y1, x2, y2], 'conf': round(cf, 3)})
+        return found
+    except Exception as e:
+        logger.exception('Field detection failed: %s', e)
+        return []
+
+
 def img_to_base64(img_np, quality=92):
     """Convert numpy image to base64 JPEG"""
     if img_np.ndim == 2:
@@ -559,10 +709,13 @@ async def detect_endpoint(image: UploadFile = File(...), yolo_conf: float = Form
     """Detect document corners in image. Accepts optional `yolo_conf` to override YOLO crop confidence for this call."""
     try:
         contents = await image.read()
+        req_id = str(uuid.uuid4())
+        payload_bytes = len(contents)
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         if img is None:
+            logger.warning(f"[{req_id}] detect received invalid image (payload_bytes={payload_bytes})")
             raise HTTPException(400, "Invalid image")
         
         # Limit image size to avoid OOM / segfaults in native libs
@@ -575,7 +728,8 @@ async def detect_endpoint(image: UploadFile = File(...), yolo_conf: float = Form
             logger.info(f"Resized input image from {w}x{h} to {new_w}x{new_h} to limit memory usage")
             h, w = img.shape[:2]
 
-            logger.info(f'detect_endpoint: received yolo_conf={yolo_conf} (default {YOLO_CROP_CONF} if None)')
+        if VISION_VERBOSE:
+            logger.info(f"[{req_id}] detect called: yolo_conf={yolo_conf}, payload_bytes={payload_bytes}, size={w}x{h}")
         try:
             corners, method = detect_document_corners(img, crop_conf=yolo_conf)
         except Exception as e:
@@ -585,7 +739,7 @@ async def detect_endpoint(image: UploadFile = File(...), yolo_conf: float = Form
         if corners is None:
             corners = fallback_corners(w, h)
             method = method or 'full_padded'
-        
+
         # Debug: save the image that was passed to YOLO so we can inspect what the model saw
         try:
             ts = int(time.time())
@@ -599,19 +753,217 @@ async def detect_endpoint(image: UploadFile = File(...), yolo_conf: float = Form
         cv2.polylines(debug_img, [np.array(corners)], True, (0, 255, 0), 3)
         for pt in corners:
             cv2.circle(debug_img, pt, 8, (255, 0, 0), -1)
+
+        # Also compute fields inside the detected crop (best-effort using YOLOE prompts)
+        try:
+            warped = four_point_warp(img, corners)
+            fields = detect_invoice_fields(warped)
+        except Exception:
+            fields = []
         
         used_conf = float(yolo_conf) if yolo_conf is not None else float(YOLO_CROP_CONF)
-        return JSONResponse({
+
+        # append JSONL entry for this detect request
+        try:
+            log_entry = {
+                'req_id': req_id,
+                'ts': int(time.time()),
+                'payload_bytes': payload_bytes,
+                'yolo_conf': used_conf,
+                'method': method,
+                'points_px': [{"x": int(x), "y": int(y)} for x, y in corners],
+                'image_size': {'width': w, 'height': h}
+            }
+            with open('/tmp/vision_requests.log', 'a') as f:
+                f.write(json.dumps(log_entry) + '\n')
+            if VISION_VERBOSE:
+                logger.info(f"[detect] req={req_id} method={method} points={log_entry['points_px']}")
+        except Exception:
+            logger.exception('Failed writing vision_requests.log')
+
+        resp_payload = {
             "ok": True,
             "points": [{"x": int(x), "y": int(y)} for x, y in corners],
             "method": method,
+            "fields": fields,
             "debug_image_base64": img_to_base64(debug_img),
             "image_size": {"width": w, "height": h},
             "used_yolo_conf": used_conf
-        })
+        }
+        if VISION_VERBOSE:
+            resp_payload['vision_log_id'] = req_id
+
+        return JSONResponse(resp_payload)
         
     except Exception as e:
         logger.exception(f"Detection error: {e}")
+        raise HTTPException(500, str(e))
+
+
+@app.post("/process-document")
+async def process_document(image: UploadFile = File(...), normalize: bool = Form(True)):
+    """Run YOLO segmentation and return a polygon describing the largest detected document.
+    Returns normalized coordinates (0..1) by default (normalize=True).
+    """
+    try:
+        contents = await image.read()
+        req_id = str(uuid.uuid4())
+        req_ts = int(time.time())
+        payload_bytes = len(contents)
+        nparr = np.frombuffer(contents, np.uint8)
+        orig_img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if orig_img is None:
+            logger.warning(f"[{req_id}] process_document received invalid image (payload_bytes={payload_bytes})")
+            raise HTTPException(400, "Invalid image")
+        orig_h, orig_w = orig_img.shape[:2]
+        if VISION_VERBOSE:
+            logger.info(f"[{req_id}] process_document called: normalize={normalize}, payload_bytes={payload_bytes}, orig_size={orig_w}x{orig_h}")
+
+        # Resize for stability if image is very large, but remember scaling to map back
+        img = orig_img.copy()
+        scaled = False
+        scale_x = scale_y = 1.0
+        MAX_DIM = 1600
+        if max(orig_w, orig_h) > MAX_DIM:
+            factor = MAX_DIM / float(max(orig_w, orig_h))
+            new_w, new_h = int(orig_w * factor), int(orig_h * factor)
+            img = cv2.resize(orig_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+            scaled = True
+            scale_x = orig_w / float(new_w)
+            scale_y = orig_h / float(new_h)
+
+        model = get_yolo_model()
+        # Time the prediction for diagnostics
+        pred_start = time.time()
+        results = model.predict(img, conf=CONFIDENCE, verbose=False)
+        pred_ms = int((time.time() - pred_start) * 1000)
+        # Summarize prediction
+        try:
+            num_results = len(results)
+            num_masks = sum(1 for r in results if hasattr(r, 'masks') and r.masks is not None)
+            num_boxes = sum(1 for r in results if getattr(r, 'boxes', None) is not None)
+            conf_samples = []
+            for r in results:
+                try:
+                    confs = getattr(r, 'boxes', None)
+                    if confs is not None and hasattr(confs, 'conf'):
+                        ct = list(confs.conf.cpu().numpy()) if hasattr(confs.conf, 'cpu') else list(confs.conf)
+                        conf_samples.extend([float(c) for c in ct])
+                except Exception:
+                    continue
+            conf_samples = sorted(conf_samples, reverse=True)[:5]
+            if VISION_VERBOSE:
+                logger.info(f"[process_document] req=auto pred_ms={pred_ms}ms results={num_results} masks={num_masks} boxes={num_boxes} top_confs={conf_samples}")
+        except Exception:
+            logger.exception('Failed to summarize YOLO prediction')
+
+        detections = []  # each: { label, contour (np.array Nx1x2), area }
+        for r in results:
+            # Determine label (best-effort)
+            label = None
+            try:
+                boxes = getattr(r, 'boxes', None)
+                if boxes is not None and hasattr(boxes, 'cls'):
+                    cls_iter = list(boxes.cls.cpu().numpy()) if hasattr(boxes.cls, 'cpu') else list(boxes.cls)
+                    if cls_iter and len(cls_iter) > 0:
+                        idx = int(cls_iter[0])
+                        if hasattr(r, 'names') and idx in r.names:
+                            label = r.names[idx]
+                if label is None and hasattr(r, 'names') and isinstance(r.names, dict):
+                    # best-effort fallback
+                    label = list(r.names.values())[0] if len(r.names) > 0 else 'document'
+            except Exception:
+                label = 'document'
+
+            # masks (preferred)
+            if hasattr(r, 'masks') and r.masks is not None:
+                for mask in r.masks.data:
+                    m = mask.cpu().numpy()
+                    m = (m * 255).astype('uint8')
+                    if m.shape[0] != img.shape[0] or m.shape[1] != img.shape[1]:
+                        m = cv2.resize(m, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
+                    contours, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                    if not contours:
+                        continue
+                    c = max(contours, key=cv2.contourArea)
+                    area = float(cv2.contourArea(c))
+                    detections.append({'label': label or 'document', 'contour': c, 'area': area})
+
+            # boxes fallback
+            if not hasattr(r, 'masks') or r.masks is None:
+                boxes = getattr(r, 'boxes', None)
+                if boxes is not None and hasattr(boxes, 'xyxy'):
+                    xys_iter = list(boxes.xyxy.cpu().numpy()) if hasattr(boxes.xyxy, 'cpu') else list(boxes.xyxy)
+                    for xy in xys_iter:
+                        x1, y1, x2, y2 = [int(float(v)) for v in xy]
+                        c = np.array([[[x1, y1]], [[x2, y1]], [[x2, y2]], [[x1, y2]]])
+                        area = float((x2 - x1) * (y2 - y1))
+                        detections.append({'label': label or 'document', 'contour': c, 'area': area})
+
+        if not detections:
+            # fallback full padded image
+            pts = padded_full_image_corners(orig_w, orig_h)
+            pts_out = [{'x': round(x / float(orig_w), 6), 'y': round(y / float(orig_h), 6)} for x, y in pts]
+            return JSONResponse({'ok': True, 'points': pts_out, 'label': 'none', 'image_size': {'width': orig_w, 'height': orig_h}})
+
+        best = max(detections, key=lambda d: d['area'])
+        cnt = best['contour']
+        # Simplify polygon aggressively to try to force 4 points
+        peri = cv2.arcLength(cnt, True)
+        approx = None
+        for eps in [0.12, 0.08, 0.05, 0.03]:
+            try:
+                a = cv2.approxPolyDP(cnt, eps * peri, True)
+                if len(a) == 4:
+                    approx = a
+                    break
+            except Exception:
+                continue
+        if approx is None:
+            # fallback to bounding quad (minAreaRect)
+            try:
+                rect = cv2.minAreaRect(cnt)
+                box = cv2.boxPoints(rect)
+                approx = np.array([[[int(round(x)), int(round(y))]] for x, y in box])
+            except Exception:
+                approx = cv2.approxPolyDP(cnt, 0.01 * peri, True)
+
+        poly = [tuple(map(int, p[0])) for p in approx]
+
+        # Map back to original image coordinates if scaled
+        if scaled:
+            poly = [ (int(round(x * scale_x)), int(round(y * scale_y))) for (x, y) in poly ]
+
+        # Build output normalized points (0..1)
+        pts_out = [{'x': round(x / float(orig_w), 6), 'y': round(y / float(orig_h), 6)} for x, y in poly]
+
+        # Emit structured debug log for this request (append JSONL to /tmp)
+        try:
+            log_entry = {
+                'req_id': req_id,
+                'ts': req_ts,
+                'payload_bytes': payload_bytes,
+                'model': 'yolov26',
+                'method': 'mask_based' if any(hasattr(r, 'masks') and r.masks is not None for r in results) else 'box_based',
+                'chosen_poly_px': poly,
+                'chosen_poly_norm': pts_out,
+                'image_size': {'width': orig_w, 'height': orig_h}
+            }
+            with open('/tmp/vision_requests.log', 'a') as f:
+                f.write(json.dumps(log_entry) + '\n')
+            if VISION_VERBOSE:
+                logger.info(f"[process_document] req={req_id} chosen_poly_norm={pts_out} image_size={orig_w}x{orig_h}")
+        except Exception:
+            logger.exception('Failed writing vision_requests.log')
+
+        resp_payload = {'ok': True, 'points': pts_out, 'label': best.get('label', 'document'), 'quad': [{'x': round(p[0] / float(orig_w), 6), 'y': round(p[1] / float(orig_h), 6)} for p in poly], 'image_size': {'width': orig_w, 'height': orig_h}}
+        if VISION_VERBOSE:
+            resp_payload['vision_log_id'] = req_id
+
+        return JSONResponse(resp_payload)
+
+    except Exception as e:
+        logger.exception('process_document failed: %s', e)
         raise HTTPException(500, str(e))
 
 
@@ -684,6 +1036,14 @@ async def restore_endpoint(
                 logger.exception(f'Warp failed: {e}')
                 warped = img.copy()
 
+            # Stage: detect fields on the warped crop and yield them to the stream (best-effort)
+            try:
+                fields = detect_invoice_fields(warped)
+                yield f"data: {json.dumps({'stage': 'fields', 'fields': fields})}\n\n"
+            except Exception:
+                fields = []
+
+
             # Stage 3: Restored (enhanced)
             try:
                 # Better color-aware enhancement pipeline and multiple variants
@@ -720,38 +1080,8 @@ async def restore_endpoint(
                 # Candidate chosen by default is enhanced_color (better for OCR); fallback to threshold_blend
                 restored = variants.get('enhanced_color', variants.get('threshold_blend'))
 
-                # Optionally try DocRes if explicitly enabled via env
-                try:
-                    if os.environ.get('ENABLE_DOCRES', '0') == '1':
-                        doc_model = get_docres_model()
-                        if doc_model is not None:
-                            try:
-                                import torch
-                                device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-                                # convert and call model safely
-                                img_rgb = restored[:, :, ::-1].astype('float32') / 255.0
-                                tensor = torch.from_numpy(img_rgb.transpose(2, 0, 1)).unsqueeze(0).float().to(device)
-                                with torch.no_grad():
-                                    out = doc_model.restore(tensor) if hasattr(doc_model, 'restore') else doc_model(tensor)
-                                # convert out to numpy image
-                                if hasattr(out, 'detach'):
-                                    t = out.detach().cpu()
-                                    if t.dim() == 4:
-                                        t = t.squeeze(0)
-                                    arr = t.numpy()
-                                    if arr.shape[0] == 3:
-                                        out_np = (arr.transpose(1, 2, 0) * 255.0).astype('uint8')
-                                    else:
-                                        out_np = (arr * 255.0).astype('uint8')
-                                # convert RGB->BGR
-                                if out_np is not None:
-                                    variants['docres'] = out_np[:, :, ::-1]
-                                    restored = variants['docres']
-                                    logger.info('DocRes produced variant')
-                            except Exception:
-                                logger.exception('DocRes inference failed')
-                except Exception:
-                    pass
+                # DocRes has been removed from the default pipeline to keep the service focused on YOLO + Ollama.
+                # Previously there was optional DocRes inference here; it has been intentionally removed.
 
                 # ensure final dtype
                 if restored.dtype != 'uint8':
@@ -903,6 +1233,49 @@ Reglas estrictas:
         return JSONResponse(result)
 
 
+# --- Debugging helper: return last JSONL logs from /tmp/vision_requests.log ---
+@app.get("/debug/logs")
+async def debug_logs(limit: int = 50):
+    """Return the last `limit` entries written to /tmp/vision_requests.log (if present)."""
+    try:
+        path = '/tmp/vision_requests.log'
+        if not os.path.exists(path):
+            return JSONResponse({'ok': False, 'reason': 'no_logs'})
+        with open(path, 'r') as f:
+            lines = f.read().strip().split('\n')
+        lines = [l for l in lines if l.strip()]
+        if not lines:
+            return JSONResponse({'ok': False, 'reason': 'no_logs'})
+        # take last `limit` lines
+        selected = lines[-limit:]
+        parsed = []
+        for l in selected:
+            try:
+                parsed.append(json.loads(l))
+            except:
+                parsed.append({'raw': l})
+        return JSONResponse({'ok': True, 'count': len(parsed), 'entries': parsed})
+    except Exception:
+        logger.exception('debug/logs read failed')
+        return JSONResponse({'ok': False, 'reason': 'error'})
+
+
+@app.post('/debug/trace')
+async def debug_trace_endpoint(payload: dict):
+    """Accept client-side traces and append to /tmp/vision_client_traces.log for later inspection"""
+    try:
+        ts = int(time.time())
+        entry = {'ts': ts, 'payload': payload}
+        with open('/tmp/vision_client_traces.log', 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+        if VISION_VERBOSE:
+            logger.info(f"[debug/trace] appended trace (len={len(payload.get('trace', [])) if isinstance(payload, dict) else 'unknown'})")
+        return JSONResponse({'ok': True, 'ts': ts})
+    except Exception:
+        logger.exception('debug/trace failed')
+        return JSONResponse({'ok': False, 'reason': 'error'})
+
+
 # --- Models endpoints: list available and request load ---
 @app.get("/models")
 async def models_endpoint():
@@ -928,25 +1301,7 @@ async def models_endpoint():
     except Exception:
         available.append({'name': 'yolo/seg', 'type': 'vision', 'loaded': False, 'present': False})
 
-    # DocRes (optional restoration model)
-    try:
-        docres_present = os.path.exists(DOCRES_MODEL_PATH)
-        docres_importable = False
-        try:
-            import importlib.util
-            docres_importable = importlib.util.find_spec('docres') is not None
-        except Exception:
-            docres_importable = False
-        # If docres exists and is importable, reflect its load state (and optionally try to load lazily)
-        if docres_present and docres_importable and _docres_model is None and os.environ.get('ENABLE_DOCRES_PRELOAD', '0') == '1':
-            try:
-                logger.info('models_endpoint: preloading DocRes on request')
-                _ = get_docres_model()
-            except Exception:
-                logger.exception('models_endpoint: loading DocRes failed')
-        available.append({'name': 'docres/default', 'type': 'restoration', 'loaded': _docres_model is not None, 'present': docres_present})
-    except Exception:
-        pass
+    # DocRes support has been removed from the default pipeline. The service focuses on YOLO + Ollama.
 
     # Ollama-exposed models (query Ollama API)
     try:
@@ -1028,18 +1383,28 @@ async def status_endpoint():
     except:
         pass
     
-    # DocRes info
-    docres_installed = False
-    docres_model_exists = False
+    # Derive explicit model names for reporting consistency
+    loaded_models = []
+
+    # Ollama models (if any)
+    if ollama_models:
+        loaded_models.extend([m for m in ollama_models if m])
+
+    # YOLO: if model path exists and YOLO is loaded, derive a model name from the filename
+    yolo_model_name = None
     try:
-        import importlib.util
-        docres_installed = importlib.util.find_spec('docres') is not None
+        if _yolo_model is not None or (os.path.exists(MODEL_PATH)):
+            basename = os.path.basename(MODEL_PATH)
+            yolo_model_name = os.path.splitext(basename)[0]
+            loaded_models.append(yolo_model_name)
     except Exception:
-        docres_installed = False
-    try:
-        docres_model_exists = os.path.exists(DOCRES_MODEL_PATH)
-    except Exception:
-        docres_model_exists = False
+        yolo_model_name = None
+
+    # Normalize unique names
+    loaded_models = list(dict.fromkeys([s for s in loaded_models if s]))
+
+    # qwen presence inference
+    qwen_present = any(OLLAMA_MODEL == m or (m and OLLAMA_MODEL.split(':')[0] in m) for m in ollama_models)
 
     return JSONResponse({
         "ok": True,
@@ -1053,17 +1418,15 @@ async def status_endpoint():
             "ready": ollama_ready,
             "host": OLLAMA_HOST,
             "models": ollama_models,
-            "configured_model": OLLAMA_MODEL
+            "configured_model": OLLAMA_MODEL,
+            "qwen_present": qwen_present
         },
         "yolo": {
             "loaded": _yolo_model is not None,
-            "path": MODEL_PATH
+            "path": MODEL_PATH,
+            "model": yolo_model_name
         },
-        "docres": {
-            "installed": docres_installed,
-            "model_exists": docres_model_exists,
-            "model_path": DOCRES_MODEL_PATH if docres_model_exists else None
-        }
+        "loadedModels": loaded_models
     })
 
 

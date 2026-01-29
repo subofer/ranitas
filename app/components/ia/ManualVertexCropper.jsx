@@ -93,9 +93,12 @@ function bilinearSample(srcData, sx, sy, width, height) {
   return res
 }
 
-function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
+function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false, zoom = 1, pan = { x: 0, y: 0 }, setZoom = null, setPan = null, onPanStart = null, onPanMove = null, onPanEnd = null, onWheel = null, carouselItems = [], carouselIndex = 0, onCarouselPrev = null, onCarouselNext = null, hostImageRef = null, overlayOnly = false, isPanning = false }, ref) {
   const canvasRef = useRef(null)
   const previewCanvasRef = useRef(null)
+  // Overlay container refs
+  const leftContainerRef = useRef(null)
+  const previewOverlayRef = useRef(null)
   // New: separate canvases for side-by-side comparison
   const origPreviewRef = useRef(null)
   const enhancedPreviewRef = useRef(null)
@@ -115,12 +118,63 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
   const detectControllerRef = useRef(null)
   // For drawing a box by dragging (start point + drag to size)
   const rectStartRef = useRef(null)
+
+  // Body overflow helper for granular scroll locking (only while dragging)
+  const bodyPrevOverflowRef = useRef(null)
+  const lockBodyScroll = () => {
+    try {
+      if (bodyPrevOverflowRef.current === null) bodyPrevOverflowRef.current = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+    } catch (e) {}
+  }
+  const unlockBodyScroll = () => {
+    try {
+      if (bodyPrevOverflowRef.current !== null) {
+        document.body.style.overflow = bodyPrevOverflowRef.current
+        bodyPrevOverflowRef.current = null
+      }
+    } catch (e) {}
+  }
+
+  const clampToCanvas = (pt) => {
+    const canvas = canvasRef.current
+    if (!canvas) return pt
+    const x = Math.max(0, Math.min(pt.x, canvas.width))
+    const y = Math.max(0, Math.min(pt.y, canvas.height))
+    return { x, y }
+  }
+
+  // Client-side debug trace for mouse/pointer events (can be exported to server)
+  const debugTraceRef = useRef([])
+  // Mirror important state in refs to avoid TDZ and make pushTrace stable
+  const pointsRef = useRef([])
+  const dragIndexRef = useRef(null)
+
+  const pushTrace = useCallback((ev) => {
+    try {
+      const canvas = canvasRef.current
+      debugTraceRef.current.push({
+        t: Date.now(),
+        type: ev && ev.type ? ev.type : 'custom',
+        clientX: ev?.clientX || null,
+        clientY: ev?.clientY || null,
+        canvasW: canvas ? canvas.width : null,
+        canvasH: canvas ? canvas.height : null,
+        points: JSON.parse(JSON.stringify(pointsRef.current)),
+        dragIndex: dragIndexRef.current
+      })
+      // keep trace short
+      if (debugTraceRef.current.length > 2000) debugTraceRef.current.shift()
+    } catch(e) { console.warn('pushTrace failed', e) }
+  }, [])
   const drawingRectRef = useRef(false)
   // When we finish drawing a rect, the browser may emit a click event — suppress the next click
   const justDrawnRectRef = useRef(false)
 
   const [points, setPoints] = useState([]) // up to 4 [{x,y}]
   const [dragIndex, setDragIndex] = useState(null)
+  useEffect(() => { pointsRef.current = points }, [points])
+  useEffect(() => { dragIndexRef.current = dragIndex }, [dragIndex])
   const [hoveredIndex, setHoveredIndex] = useState(null)
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const previewGeneratedRef = useRef(false)
@@ -188,12 +242,16 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
     }
     fetchStatus()
 
-    // Prevent body scroll while modal is open
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
+    // Keep reference to previous body overflow but do not block scroll by default.
+    // We'll only lock the body scroll while the user is actively dragging (lockBodyScroll/unlockBodyScroll).
+    bodyPrevOverflowRef.current = document.body.style.overflow
 
     return () => {
-      document.body.style.overflow = prevOverflow
+      // Ensure we restore any changed overflow when component unmounts
+      if (bodyPrevOverflowRef.current !== null) {
+        document.body.style.overflow = bodyPrevOverflowRef.current
+        bodyPrevOverflowRef.current = null
+      }
     }
   }, [pushRestoreEvent])
 
@@ -218,6 +276,12 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
     const ctx = canvas?.getContext('2d', { willReadFrequently: false })
     const img = imgRef.current
     if (!canvas || !ctx || !img) return
+
+    if (canvas.width === 0 || canvas.height === 0 || img.width === 0 || img.height === 0) {
+      pushTrace({ type: 'draw-skipped', canvasW: canvas.width, canvasH: canvas.height, imgW: img.width, imgH: img.height })
+      console.warn('draw skipped due to zero-size canvas/image', canvas.width, canvas.height, img.width, img.height)
+      return
+    }
     
     // Optimización: usar requestAnimationFrame solo si es necesario
     ctx.clearRect(0,0,canvas.width,canvas.height)
@@ -284,7 +348,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
         ctx.fillText(text, pt.x - metrics.width/2, pt.y + 5)
       }
     }
-  }, [points, hoveredIndex, dragIndex])
+  }, [points, hoveredIndex, dragIndex, pushTrace])
 
   useEffect(() => {
     const img = new Image()
@@ -554,6 +618,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
   }
 
   function handleMouseDown(e) {
+    pushTrace(e)
     const srcEv = e.touches ? e.touches[0] : e
     const p = toCanvasCoords(srcEv.clientX, srcEv.clientY)
 
@@ -565,22 +630,28 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
       setDragIndex(idx)
       setUserEditedPoints(true)
 
+      // Lock body scroll while dragging (prevents page scroll interfering)
+      lockBodyScroll()
+
       // Add window-level listeners to track pointer even if it leaves the canvas
       const onMove = (ev) => {
         const src = ev.touches ? ev.touches[0] : ev
         const q = toCanvasCoords(src.clientX, src.clientY)
-        setPoints(prev => prev.map((pt, i) => i === idx ? q : pt))
+        const qc = clampToCanvas(q)
+        setPoints(prev => prev.map((pt, i) => i === idx ? qc : pt))
       }
+      const onTouchMove = (t) => { onMove(t.touches ? t.touches[0] : t) }
       const onUp = (ev) => {
         setDragIndex(null)
+        unlockBodyScroll()
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
-        window.removeEventListener('touchmove', onMove)
+        window.removeEventListener('touchmove', onTouchMove)
         window.removeEventListener('touchend', onUp)
       }
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
-      window.addEventListener('touchmove', (t) => onMove(t.touches[0] || t), { passive: false })
+      window.addEventListener('touchmove', onTouchMove, { passive: false })
       window.addEventListener('touchend', onUp)
       return
     }
@@ -591,13 +662,17 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
       rectStartRef.current = p
       drawingRectRef.current = true
 
+      // Lock body scroll while drawing the rect
+      lockBodyScroll()
+
       const onMoveRect = (ev) => {
         const src = ev.touches ? ev.touches[0] : ev
         const q = toCanvasCoords(src.clientX, src.clientY)
-        const left = Math.min(rectStartRef.current.x, q.x)
-        const right = Math.max(rectStartRef.current.x, q.x)
-        const top = Math.min(rectStartRef.current.y, q.y)
-        const bottom = Math.max(rectStartRef.current.y, q.y)
+        const qc = clampToCanvas(q)
+        const left = Math.min(rectStartRef.current.x, qc.x)
+        const right = Math.max(rectStartRef.current.x, qc.x)
+        const top = Math.min(rectStartRef.current.y, qc.y)
+        const bottom = Math.max(rectStartRef.current.y, qc.y)
 
         // Set points in order: TL, TR, BL, BR (keeps consistency with prev code)
         // Use TL, TR, BR, BL ordering to avoid self-intersecting polygon
@@ -605,6 +680,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
         setPoints(rectPts)
       }
 
+      const onTouchMoveRect = (t) => onMoveRect(t.touches ? t.touches[0] : t)
       const onUpRect = (ev) => {
         drawingRectRef.current = false
         justDrawnRectRef.current = true // prevent subsequent click add
@@ -613,26 +689,29 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
 
         // mark that user finalized a manual rectangle
         setUserEditedPoints(true)
+        unlockBodyScroll()
 
         window.removeEventListener('mousemove', onMoveRect)
         window.removeEventListener('mouseup', onUpRect)
-        window.removeEventListener('touchmove', onMoveRect)
+        window.removeEventListener('touchmove', onTouchMoveRect)
         window.removeEventListener('touchend', onUpRect)
       }
 
       window.addEventListener('mousemove', onMoveRect)
       window.addEventListener('mouseup', onUpRect)
-      window.addEventListener('touchmove', onMoveRect, { passive: false })
+      window.addEventListener('touchmove', onTouchMoveRect, { passive: false })
       window.addEventListener('touchend', onUpRect)
     }
   }
 
   function handleMouseMove(e) {
+    pushTrace(e)
     const p = toCanvasCoords(e.clientX, e.clientY)
     
     // Si estamos arrastrando
     if (dragIndex !== null) {
-      setPoints(prev => prev.map((pt, i) => i === dragIndex ? p : pt))
+      const qc = clampToCanvas(p)
+      setPoints(prev => prev.map((pt, i) => i === dragIndex ? qc : pt))
       return
     }
     
@@ -642,7 +721,9 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
   }
 
   function handleMouseUp() { 
-    setDragIndex(null) 
+    pushTrace({ type: 'mouseup', clientX: null, clientY: null })
+    setDragIndex(null)
+    unlockBodyScroll()
   }
 
   function handleMouseLeave() {
@@ -853,7 +934,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
       const timeout = setTimeout(() => { try { detectControllerRef.current?.abort() } catch(e){} }, timeoutMs)
 
       // Call Docker YOLO service
-      const res = await fetch(`${VISION_SERVICE_URL}/detect`, { method: 'POST', body: fd, signal })
+      const res = await fetch(`${VISION_SERVICE_URL}/process-document`, { method: 'POST', body: fd, signal })
       clearTimeout(timeout)
 
       if (!res.ok) {
@@ -871,7 +952,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
         // Ignorar imagen de debug de selección (ya no se muestra)
         const canvas = canvasRef.current
         if (canvas && points.length === 0) {
-          const full = [ {x:0,y:0}, {x:canvas.width,y:0}, {x:canvas.width,y:canvas.height}, {x:0,y:canvas.height} ]
+          const full = [ {x:0,y:0}, {x:1,y:0}, {x:1,y:1}, {x:0,y:1} ]
           setPoints(full)
           setUserEditedPoints(false) // automatic full selection, not a manual edit
           if (typeof markPreviewGenerated === 'function') {
@@ -884,13 +965,21 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
         return
       }
 
-      // data.points are absolute pixels
-      const scale = canvas.dataset.scale ? Number(canvas.dataset.scale) : 1
-      const mapped = (data.points || []).map(p => ({ x: Math.round(p.x * scale), y: Math.round(p.y * scale) }))
+      // Map returned points to normalized coordinates expected by the cropper (0..1)
+      const mapped = (data.points || []).map(p => {
+        // Already normalized (0..1)
+        if (typeof p.x === 'number' && typeof p.y === 'number' && p.x <= 1 && p.y <= 1) {
+          return { x: Number(p.x), y: Number(p.y) }
+        }
+        // Absolute pixels -> normalize using image_size when available, otherwise infer from canvas and scale
+        const imgW = (data.image_size && data.image_size.width) ? data.image_size.width : (canvas ? (canvas.width / (canvas.dataset.scale ? Number(canvas.dataset.scale) : 1)) : 1)
+        const imgH = (data.image_size && data.image_size.height) ? data.image_size.height : (canvas ? (canvas.height / (canvas.dataset.scale ? Number(canvas.dataset.scale) : 1)) : 1)
+        return { x: Number(p.x) / imgW, y: Number(p.y) / imgH }
+      })
       if (mapped.length === 4) {
         setPoints(mapped)
         setUserEditedPoints(false) // automatic detection replaced points
-        // No guardamos ni mostramos imágenes de depuración de selección
+        // Clear errors and save detection method
         setErrorDeteccion(null)
         setLastDetectMethod(data.method || null)
       } else {
@@ -928,7 +1017,7 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
       if (points.length === 0) {
         const canvas = canvasRef.current
         if (!canvas) { setErrorDeteccion('Canvas no disponible'); return }
-        const fullPts = [ {x:0,y:0}, {x:canvas.width,y:0}, {x:canvas.width,y:canvas.height}, {x:0,y:canvas.height} ]
+        const fullPts = [ {x:0,y:0}, {x:1,y:0}, {x:1,y:1}, {x:0,y:1} ]
         setPoints(fullPts)
         markPreviewGenerated(false)
         // Give time for preview generation
@@ -1297,9 +1386,73 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
     }, 'image/jpeg', 0.95)
   }
 
+  if (overlayOnly) {
+    return (
+      <div className="w-full h-full flex flex-col gap-4">
+        <div className="flex gap-4 h-full">
+          <div className="h-full w-full">
+            <div ref={leftContainerRef} style={{ position: 'relative', height: '100%' }}>
+
+              <canvas
+                ref={canvasRef}
+                onClick={handleClick}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
+                className="w-full rounded-lg shadow-lg border-2 border-blue-400 h-full"
+                style={{ display: 'block', width: '100%', height: '100%', touchAction: 'none', userSelect: 'none', cursor: isPanningRef.current ? 'grabbing' : 'crosshair' }}
+              />
+
+              <canvas ref={previewOverlayRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'none', pointerEvents: 'none', zIndex: 50 }} />
+
+              {/* Point markers overlay (DOM) to ensure selection points are visible even if canvas drawing is off) */}
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: isPanning ? 'none' : 'auto', zIndex: 55 }}>
+                {points && points.length > 0 && (() => {
+                  try {
+                    const canvas = canvasRef.current
+                    const dpr = dprRef.current || 1
+                    return points.map((pt, idx) => {
+                      // pt is normalized [0..1]; convert to % position
+                      const left = (pt.x || 0) * 100
+                      const top = (pt.y || 0) * 100
+                      return (
+                        <div
+                          key={idx}
+                          onPointerDown={(ev) => {
+                            if (isPanning) return
+                            try { ev.preventDefault(); ev.stopPropagation(); } catch(e){}
+                            startPointDrag(idx, ev)
+                          }}
+                          style={{ position: 'absolute', left: `${left}%`, top: `${top}%`, transform: 'translate(-50%,-50%)', width: 28, height: 28, borderRadius: 9999, background: 'rgba(255,255,255,0.95)', border: '2px solid #2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: '600', color: '#2563eb', pointerEvents: isPanning ? 'none' : 'auto', cursor: 'grab' }}>
+                          {idx+1}
+                        </div>
+                      )
+                    })
+                  } catch (e) { return null }
+                })()}
+              </div>
+
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="text-sm text-gray-600">
+              {errorDeteccion && <div className="text-red-600 mt-2">{errorDeteccion}</div>}
+              {restoreStatus && <div className="text-yellow-700 mt-2">{restoreStatus}</div>}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed left-0 right-0 bg-black bg-opacity-90 z-50 flex items-start justify-center" style={{ top: modalTop + 'px', maxHeight: `calc(100vh - ${modalTop}px - 16px)` }} >
-      <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
+        <div className="bg-white rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h3 className="font-semibold text-lg text-gray-900">✂️ Crop manual (4 vértices)</h3>
@@ -1370,6 +1523,17 @@ function ManualVertexCropper({ src, onCrop, onCancel, detectOnMount = false }) {
 
             <button onClick={reset} className="px-3 py-1.5 rounded-lg border bg-gray-50 hover:bg-gray-100">🔄 Reset</button>
             <button onClick={onCancel} className="px-3 py-1.5 rounded-lg border bg-red-50 text-red-700 hover:bg-red-100">✖ Cancelar</button>
+            <button onClick={async () => {
+              try {
+                const d = debugTraceRef.current || []
+                // copy to clipboard
+                try { await navigator.clipboard.writeText(JSON.stringify(d)) } catch(e) { console.warn('Clipboard write failed', e) }
+                // also POST to server-side debug trace endpoint
+                try { await fetch(`${VISION_SERVICE_URL}/debug/trace`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trace: d, src }) }) } catch(e) { console.warn('POST trace failed', e) }
+                // user feedback
+                alert('Debug trace copied to clipboard and sent to server (if available)')
+              } catch(e) { console.warn('Export trace failed', e); alert('No se pudo exportar el trace: ' + String(e)) }
+            }} className="px-3 py-1.5 rounded-lg border bg-gray-50 hover:bg-gray-100">🐞 Export trace</button>
           </div>
 
           {/* Detección: mostrar método y controles para fallback */}

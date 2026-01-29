@@ -1,49 +1,46 @@
 import { NextResponse } from 'next/server'
 
+const VISION_HOST = process.env.VISION_HOST || 'http://localhost:8000'
+
 export async function GET() {
   try {
-    // Usar cliente oficial de ollama
-    const { Ollama } = await import('ollama')
-    const ollama = new Ollama({ host: 'http://localhost:11434' })
+    // Forward to vision:/models to get list of available IA components and loaded models
+    const res = await fetch(`${VISION_HOST}/models`)
+    if (!res.ok) throw new Error(`Vision models HTTP ${res.status}`)
 
-    const response = await ollama.list()
+    const data = await res.json()
+    // Normalize to simple model list for compatibility with frontend
+    const models = (data?.available || []).map(m => m.name)
 
-    // La respuesta tiene formato: { models: [...] }
-    const models = response?.models || []
-    const modelNames = models.map(m => m.name || m.model || String(m))
+    return NextResponse.json({ ok: true, models, raw: data })
+  } catch (err) {
+    console.error('❌ Error obteniendo modelos desde vision:', err.message || err)
+    return NextResponse.json({ ok: false, error: 'No se pudo consultar el servicio vision para modelos', details: String(err) }, { status: 500 })
+  }
+}
 
-    return NextResponse.json({
-      ok: true,
-      models: modelNames
+export async function POST(req) {
+  try {
+    const body = await req.json()
+    const model = body?.model
+    if (!model) return NextResponse.json({ ok: false, error: 'model required' }, { status: 400 })
+
+    // Forward the load request to vision
+    const resp = await fetch(`${VISION_HOST}/models/load`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model })
     })
 
-  } catch (ollamaError) {
-    console.error('❌ Error con cliente ollama:', ollamaError.message)
-
-    // Fallback: llamar directamente a la API HTTP de Ollama
-    try {
-      const res = await fetch('http://localhost:11434/api/tags')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
-      const data = await res.json()
-      const models = data?.models || []
-      const modelNames = models.map(m => m.name || m.model || String(m))
-
-      console.log('✅ Modelos desde HTTP fallback:', modelNames)
-
-      return NextResponse.json({
-        ok: true,
-        models: modelNames
-      })
-
-    } catch (httpError) {
-      console.error('❌ Error con HTTP fallback:', httpError.message)
-
-      return NextResponse.json({
-        ok: false,
-        error: 'No se pudo conectar con Ollama. Verifica que esté corriendo en puerto 11434',
-        details: httpError.message
-      }, { status: 500 })
+    if (!resp.ok) {
+      const txt = await resp.text()
+      throw new Error(`Vision load failed: ${resp.status} ${txt}`)
     }
+
+    const data = await resp.json()
+    return NextResponse.json({ ok: true, result: data })
+  } catch (err) {
+    console.error('❌ Error cargando modelo en vision:', err.message || err)
+    return NextResponse.json({ ok: false, error: 'No se pudo pedir carga de modelo', details: String(err) }, { status: 500 })
   }
 }

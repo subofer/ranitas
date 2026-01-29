@@ -14,18 +14,16 @@ const menuList = {
 export default menuList;
 
 export const menuListHorizontal = [
-  { menu: "Home", href: "/", subMenu: [] },
-  { menu: "Inventario", subMenu: [
+  { menu: "Principal", subMenu: [
+    { menu: "Home", href: "/", subMenu: [] },
     { menu: "Productos", href: "/listadoProductos" },
     { menu: "Productos x proveedor", href: "/productosProveedor" },
     { menu: "Busqueda", href: "/buscarEnGoogle" },
   ] },
-  { menu: "Compras", subMenu: [
+  { menu: "Operaciones", subMenu: [
     { menu: "Cargar Factura", href: "/compras" },
     { menu: "Facturas", href: "/facturas" },
     { menu: "Pedidos", href: "/pedidos" },
-  ] },
-  { menu: "Ventas", subMenu: [
     { menu: "Minorista", href: "/venta" },
     { menu: "Mayorista", href: "/venta" },
   ] },
@@ -35,7 +33,9 @@ export const menuListHorizontal = [
     { menu: "Contactos", href: "/contactos" },
   ] },
   { menu: "Ia", href: "/ia", subMenu: [] },
-  { menu: "Auditoria", href: "/audit", subMenu: []  },
-  { menu: "Pendientes", href: "/pendientes", subMenu: [] },
-  { menu: "Configuración", href: "/configuracion", subMenu: [] },
+  { menu: "Admin", subMenu: [
+    { menu: "Auditoria", href: "/audit", subMenu: []  },
+    { menu: "Pendientes", href: "/pendientes", subMenu: [] },
+    { menu: "Configuración", href: "/configuracion", subMenu: [] },
+  ]  },
 ];

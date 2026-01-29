@@ -58,24 +58,8 @@ export async function GET() {
           }
         }
       } catch (e) {
-        // fallback: try to detect ollama models inside container as a hint
-        try {
-          const containerTarget = containerInfo.container_candidate || 'ranitas-vision'
-          const cmd2 = `docker exec ${containerTarget} ollama list --json`
-          const { stdout } = await execP(cmd2, { timeout: 5000 })
-          const parsed = (() => { try { return JSON.parse(stdout) } catch (err) { return null } })()
-          if (Array.isArray(parsed)) {
-            // create a minimal status structure indicating which ollama models exist
-            data = data || {}
-            data.loadedModels = (parsed || []).map(m => (typeof m === 'string' ? { name: m } : { name: m.name || m.id }))
-            containerInfo.container_running = true
-            containerInfo.ollama_raw = stdout
-            containerInfo.command = cmd2
-          }
-        } catch (e2) {
-          // nothing else we can do here
-          containerInfo.docker_error = String(e2)
-        }
+        // no extra binary probing (ollama) — rely on the service `/status` endpoint as the single source of truth
+        containerInfo.docker_error = String(e)
       }
     }
 

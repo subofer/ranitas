@@ -29,7 +29,7 @@ Sistema completo de gestión de productos e inventario desarrollado con **Next.j
 - ✅ Búsqueda de productos en Google por código de barras
 - ✅ Lectura de códigos QR/códigos de barras con cámara
 - ✅ Exportación a Excel
-- ✅ Consultas a IA (Ollama/local)
+- ✅ Consultas a IA (local, Qwen)
 - ✅ Cotización del dólar automática
 - ✅ Dashboard con gráficos
 
@@ -41,7 +41,7 @@ Sistema completo de gestión de productos e inventario desarrollado con **Next.j
 - **Autenticación**: JWT con scrypt hashing
 - **Testing**: Cypress (E2E), Jest (Unit)
 - **UI/UX**: FontAwesome icons, SweetAlert2, Toast notifications
-- **Integraciones**: Puppeteer, Cheerio, Ollama (local)
+- **Integraciones**: Puppeteer, Cheerio, IA local (Qwen)
 
 ## 📋 Prerrequisitos
 
@@ -102,6 +102,22 @@ npm run dev
 ```
 
 Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
+
+### IA local (ranitas-vision)
+- El análisis de imágenes y extracción ahora corre en el microservicio `vision`, mientras que las tareas LLM pueden ser servidas por un Ollama local dentro del mismo entorno (contenedor `ollama`) o por modelos Python si lo preferís.
+- Para iniciar el microservicio `vision` (ahora puede ejecutar Ollama dentro del mismo contenedor y precargar un modelo):
+  ```bash
+# Levanta sólo visión; la imagen intentará instalar/iniciar Ollama y precargar el modelo indicado en OLLAMA_MODEL
+docker compose up -d vision
+  ```
+
+> Nota: la primera vez la imagen descargará e instalará Ollama (si no está presente) y hará `ollama pull` + un pequeño "warmup" del modelo configurado en `OLLAMA_MODEL`. Esto requiere conexión a internet y espacio en disco/VRAM; puede tardar varios minutos la primera vez.
+- Verifica que el servicio y los modelos estén cargados:
+  ```bash
+curl http://localhost:8000/status | jq
+  ```
+  Verás campos como `yolo_loaded`. Si estás usando Ollama también verás `ollama_available` y `ollama_models` en la respuesta. Para permitir la descarga automática de pesos desde Hugging Face exportá `HUGGINGFACE_HUB_TOKEN` en tu entorno o añádelo en `docker-compose.yml` antes de levantar los servicios.
+
 
 ## 🧪 Testing
 

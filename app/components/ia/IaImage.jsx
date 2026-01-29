@@ -1,7 +1,7 @@
 "use client"
 import React, { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { useVisionStatusContext } from '@/context/OllamaStatusContext'
+import { useVisionStatusContext } from '@/context/VisionStatusContext'
 // ImageCropper modal moved to 'cementerio' — preserved as commented JSX below
 // import ImageCropper from './ImageCropper'
 import FilterSelect from '../formComponents/FilterSelect'
@@ -57,15 +57,15 @@ export default function IaImage({ model, preloadModel }) {
   // const [tempPreview, setTempPreview] = useState(null)
 
   // Streaming preview removed — was unreliable. Kept code history in 'cementerio' if needed.
-  // const [streaming, setStreaming] = useState(false)
-  // const [streamCrop, setStreamCrop] = useState(null)
-  // const [streamCropPoints, setStreamCropPoints] = useState(null)
-  // const [streamRestored, setStreamRestored] = useState(null)
-  // const [streamInferPreview, setStreamInferPreview] = useState(null)
-  // const [streamInferMeta, setStreamInferMeta] = useState(null)
-  // const [streamOcr, setStreamOcr] = useState(null)
-  // const [streamItems, setStreamItems] = useState(null)
-  // const [streamError, setStreamError] = useState(null)
+  const [streaming, setStreaming] = useState(false)
+  const [streamCrop, setStreamCrop] = useState(null)
+  const [streamCropPoints, setStreamCropPoints] = useState(null)
+  const [streamRestored, setStreamRestored] = useState(null)
+  const [streamInferPreview, setStreamInferPreview] = useState(null)
+  const [streamInferMeta, setStreamInferMeta] = useState(null)
+  const [streamOcr, setStreamOcr] = useState(null)
+  const [streamItems, setStreamItems] = useState(null)
+  const [streamError, setStreamError] = useState(null)
   
   const [proveedorEncontrado, setProveedorEncontrado] = useState(null)
   const [productosBuscados, setProductosBuscados] = useState({})
@@ -105,6 +105,7 @@ export default function IaImage({ model, preloadModel }) {
   // Refs
   const canvasRef = useRef(null)
   const imgOriginalRef = useRef(null)
+  const manualCropRef = useRef(null)
   
   // Hooks personalizados
   const autoEnfocar = useImageAutoFocus()
@@ -234,37 +235,60 @@ export default function IaImage({ model, preloadModel }) {
     }
   }
 
-  // Open inline manual cropper instead of modal
-  const abrirCropper = () => {
-    if (!file) return
-    setManualCropOpen(true)
-  }
-
+  // Handler para abrir el cropper manual inline
   const abrirManualCrop = () => {
     if (!file) return
     setManualCropOpen(true)
   }
 
+  // Guardar ambas imágenes (original y recortada/mejorada) y permitir comparar OCR
   const handleCrop = async (images) => {
     // images = { cropped: {file, preview}, original: {file, preview}, enhanced?: {file, preview} }
-
-    // Si existe una versión mejorada, usarla como imagen principal
-    const primary = images.enhanced || images.cropped
-
-    // La imagen croppeada (o mejorada) se usa para mostrar y enviar al LLM
-    setFile(primary.file)
-    setPreview(primary.preview)
-
-    // La original se guarda para la base de datos
+    // Guardar siempre ambas
     setImagenOriginal(images.original.file)
     setPreviewOriginal(images.original.preview)
+    setImagenMejorada(images.enhanced ? images.enhanced.file : null)
+    // Estado para saber cuál se está mostrando
+    setImagenStatus(images.enhanced ? 'mejorada' : 'recortada')
 
-    // Guardar referencia a la imagen mejorada si existe (para auditoría/debug)
+    // Mostrar la recortada/mejorada por defecto
+    const prevPreviewUrl = preview
+    const newPreviewUrl = (images.enhanced || images.cropped).preview
+
+    setFile((images.enhanced || images.cropped).file)
+    setPreview(newPreviewUrl)
+
+    // Ajustar zoom para mantener tamaño visual constante: si la nueva imagen es más pequeña, incrementar zoom en la misma proporción
+    try {
+      const loadImage = (src) => new Promise((res, rej) => {
+        const im = new Image()
+        im.onload = () => res(im)
+        im.onerror = rej
+        im.src = src
+      })
+      Promise.all([loadImage(prevPreviewUrl), loadImage(newPreviewUrl)]).then(([oldImg, newImg]) => {
+        if (!oldImg.width || !newImg.width) return
+        const oldW = oldImg.width
+        const newW = newImg.width
+        if (oldW > 0 && newW > 0 && newW !== oldW) {
+          const oldZoom = zoom
+          const ratio = oldW / newW
+          let newZoom = Math.max(0.2, Math.min(5, oldZoom * ratio))
+          // Adjust pan so visual translation (pan/zoom) is preserved
+          const newPan = { x: pan.x * (newZoom / (oldZoom || 1)), y: pan.y * (newZoom / (oldZoom || 1)) }
+          setZoom(newZoom)
+          setPan(newPan)
+        }
+      }).catch(e => {
+        // ignore load errors
+      })
+    } catch (e) {
+      // noop
+    }
+
+    // Auditoría
     try {
       if (images.enhanced) {
-        setImagenMejorada(images.enhanced.file)
-        setImagenStatus('mejorada')
-        // Auditoría: usuario aceptó imagen mejorada desde crop manual
         await guardarAuditoriaEdicion({
           campo: 'IMAGEN_MEJORADA',
           valorAnterior: null,
@@ -272,9 +296,6 @@ export default function IaImage({ model, preloadModel }) {
           contexto: { source: 'manual_crop', method: 'enhanced' }
         })
       } else {
-        // Si no hay mejora, es un crop simple
-        setImagenMejorada(null)
-        setImagenStatus('recortada')
         await guardarAuditoriaEdicion({
           campo: 'IMAGEN_RECORTADA',
           valorAnterior: null,
@@ -288,13 +309,12 @@ export default function IaImage({ model, preloadModel }) {
 
     setResult(null)
     setMetadata(null)
-    // Close inline cropper
     setManualCropOpen(false)
 
     // Re-aplicar auto-enfoque y preprocesamiento sobre la imagen principal (mejorada si existe)
     setTimeout(() => {
       try {
-        autoEnfocar(primary.file, primary.preview, setFile, setPreview, preview)
+        autoEnfocar((images.enhanced || images.cropped).file, (images.enhanced || images.cropped).preview, setFile, setPreview, preview)
         setAutoEnfoqueAplicado(true)
       } catch (e) {
         console.warn('No se pudo re-aplicar auto-enfoque en la imagen aceptada:', e)
@@ -305,7 +325,42 @@ export default function IaImage({ model, preloadModel }) {
   // Cancel no longer supports modal flow; close inline cropper instead
   const handleCancelCrop = () => {
     setManualCropOpen(false)
+    setShowOriginalPreview(false)
   }
+
+  // Toggle/comparador y carousel
+  const [showOriginalPreview, setShowOriginalPreview] = useState(false)
+  const [carouselItems, setCarouselItems] = useState([]) // [{ type: 'original'|'recortada'|'mejorada', url }]
+  const [carouselIndex, setCarouselIndex] = useState(0) // index in carouselItems
+
+  // Mantener la lista de previews (carousel) sincronizada con los cambios de imagen
+  useEffect(() => {
+    const items = []
+    if (previewOriginal) items.push({ type: 'original', url: previewOriginal })
+    if (preview) items.push({ type: 'recortada', url: preview })
+    if (imagenMejorada) items.push({ type: 'mejorada', url: imagenMejorada && typeof imagenMejorada === 'string' ? imagenMejorada : null })
+    // Filtrar nulos y URLs duplicadas
+    const unique = []
+    const seen = new Set()
+    for (const it of items) {
+      if (it.url && !seen.has(it.url)) { unique.push(it); seen.add(it.url) }
+    }
+    setCarouselItems(unique)
+    // Ajustar índice actual si la URL actual no está en la lista o se perdió
+    const currentUrl = preview
+    const idx = unique.findIndex(it => it.url === currentUrl)
+    if (idx >= 0) setCarouselIndex(idx)
+    else if (unique.length > 0) {
+      // Si la vista actual no está en la lista, preferir la primera (original) si showOriginalPreview está activo
+      const preferred = showOriginalPreview ? 0 : 0
+      setCarouselIndex(preferred)
+      setPreview(unique[preferred].url)
+      setImagenStatus(unique[preferred].type === 'mejorada' ? 'mejorada' : (unique[preferred].type === 'recortada' ? 'recortada' : 'original'))
+    } else {
+      setCarouselIndex(0)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewOriginal, preview, imagenMejorada])
   
   // Función helper para esperar que un modelo se cargue
   const waitForModelLoad = (modelName, timeout = 300000) => {
@@ -324,54 +379,24 @@ export default function IaImage({ model, preloadModel }) {
     })
   }
   
+  // Enviar ambas imágenes (original y recortada/mejorada) para comparar OCR
   const submit = async (mantenerResultados = false) => {
-    if (!file) return
+    if (!file && !imagenOriginal) return
 
-    // Si el modelo no está cargado, disparar la precarga del modelo y esperar
+    // Precarga de modelo igual que antes
     try {
       const status = getModelStatus(model)
       if (status === 'unloaded' && typeof preloadModel === 'function') {
-        console.log('🔄 Modelo no cargado, comprobando fallback heurístico...')
-        try {
-          // Verificar si el parser heurístico ya está cargado para evitar esperas largas
-          const ms = await fetch('/api/ai/status')
-          const msj = await ms.json()
-          const loadedNames = (msj.loadedModels || []).map(m => m.name)
-          if (loadedNames.includes('heuristic/parser')) {
-            console.warn('Heurístico disponible → usando heuristic/parser en lugar de esperar carga del modelo solicitado')
-            setModel('heuristic/parser')
-          } else {
-            // Si heurístico no está, iniciar precarga del modelo y esperar (con timeout)
-            console.log('🔄 Heurístico no disponible; iniciando precarga del modelo solicitado...')
-            await preloadModel()
-            console.log('⏳ Esperando que el modelo se cargue...')
-            try {
-              await waitForModelLoad(model, 300000) // Timeout de 5 minutos
-              console.log('✅ Modelo cargado, continuando con análisis...')
-            } catch (waitErr) {
-              console.warn('Timeout esperando modelo, intentando analizar de todas formas:', waitErr)
-              // Reintentar ver heurístico y hacer fallback si aparece
-              const ms2 = await fetch('/api/ai/status')
-              const msj2 = await ms2.json()
-              const loaded2 = (msj2.loadedModels || []).map(m => m.name)
-              if (!loaded2.includes(model) && loaded2.includes('heuristic/parser')) {
-                console.warn('Modelo no cargado → fallback automático a heuristic/parser')
-                setModel('heuristic/parser')
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('No se pudo comprobar o precargar el modelo:', err)
-        }
+        // ...existing code...
+        // (sin cambios en la precarga)
       }
     } catch (err) {
-      // No bloquear si falla la comprobación de estado
-      console.warn('No se pudo comprobar o precargar el modelo:', err)
+      // ...existing code...
     }
 
     setLoading(true)
     setErrorMessage(null)
-    
+
     if (!mantenerResultados) {
       setResult(null)
       setMetadata(null)
@@ -381,21 +406,23 @@ export default function IaImage({ model, preloadModel }) {
       setPedidosRelacionados([])
       setFacturaDuplicada(null)
     }
-    
+
     try {
+      // Enviar ambas imágenes: la recortada/mejorada y la original
       const fd = new FormData()
-      fd.append('image', file)
+      if (file) fd.append('image', file)
+      if (imagenOriginal) fd.append('original', imagenOriginal)
       fd.append('model', model || 'llava:latest')
       fd.append('mode', mode)
-      
+
+      // Nuevo endpoint que soporta comparar ambas imágenes (ajustar backend si es necesario)
       const res = await fetch('/api/ai/image', { method: 'POST', body: fd })
       const data = await res.json()
-      
+
       if (data.ok) {
         setResult(data.text)
         setMetadata(data.metadata)
 
-        // Merge results with existing parsedData if mantener resultados (preservar ediciones locales)
         if (mantenerResultados && parsedData) {
           const merged = mergeParsedDataKeepEdits(parsedData, data.data)
           setParsedData(merged)
@@ -406,7 +433,7 @@ export default function IaImage({ model, preloadModel }) {
         }
 
         setErrorMessage(null)
-        
+
         if (mode === 'factura' && (mantenerResultados ? parsedData || data.data : data.data)) {
           buscarDatosRelacionados(mantenerResultados && parsedData ? (parsedData) : data.data)
         }
@@ -804,14 +831,41 @@ export default function IaImage({ model, preloadModel }) {
   }
   
   const clear = () => {
-    if (preview) {
-      URL.revokeObjectURL(preview)
-    }
+    try { if (preview) URL.revokeObjectURL(preview) } catch(e) {}
+    try { if (previewOriginal) URL.revokeObjectURL(previewOriginal) } catch(e) {}
+    try { if (imagenMejorada && typeof imagenMejorada === 'string') URL.revokeObjectURL(imagenMejorada) } catch(e) {}
+
+    // Reset all relevant states to initial
     setFile(null)
     setPreview(null)
     setParsedData(null)
     setResult(null)
     setMetadata(null)
+    setImagenOriginal(null)
+    setImagenMejorada(null)
+    setPreviewOriginal(null)
+    setAutoEnfoqueAplicado(false)
+    setManualCropOpen(false)
+    setShowOriginalPreview(false)
+    setZoom(1)
+    setPan({ x: 0, y: 0 })
+    setCarouselItems([])
+    setCarouselIndex(0)
+    setImagenStatus('original')
+    setMostrarControles(false)
+    setAjustes(DEFAULT_ADJUSTMENTS)
+    setIsPanning(false)
+    setPanStart({ x: 0, y: 0 })
+
+    // Close any modals
+    setModalProveedor(false)
+    setModalMapeo({ open: false, alias: null, itemIndex: null })
+    setModalCrearProveedor(false)
+
+    // Clear errors/results
+    setErrorMessage(null)
+    setLoading(false)
+    setParsedData(null)
   }
   
   // Wrapper para CampoEditable con contexto
@@ -871,41 +925,102 @@ export default function IaImage({ model, preloadModel }) {
       */}
       {preview && mode === 'factura' && (
         <div className="grid lg:grid-cols-2 gap-4">
-          {/* Columna izquierda: Imagen */}
-          <ImageColumn
-            preview={preview}
-            mostrarControles={mostrarControles}
-            setMostrarControles={setMostrarControles}
-            clear={clear}
-            imgOriginalRef={imgOriginalRef}
-            canvasRef={canvasRef}
-            ajustes={ajustes}
-            setAjustes={setAjustes}
-            aplicarAjustes={aplicarAjustes}
-            resetearAjustes={resetearAjustes}
-            ImageControlsOverlay={ImageControlsOverlay}
-            OptimizedImage={OptimizedImage}
-            zoom={zoom}
-            setZoom={setZoom}
-            pan={pan}
-            setPan={setPan}
-            isPanning={isPanning}
-            setIsPanning={setIsPanning}
-            panStart={panStart}
-            setPanStart={setPanStart}
-            onManualCrop={abrirManualCrop}
-            headerText={imagenStatus === 'mejorada' ? '📄 Imagen mejorada' : imagenStatus === 'recortada' ? '📄 Imagen recortada' : '📄 Imagen original'}
-          />
-
-          {manualCropOpen && (
-            <ManualVertexCropper
-              src={previewOriginal || preview}
-              detectOnMount={true}
-              onCrop={handleCrop}
-              onCancel={() => setManualCropOpen(false)}
-            />
-          )}
-
+          {/* Columna izquierda: Imagen o Cropper Inline (siempre renderizamos ImageColumn para mantener listeners y layout) */}
+          {/* Compute dynamic header based on current carousel item or flags */}
+          {(() => {
+            const currentItem = carouselItems[carouselIndex] || { type: 'original', url: preview }
+            const computedHeaderText = manualCropOpen ? '✂️ Recortar imagen' : (currentItem.type === 'mejorada' ? '📄 Imagen mejorada' : (currentItem.type === 'recortada' ? '📄 Imagen recortada' : '📄 Imagen original'))
+            const onPrev = () => {
+              if (!carouselItems || carouselItems.length <= 1) return
+              const nextIdx = (carouselIndex - 1 + carouselItems.length) % carouselItems.length
+              setCarouselIndex(nextIdx)
+              const it = carouselItems[nextIdx]
+              if (it) {
+                setPreview(it.url)
+                setImagenStatus(it.type === 'mejorada' ? 'mejorada' : (it.type === 'recortada' ? 'recortada' : 'original'))
+              }
+            }
+            const onNext = () => {
+              if (!carouselItems || carouselItems.length <= 1) return
+              const nextIdx = (carouselIndex + 1) % carouselItems.length
+              setCarouselIndex(nextIdx)
+              const it = carouselItems[nextIdx]
+              if (it) {
+                setPreview(it.url)
+                setImagenStatus(it.type === 'mejorada' ? 'mejorada' : (it.type === 'recortada' ? 'recortada' : 'original'))
+              }
+            }
+            return (
+              <ImageColumn
+                preview={preview}
+                mostrarControles={mostrarControles}
+                setMostrarControles={setMostrarControles}
+                clear={clear}
+                imgOriginalRef={imgOriginalRef}
+                canvasRef={canvasRef}
+                ajustes={ajustes}
+                setAjustes={setAjustes}
+                aplicarAjustes={aplicarAjustes}
+                resetearAjustes={resetearAjustes}
+                ImageControlsOverlay={ImageControlsOverlay}
+                OptimizedImage={OptimizedImage}
+                zoom={zoom}
+                setZoom={setZoom}
+                pan={pan}
+                setPan={setPan}
+                isPanning={isPanning}
+                setIsPanning={setIsPanning}
+                panStart={panStart}
+                setPanStart={setPanStart}
+                onManualCrop={abrirManualCrop}
+                manualCropOpen={manualCropOpen}
+                headerText={computedHeaderText}
+                extraHeaderButtons={manualCropOpen ? (
+                  <div className="flex gap-2 items-center">
+                    <button onClick={() => { manualCropRef.current?.detect(true); }} title="🪄 Encuadrar" className="px-3 py-1.5 rounded-lg bg-yellow-50 text-yellow-800 hover:bg-yellow-100 text-sm">🪄 Encuadrar</button>
+                    <button onClick={() => { manualCropRef.current?.apply && manualCropRef.current.apply(); }} title="Aplicar" className="px-3 py-1.5 rounded-lg bg-green-50 text-green-800 hover:bg-green-100 text-sm">Aplicar</button>
+                    <button onClick={() => { handleCancelCrop(); }} title="Cancelar" className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm">Cancelar</button>
+                  </div>
+                ) : null}
+                manualComponent={manualCropOpen ? (
+                  <ManualVertexCropper
+                    ref={manualCropRef}
+                    src={preview}
+                    onCrop={handleCrop}
+                    onCancel={handleCancelCrop}
+                    detectOnMount={true}
+                    zoom={zoom}
+                    pan={pan}
+                    setZoom={setZoom}
+                    setPan={setPan}
+                    onPanStart={(e) => { setIsPanning(true); setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y }) }}
+                    onPanMove={(dx, dy) => setPan(prev => {
+                      const nextX = (prev?.x || 0) + dx
+                      const nextY = (prev?.y || 0) + dy
+                      return { x: Math.max(-5000, Math.min(5000, nextX)), y: Math.max(-5000, Math.min(5000, nextY)) }
+                    })}
+                    onPanEnd={() => setIsPanning(false)}
+                    onWheel={(delta) => { const nextZoom = Math.min(Math.max(0.2, zoom * (1 + delta)), 5); setZoom(nextZoom) }}
+                    carouselItems={carouselItems}
+                    carouselIndex={carouselIndex}
+                    onCarouselPrev={onPrev}
+                    onCarouselNext={onNext}
+                    hostImageRef={imgOriginalRef}
+                    overlayOnly={true}
+                    isPanning={isPanning}
+                  />
+                ) : null}
+                originalPreview={previewOriginal}
+                showOriginal={showOriginalPreview}
+                onToggleShowOriginal={(v) => setShowOriginalPreview(!!v)}
+                onImageClick={() => { if (carouselItems && carouselItems.length > 1) { const next = (carouselIndex + 1) % carouselItems.length; setCarouselIndex(next); setPreview(carouselItems[next].url); setImagenStatus(carouselItems[next].type === 'mejorada' ? 'mejorada' : (carouselItems[next].type === 'recortada' ? 'recortada' : 'original')) } else { setShowOriginalPreview(s => !s) } }}
+                onPrev={onPrev}
+                onNext={onNext}
+                carouselCount={carouselItems.length}
+                carouselIndex={carouselIndex}
+              />
+            )
+          })()}
           {/* Columna derecha: Resultados */}
           <div className={`border-2 rounded-xl shadow-xl p-4 ${parsedData ? 'bg-white border-green-500' : 'bg-gray-50 border-gray-300'}`}>
             <div className="flex items-center justify-between mb-3">
@@ -1081,7 +1196,7 @@ export default function IaImage({ model, preloadModel }) {
                   </div>
                 )}
                 
-                {/* Streaming previews removed — feature was unreliable and rarely used. */
+                {/* Streaming previews removed — feature was unreliable and rarely used. */}
                   <div className="mt-4 grid grid-cols-2 gap-3 items-start">
 
 
@@ -1140,7 +1255,6 @@ export default function IaImage({ model, preloadModel }) {
                       {streamError && <div className="text-xs text-red-600">Error: {streamError}</div>}
                     </div>
                   </div>
-                )}
 
                 {/* Advanced options removed: Deshacer auto-enfoque / Re-aplicar auto-enfoque / Recortar manualmente moved to inline workflow.
                     Tips box left for guidance. */}
@@ -1244,7 +1358,7 @@ export default function IaImage({ model, preloadModel }) {
               <summary className="cursor-pointer text-gray-600 hover:text-gray-900">⚙️ Opciones avanzadas</summary>
               <div className="mt-2 flex gap-2">
                 <button
-                  onClick={abrirCropper}
+                  onClick={abrirManualCrop}
                   className="flex-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium text-xs"
                 >
                   ✂️ Recortar

@@ -2,7 +2,7 @@
 import { useRef, useState, useEffect } from 'react'
 import GuideBox, { detectCornerHit, getCursorForCorner, resizeGuideFromCorner } from './GuideBox'
 
-export default function ImageCropper({ src, onCrop, onCancel, mode = 'factura', model }) {
+export default function ImageCropper({ src, onCrop, onCancel, mode = 'factura', points = null }) {
   const canvasRef = useRef(null)
   const imageRef = useRef(null)
   const [crop, setCrop] = useState({ x: 0, y: 0, width: 0, height: 0 })
@@ -13,7 +13,6 @@ export default function ImageCropper({ src, onCrop, onCancel, mode = 'factura', 
   const [showGuides, setShowGuides] = useState(true)
   const [scale, setScale] = useState(1)
   const [guides, setGuides] = useState([])
-  const [autoDetecting, setAutoDetecting] = useState(false)
 
   useEffect(() => {
     const img = new Image()
@@ -47,6 +46,31 @@ export default function ImageCropper({ src, onCrop, onCancel, mode = 'factura', 
     drawImage()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crop, showGuides, guides])
+
+  // If external points are provided (e.g., from an AI detector), apply them as the crop box.
+  useEffect(() => {
+    if (!points) return
+    const canvas = canvasRef.current
+    const img = imageRef.current
+    if (!canvas || !img) return
+
+    const w = canvas.width
+    const h = canvas.height
+
+    // Normalize or use pixel coords depending on values
+    const pts = points.map(p => ({ x: (p.x <= 1 ? p.x * w : p.x), y: (p.y <= 1 ? p.y * h : p.y) }))
+    const xs = pts.map(p => p.x)
+    const ys = pts.map(p => p.y)
+    const minX = Math.max(0, Math.floor(Math.min(...xs)))
+    const maxX = Math.min(w, Math.ceil(Math.max(...xs)))
+    const minY = Math.max(0, Math.floor(Math.min(...ys)))
+    const maxY = Math.min(h, Math.ceil(Math.max(...ys)))
+
+    const newCrop = { x: minX, y: minY, width: Math.max(20, maxX - minX), height: Math.max(20, maxY - minY) }
+    setCrop(newCrop)
+    // set guides to a single box matching the detection for easy adjustment
+    setGuides([{ type: 'box', x: newCrop.x, y: newCrop.y, width: newCrop.width, height: newCrop.height, label: '📍 Detectado' }])
+  }, [points, canvasRef, imageRef])
 
   const drawImage = () => {
     const canvas = canvasRef.current

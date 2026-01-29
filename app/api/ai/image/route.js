@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server'
 import sharp from 'sharp'
 import prisma from '@/prisma/prisma'
-import { guardarAuditoriaOllamaFailure } from '@/prisma/serverActions/facturaActions'
-import { Ollama } from 'ollama'
+import { guardarAuditoriaIaFailure } from '@/prisma/serverActions/facturaActions'
 
 // Configuración de timeout para esta ruta (10 minutos)
+// NOTE: Ollama external dependency removed; now we call local vision microservice which hosts Qwen
+const VISION_HOST = process.env.VISION_HOST || 'http://vision:8000'
 export const maxDuration = 600 // segundos
 export const dynamic = 'force-dynamic'
-
-const OLLAMA_HOST = 'http://localhost:11434'
-const ollama = new Ollama({ host: OLLAMA_HOST })
 
 /**
  * Normaliza dimensiones a múltiplos de 28 (requerido por Qwen2.5-VL)
@@ -224,124 +222,40 @@ async function optimizeImageForAI(imageBuffer) {
 
 // Prompts optimizados para obtener JSON estructurado
 const PROMPTS = {
-  factura: `Analiza la factura/remito y genera un JSON detallado.
-REGLAS TÉCNICAS:
-  Es importante que seas un excelente contador, data entry que quiere documentar todos los aspectos de la factura.
-- DECIMALES: Prioridad derecha (ej: 1.200,50 -> coma es decimal). Eliminar "$" y espacios.
-- NUMÉRICOS: Devuelve los valores numéricos PUROS (por ejemplo: 1234.56). No devuelvas símbolos monetarios ni formatos con puntos/miles o comas como strings; normaliza a número.
-- STOCK/MANUSCRITO: Texto a mano manda. Tachado = Cantidad 0. Notas de pago/deuda a "anotaciones_marginales".
-- DEVOLUCIONES: Si dice "Devolución" o similar (puede tener typos), marca "es_devolucion": true y entrega el valor como negativo en el subtotal (ej: -123.45) y también agrega la suma absoluta en "totales.devoluciones_total".
-- PACKAGING: Mapear "Caja 15x 200g" -> {tipo: "CAJA", unidades: 15, base: "200g"}.
-- NOMBRES_PRODUCTOS: Es importante que extraigas todo lo que puedas del nombre, intentando mantener la coherencia, sin abreviaturas raras.
-- ANOTACIONES: Captura todo lo que puedas del texto manuscrito, analizando su contexto (ej: "PAGADO", "ANULADO", "PARCIAL", "DEBE", "ENTREGUÉ $XXX", restas inferidas, etc) y guárdalo en "extras.texto_mano" o en "documento.anotaciones_marginales" según corresponda.
-- CUENTA_CORRIENTE: Extrae cualquier saldo o estado de cuenta mencionado (ACTIVA, DEBE, A FAVOR) y pagos parciales/excedentes.
+  factura: `Analiza la imagen de la factura/remito y devuelve EXCLUSIVAMENTE un JSON estricto que cumpla exactamente con el esquema solicitado abajo. Responde SOLO con JSON, sin texto adicional ni explicaciones. Si algún campo no aplica, devuelve 0, false, "" o [] según corresponda.
 
-JSON SCHEMA (IMPORTANTE - devuelve SOLO JSON):
+REGLAS CLAVE (resumido y preciso):
+- NUMÉRICOS: Devuelve todos los montos como números (tipo number). Usa punto decimal (1234.56). Elimina símbolos ($, ¢) y espacios.
+- FORMATOS ARGENTINOS: Interpreta "1.234,50" como 1234.50, "1200,5" como 1200.50.
+- DECIMALES: prioridad a la parte derecha si hay ambigüedad.
+- DEVOLUCIONES: Si hay indicio o palabra "devolución"/"nota de crédito"/"devolu...", marca el ítem con "es_devolucion": true y su subtotal debe ser NEGATIVO en subtotal_original/subtotal_calculado. Además sumar su valor absoluto en totales.devoluciones_total (positivo).
+- DESCUENTOS: Extrae descuentos por ítem como "descuento" (monto) y el total en "totales.descuento_total". Si hay descuentos detallados, devolverlos en "totales.descuentos" como array de { nombre, monto }.
+- ITEMS: Cada item debe incluir cantidad_documento, precio_unitario, subtotal_original y subtotal_calculado (ambos numéricos). Si OCR no detecta alguno, usar 0.
+- IMPUESTOS: Desglose por impuesto en "totales.impuestos" (nombre,tipo,monto) y sumar en "totales.impuestos_total".
+- PAGOS/ESTADO: Si hay información de pago, devolver documento.monto_pagado (number) y documento.estado_pago (string) y marcar documento.pagado (boolean) si corresponde.
+- NOTAS MANUSCRITAS/ANOTACIONES: Extraer texto manuscrito y colocarlo en extras.texto_mano y/o documento.anotaciones_marginales.
+- ROBUSTEZ: Si detectás códigos, prefijos o tags (ej: [D552]), preservalos en descripcion_exacta pero intenta limpiar descripcion_limpia para emparejar productos.
+- CONVERSIÓN A PRESENTACIONES (CRÍTICO): Para cada ítem intenta normalizar la "presentacion" en un objeto estandarizado y devuelve candidatos de mapeo. Por cada ítem devuelve los siguientes campos:
+  - presentacion_normalizada: string (ej: "CAJA 12x500g" o "500g")
+  - tipo_presentacion_nombre: string (CAJA, PACK, UNIDAD, BOLSON, etc.)
+  - unidades_por_presentacion: number
+  - presentacion_base: string (ej: "500g", "1L")
+  - presentacion_candidates: [{ "nombre": "", "unidades_por_presentacion": 0, "presentacion_base": "", "confidence": 0.0, "match_tokens": "" }]
+  - producto_candidates: [{ "nombre": "", "codigo_proveedor": "", "confidence": 0.0 }]
+- CALCULOS: Devuelve también totales.total_calculado calculado como suma de items menos descuentos + impuestos + recargos. Si el LLM detecta un total impreso lo coloca en totales.total_impreso y calcular la diferencia en totales.diferencia.
+
+JSON SCHEMA (devuelve SOLO este objeto):
 {
   "documento": { "tipo": "", "numero": "", "fecha": "DD/MM/AAAA", "estado_pago": "", "monto_pagado": 0, "cuenta_corriente": { "estado": "", "monto": 0 }, "anotaciones_marginales": "" },
   "emisor": { "nombre": "", "cuit": "", "telefono": "", "iva": "", "direccion_completa_manual": "", "emails": [], "datos_bancarios": { "banco": "", "cbu": "", "alias": "" } },
-  "items": [{ "ordenEnFactura":0, "descripcion_exacta": "", "nombre_producto": "", "tipo_presentacion_nombre": "", "unidades_por_presentacion": 1, "presentacion_base": "", "cantidad_documento": 0, "precio_unitario": 0, "subtotal_original": 0, "subtotal_calculado": 0, "es_devolucion": false, "descuento": 0, "observaciones": "" }],
-  "totales": {
-     "subtotal_items": 0,                       // suma neta de subtotales (incluye devoluciones negativas)
-     "devoluciones_total": 0,                  // suma absoluta de devoluciones (positiva, para mostrar como '- $X')
-     "descuento_total": 0,                     // monto total de descuentos aplicados
-     "descuentos": [],                         // listado detallado de descuentos (opcional)
-     "recargos_total": 0,
-     "impuestos_total": 0,                     // suma de todos los impuestos
-     "impuestos": [{ "nombre": "", "tipo": "", "monto": 0 }], // desglose por impuesto
-     "total_impreso": 0,
-     "total_calculado": 0,
-     "diferencia": 0,
-     "detalle_diferencia": ""
-  },
-  "extras": { "texto_mano": "" }
+  "items": [{ "ordenEnFactura":0, "descripcion_exacta":"", "descripcion_limpia":"", "nombre_producto":"", "presentacion_normalizada":"", "tipo_presentacion_nombre":"", "unidades_por_presentacion":1, "presentacion_base":"", "cantidad_documento":0, "precio_unitario":0, "descuento":0, "subtotal_original":0, "subtotal_calculado":0, "es_devolucion":false, "observaciones":"", "presentacion_candidates":[], "producto_candidates":[] }],
+  "totales": { "subtotal_items":0, "devoluciones_total":0, "descuento_total":0, "descuentos":[], "recargos_total":0, "impuestos_total":0, "impuestos":[{"nombre":"","tipo":"","monto":0}], "total_impreso":0, "total_calculado":0, "diferencia":0, "detalle_diferencia":"" },
+  "candidatos_presentaciones": [],
+  "candidatos_productos": [],
+  "extras": { "texto_mano":"" }
 }
 
-NOTA: Si algún campo no aplica, devuelve el valor numérico 0 o una lista vacía. Para las devoluciones: además de marcar "es_devolucion": true en el item, incluye su monto en "devoluciones_total" como valor positivo (UI lo mostrará como -).`,
-  }
-
-const pepe = {
-  factura: `Actúa como un experto en auditoría fiscal y gestión de inventarios. Analiza la imagen y extrae un JSON respetando estas reglas:
-          1. HEURÍSTICA NUMÉRICA (CRÍTICO):
-            - Prioridad decimal: Si hay un separador seguido de 1 o 2 dígitos al final (ej: "120.7" o "1234,5") -> DECIMAL.
-            - Doble separador: "1.234,50" -> Punto MILES, Coma DECIMAL.
-            - Símbolos: Elimina "$", " " y sufijos ".-".
-            - Devoluciones/Notas de Crédito: Deben ser valores NEGATIVOS, remover la palabra devolucion del nombre del articulo usar solo el valor "es_devolucion".
-
-          1.1. EXTRACCIÓN DEL EMISOR (DETALLE DE MEMBRETE):
-            Captura todos los datos del emisor para permitir la creación de un nuevo contacto. Usa estos campos exactos del schema:
-            - nombre: Razón social o nombre principal.
-            - cuit: Extraer con guiones si están presentes (ej: 30-50554465-6).
-            - telefono: Si hay varios, sepáralos por coma.
-            - iva: Condición frente al IVA (Responsable Inscripto, Monotributo, etc.).
-            - DIRECCIONES: Extraer calle, número, localidad y provincia del membrete.
-            - EMAILS: Buscar cualquier dirección de correo electrónico.
-            - CUENTA_BANCARIA: Buscar CBU, Alias o Banco si figuran para pagos.
-
-
-          2. CONCILIACIÓN Y ANOTACIONES MANUSCRITAS:
-            - El bolígrafo mata la imprenta: Si algo está tachado, cantidad = 0.
-            - Pero si algo esta circulado o con un tilde o puntito es probable que sea revisado y válido. tambien contemplarlo y registrarlo.
-            - Intentar capturar todo el texto escrito a mano, analizar su contexto y guardar lo que se entendio y lo que dice.enviarlo en json como extras
-            - Restas inferidas: Si hay un "-24" anotado, deduce a qué ítem afecta según su precio unitario y ajusta el stock.
-            - Estados: Busca "PAGADO", "ANULADO", "PARCIAL", "DEBE", "ENTREGUÉ $XXX".
-
-          3. CUENTA CORRIENTE Y PAGOS:
-            - Extrae cualquier saldo anterior o estado de cuenta mencionado (ACTIVA, DEBE, A FAVOR).
-            - Si hay una anotación de pago parcial o excedente, capturarla.
-
-          4. LÓGICA DE PRESENTACIONES (SCHEMA PRISMA):
-            - Clasifica 'tipo_presentacion_nombre' según los tipos válidos (CAJA, PACK, BOLSÓN, UNIDAD, etc.).
-            - Mapea: "Caja 15x 200g" -> tipo_presentacion_nombre: "CAJA", unidades_por_presentacion: 15, presentacion_base: "200g".
-            - Si dice algo similar a devolucion, marca el ítem como es_devolucion: true y ajusta cantidades/precios en consecuencia y asumi que el produucto es el mismo sin la palabra devolucion, y que puede estar truncado, ayudate por codgos y contexto.
-
-            6. CÁLCULO DE DIFERENCIAS:
-            - Compara el 'total_impreso' contra el 'total_calculado' (post-tachaduras y ajustes). Indica la diferencia exacta.
-
-          6. TOLERANCIA A ERRORES DE OCR/IMPRESIÓN (FUZZY MATCHING):
-            - Si detectas palabras con caracteres extraños (ej: "Devoluci|n", "Factur@", "C@ntidad"), interprétalas por contexto contable.
-            - "Devoluci|n" -> debe entenderse como "Devolución" y activar la lógica de valores NEGATIVOS (es_devolucion: true).
-            - Ignora prefijos de sistema entre corchetes (ej: "[D552]") para el nombre del producto, pero mantelos en 'descripcion_exacta' entendiendo que son codigos propios del proveedor que luego se pueden usar para entender que se esta devolviendo.
-
-          RESPONDE EXCLUSIVAMENTE EN ESTE FORMATO JSON:
-          {
-            "documento": {
-              "tipo": "", "numero": "", "fecha": "DD/MM/AAAA",
-              "estado_pago": "", "monto_pagado": 0,
-              "cuenta_corriente": { "estado": "", "monto": 0 },
-              "anotaciones_marginales": ""
-            },
-            "emisor": {
-              "nombre": "",
-              "cuit": "",
-              "telefono": "",
-              "iva": "",
-              "direccion_completa_manual": "", 
-              "emails": [],
-              "datos_bancarios": { "banco": "", "cbu": "", "alias": "" },
-              "inicio_actividades": ""
-            },
-            "items": [{
-              "descripcion_exacta": "",
-              "nombre_producto": "",
-              "tipo_presentacion_nombre": "", 
-              "unidades_por_presentacion": 1, 
-              "presentacion_base": "",
-              "cantidad_documento": 0,
-              "precio_unitario": 0,
-              "subtotal_original": 0,
-              "subtotal_calculado": 0,
-              "es_devolucion": false,
-              "observaciones": ""
-            }],
-            "totales": {
-              "total_impreso": 0,
-              "total_calculado": 0,
-              "diferencia": 0,
-              "detalle_diferencia": ""
-            }
-          }`,
-
+IMPORTANTE: Responde solo con el JSON exacto. No uses cadenas para montos ni agregues comentarios. Entrega valores numéricos siempre como numbers. Para los candidatos utiliza campos numéricos de confianza (0.0-1.0) y normaliza unidades (ej: 500g -> "500g" o "0.5kg"). Si hay ambigüedad en una cifra, intenta la interpretación contable más probable (coma como decimal si aplica).`,
 
   producto: `Analiza este producto y extrae la información en formato JSON:
               {
@@ -361,6 +275,102 @@ const pepe = {
               - Colores predominantes
               - Cualquier información relevante`
               }
+
+// -----------------------------
+// Heurística de fallback (JS)
+// -----------------------------
+function simpleInvoiceParserJS(text) {
+  // Extract basic header and items using lightweight heuristics as a fallback
+  if (!text || typeof text !== 'string') return null
+
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const dateRe = /(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i
+  const cuitRe = /(\d{2}-\d{8}-\d|\d{11})/g
+  const nroRe = /(?:Nro|Nº|Numero|Factura|Núm)[:\s]*([A-Za-z0-9\-\/]+)/i
+  const moneyRe = /\d{1,3}(?:[\.,]\d{3})*(?:[\.,]\d{2})?/g
+
+  const parsed = { emisor: { nombre: '', cuit: '' }, documento: { numero: '', fecha: null, totales: {} }, items: [] }
+
+  if (lines.length) parsed.emisor.nombre = lines[0]
+
+  // Find CUIT and date and nro in first 12 lines
+  for (let i = 0; i < Math.min(12, lines.length); i++) {
+    const l = lines[i]
+    const cuit = (l.match(cuitRe) || [])[0]
+    if (cuit && !parsed.emisor.cuit) parsed.emisor.cuit = cuit
+    const d = l.match(dateRe)
+    if (d && !parsed.documento.fecha) parsed.documento.fecha = d[1]
+    const n = l.match(nroRe)
+    if (n && !parsed.documento.numero) parsed.documento.numero = n[1]
+  }
+
+  // Totals: look for line with 'total' bottom-up
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
+    const l = lines[i].toLowerCase()
+    if (l.includes('total')) {
+      const m = (l.match(moneyRe) || [])
+      if (m.length) {
+        parsed.documento.totales.total = m[m.length - 1]
+        break
+      }
+    }
+  }
+
+  // Items: look for lines with money patterns and 2-4 tokens at end (qty price subtotal)
+  const itemCandidates = []
+  for (const l of lines) {
+    const m = l.match(moneyRe)
+    if (m && m.length >= 1) {
+      // tokenise
+      const parts = l.split(/\s{2,}|\s\t|\t/).map(p => p.trim()).filter(Boolean)
+      if (parts.length >= 2) itemCandidates.push(l)
+    }
+  }
+
+  // Try extract qty, price, subtotal from candidate lines by tokenizing by spaces
+  let orden = 1
+  for (const l of itemCandidates) {
+    const tokens = l.split(/\s+/).filter(Boolean)
+    // heuristic: last 1-2 tokens are money
+    const money = tokens.filter(t => /\d[\d\.,]+/.test(t))
+    if (money.length >= 1) {
+      const subtotal = money[money.length - 1]
+      const precio = money.length >= 2 ? money[money.length - 2] : subtotal
+      // description: tokens before first money token
+      const firstMoneyIdx = tokens.findIndex(t => /\d[\d\.,]+/.test(t))
+      const desc = tokens.slice(0, firstMoneyIdx).join(' ') || l
+      parsed.items.push({ ordenEnFactura: orden++, descripcion_exacta: desc, descripcion_limpia: desc, cantidad_documento: null, precio_unitario: precio, subtotal_original: subtotal, descuento: 0, impuestos: 0, es_devolucion: false })
+    }
+  }
+
+  return parsed
+}
+
+function validateParsedInvoice(parsed) {
+  const errors = []
+  if (!parsed) { errors.push('parsed_missing'); return errors }
+  const nombre = parsed.emisor?.nombre || ''
+  if (!nombre || typeof nombre !== 'string' || nombre.trim().length < 3 || /^\d+$/.test(nombre.trim())) errors.push('emisor_nombre_invalid')
+  const cuit = parsed.emisor?.cuit || ''
+  if (cuit && !/^(\d{2}-\d{8}-\d|\d{11})$/.test(String(cuit).trim())) errors.push('cuit_bad_format')
+  const numero = parsed.documento?.numero || ''
+  if (!numero || String(numero).trim().length < 2) errors.push('documento_numero_invalid')
+  if (!parsed.items || !Array.isArray(parsed.items) || parsed.items.length === 0) errors.push('items_missing')
+  // Validate item numbers
+  const itemIssues = parsed.items.filter(it => {
+    // description too short or numeric only
+    const d = String(it.descripcion_exacta || it.descripcion_limpia || '')
+    if (!d || d.trim().length < 2) return true
+    // price/subtotal parsable
+    const p = it.precio_unitario
+    const s = it.subtotal || it.subtotal_original
+    if (p === undefined || p === null || (String(p).trim() === '')) return true
+    if (s === undefined || s === null || (String(s).trim() === '')) return true
+    return false
+  })
+  if (itemIssues.length > 0) errors.push('items_bad')
+  return errors
+}
 
 export async function POST(req) {
   try {
@@ -399,126 +409,184 @@ export async function POST(req) {
     console.log('   - Optimizada:', imageMeta.optimized?.size || optimized.length, 'chars')
     if (imageMeta.reduction) console.log('   - Reducción:', imageMeta.reduction)
 
-    // Usar directamente la API de Ollama (compatible con v1)
+    // Usar directamente la API del microservicio vision (local Qwen)
     const prompt = PROMPTS[mode] || PROMPTS.general
     
-    console.log('✅ Usando SDK oficial de Ollama')
-    console.log('📤 Enviando a Ollama...')
-    console.log('   - Modelo:', model)
+    console.log('📤 Enviando imagen optimizada al microservicio vision para DocRes + OCR + Qwen...')
+    console.log('   - Modelo sugerido por frontend:', model)
     console.log('   - Modo:', mode)
     console.log('   - Tamaño imagen optimizada:', optimized.length, 'chars')
-    const tBeforeOllama = Date.now()
-    
+    const tBeforeVision = Date.now()
+
     let data
-    let tAfterOllama
-    
+    let tAfterVision
+
     try {
-      console.log('🔄 Generando con SDK de Ollama...')
-      
-      // El SDK de Ollama espera un array de strings base64 (sin el prefijo data:image)
-      // Ya tenemos optimized como base64 string puro
-      let response
+      // Convert optimized base64 to binary and attach as a Blob for FormData
+      const optimizedBuffer = Buffer.from(optimized, 'base64')
+      const form = new FormData()
+      // Use Web Blob in Node (Node 18+ supports global Blob). Fallback to Buffer if not available.
+      let blobForForm
       try {
-        response = await ollama.generate({
-          model: model,
-          prompt: prompt,
-          images: [optimized], // Array de base64 strings
-          stream: false,
-          format: 'json',
-          options: {
-            temperature: 0,
-            num_ctx: 4096
-          }
-        })
-      } catch (firstErr) {
-        const firstMsg = String(firstErr.message || firstErr)
-        // Si detectamos GGML_ASSERT (error de shape/dimensiones), intentar reintento con imagen "segura"
-        if (/GGML_ASSERT|assert\(|panic/i.test(firstMsg) || (/an error was encountered while running the model/i.test(firstMsg) && model && /qwen/i.test(model))) {
-          console.warn('⚠️ Error GGML_ASSERT detectado en Ollama. Intentando reintento con imagen segura (square, múltiplos de 28)...')
+        blobForForm = new Blob([optimizedBuffer], { type: 'image/jpeg' })
+      } catch (e) {
+        // older Node/builds may not have Blob global - use Buffer directly
+        blobForForm = optimizedBuffer
+      }
+
+      // Append image; some runtimes expect (name, Blob, filename)
+      try {
+        form.append('image', blobForForm, image.name || 'upload.jpg')
+      } catch (appendErr) {
+        // As a last resort try object form to appease different FormData implementations
+        form.append('image', blobForForm)
+      }
+
+      form.append('enhance', '1')
+      form.append('mode', mode)
+      try { form.append('model', model) } catch(e) { console.warn('Could not append model to form:', e.message) }
+      // Send explicit prompt for invoices to the vision microservice so Docker Qwen uses the same schema
+      try { form.append('prompt', prompt) } catch(e) { console.warn('Could not append prompt to form:', e.message) }
+
+      // Forward optional flags if needed (could be exposed from frontend later)
+      let resp
+      try {
+        resp = await fetch(`${VISION_HOST}/restore`, { method: 'POST', body: form })
+      } catch (fetchErr) {
+        console.error('❌ No se pudo conectar al microservicio vision:', fetchErr.message)
+
+        // Intento de recuperación: si VISION_HOST apunta a 'vision', probar 'http://localhost:8000' para entornos de desarrollo
+        if (VISION_HOST && VISION_HOST.includes('vision')) {
           try {
-            // Crear buffer desde base64 y generar versión segura
-            const optimizedBuffer = Buffer.from(optimized, 'base64')
-            const safeBuffer = await makeSafeImageForQwen(optimizedBuffer)
-            const safeBase64 = safeBuffer.toString('base64')
-
-            // Auditoría de intento de fallback
+            console.info('🔁 Intentando fallback a http://localhost:8000 (entorno dev)')
+            resp = await fetch('http://localhost:8000/restore', { method: 'POST', body: form })
+          } catch (fallbackErr) {
+            console.error('❌ Fallback a localhost falló:', fallbackErr.message)
             try {
-              await prisma.auditLog.create({
-                data: {
-                  accion: 'OLLAMA_FAILURE',
-                  detalles: { fallback: true, model, originalFile: image.name },
-                  userId: 'sistema'
-                }
-              })
+              await guardarAuditoriaIaFailure({ model: 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: 0, errorText: fallbackErr.message, timing: { before: tBeforeVision, after: Date.now() } })
             } catch (audErr) {
-              console.warn('⚠️ No se pudo registrar auditoría de fallback Ollama:', audErr.message)
+              console.warn('⚠️ No se pudo registrar auditoría de fallo IA:', audErr.message)
             }
-
-            // Reintentar con la imagen segura
-            response = await ollama.generate({
-              model: model,
-              prompt: prompt,
-              images: [safeBase64],
-              stream: false,
-              format: 'json',
-              options: {
-                temperature: 0,
-                num_ctx: 4096
-              }
-            })
-            console.log('✅ Reintento con imagen segura exitoso')
-          } catch (retryErr) {
-            // Si falla el reintento, propagar el error para que entre al catch principal
-            throw retryErr
+            return NextResponse.json({ ok: false, error: 'Vision microservice not available', retryable: true }, { status: 502 })
           }
         } else {
-          throw firstErr
+          try {
+            await guardarAuditoriaIaFailure({ model: 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: 0, errorText: fetchErr.message, timing: { before: tBeforeVision, after: Date.now() } })
+          } catch (audErr) {
+            console.warn('⚠️ No se pudo registrar auditoría de fallo IA:', audErr.message)
+          }
+          return NextResponse.json({ ok: false, error: 'Vision microservice not available', retryable: true }, { status: 502 })
         }
       }
 
-      tAfterOllama = Date.now()
-      console.log(`✅ Respuesta recibida en ${((tAfterOllama - tBeforeOllama) / 1000).toFixed(1)}s`)
-      
-      // El SDK devuelve la respuesta en response.response
-      data = {
-        response: response.response,
-        model: response.model || model,
-        created_at: response.created_at,
-        done: response.done
+      tAfterVision = Date.now()
+      if (!resp.ok) {
+        const text = await resp.text()
+        console.error('❌ Vision service returned error:', resp.status, text)
+
+        // Si el error indica que vision no pudo identificar la imagen, intentar reenviar la imagen ORIGINAL (no optimizada)
+        if (/cannot identify image file/i.test(text)) {
+          console.warn('🔁 Vision no pudo identificar la imagen optimizada; reenviando imagen ORIGINAL como fallback')
+          try {
+            const originalBuffer = Buffer.from(original, 'base64')
+            const fallbackForm = new FormData()
+            let fallbackBlob
+            try { fallbackBlob = new Blob([originalBuffer], { type: image.type || 'image/jpeg' }) } catch (e) { fallbackBlob = originalBuffer }
+            try { fallbackForm.append('image', fallbackBlob, image.name || 'upload.jpg') } catch (e) { fallbackForm.append('image', fallbackBlob) }
+            fallbackForm.append('enhance', '1')
+            fallbackForm.append('mode', mode)
+            try { fallbackForm.append('model', model) } catch(e) { console.warn('Could not append model to fallback form:', e.message) }
+
+            let fallbackResp
+            try {
+              fallbackResp = await fetch(`${VISION_HOST}/restore`, { method: 'POST', body: fallbackForm })
+            } catch (frErr) {
+              console.error('❌ Fallback to vision with original image failed:', frErr.message)
+              // Continue to record original error
+            }
+
+            if (fallbackResp && fallbackResp.ok) {
+              const fv = await fallbackResp.json()
+              console.log('✅ Fallback to original image succeeded')
+              data = {
+                response: fv.extraction ? (typeof fv.extraction === 'string' ? fv.extraction : JSON.stringify(fv.extraction)) : (fv.ocr_text || ''),
+                model: fv.extraction_meta?.model || 'qwen',
+                created_at: new Date().toISOString(),
+                done: true,
+                vision_meta: fv
+              }
+            } else {
+              // No success re-sending original - record audit and return original error
+              try {
+                await guardarAuditoriaIaFailure({ model: 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: resp.status, errorText: text, timing: { before: tBeforeVision, after: tAfterVision } })
+              } catch (audErr) {
+                console.warn('⚠️ No se pudo registrar auditoría de fallo IA:', audErr.message)
+              }
+              return NextResponse.json({ ok: false, error: 'Vision microservice error', details: text }, { status: 502 })
+            }
+          } catch (fallbackErr) {
+            console.error('❌ Fallback processing failed:', fallbackErr)
+            try {
+              await guardarAuditoriaIaFailure({ model: 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: resp.status, errorText: text, timing: { before: tBeforeVision, after: tAfterVision } })
+            } catch (audErr) {
+              console.warn('⚠️ No se pudo registrar auditoría de fallo IA:', audErr.message)
+            }
+            return NextResponse.json({ ok: false, error: 'Vision microservice error', details: text }, { status: 502 })
+          }
+        }
+
+        try {
+          await guardarAuditoriaIaFailure({ model: 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: resp.status, errorText: text, timing: { before: tBeforeVision, after: tAfterVision } })
+        } catch (audErr) {
+          console.warn('⚠️ No se pudo registrar auditoría de fallo IA:', audErr.message)
+        }
+        return NextResponse.json({ ok: false, error: 'Vision microservice error', details: text }, { status: 502 })
       }
+
+      const vdata = await resp.json()
+      console.log('✅ Vision response received in', ((tAfterVision - tBeforeVision) / 1000).toFixed(2), 's')
+
+      // Normalize into `data` (keeping compatibility with existing flow)
+      data = {
+        response: vdata.extraction ? (typeof vdata.extraction === 'string' ? vdata.extraction : JSON.stringify(vdata.extraction)) : (vdata.ocr_text || ''),
+        model: vdata.extraction_meta?.model || 'qwen',
+        created_at: new Date().toISOString(),
+        done: true,
+        vision_meta: vdata
+      }
+
+      console.log('📦 Estructura de respuesta vision:', Object.keys(vdata))
       
-      console.log('📦 Estructura de respuesta:', Object.keys(response))
-      
-    } catch (ollamaError) {
-      tAfterOllama = Date.now()
-      
-      console.error('❌ Error de Ollama SDK:', ollamaError)
-      
-      const errorMsg = ollamaError.message || String(ollamaError)
+    } catch (visionErr) {
+      tAfterVision = Date.now()
+
+      console.error('❌ Error llamando al microservicio vision:', visionErr)
+
+      const errorMsg = visionErr.message || String(visionErr)
       let userMsg = errorMsg
-      
-      // Detectar errores internos del modelo
+
+      // Detectar errores internos del modelo (si el texto contiene GGML_ASSERT)
       if (/GGML_ASSERT|assert\(|panic/i.test(errorMsg)) {
         userMsg = `Error interno del modelo: ${errorMsg.split('\n')[0]}. Intenta reintentar o usa otro modelo.`
       }
-      
+
       try {
-        await guardarAuditoriaOllamaFailure({ 
-          model, 
+        await guardarAuditoriaIaFailure({ 
+          model: 'qwen', 
           mode, 
           fileName: image.name, 
           fileSize: image.size, 
           responseStatus: 500, 
           errorText: userMsg, 
-          timing: { before: tBeforeOllama, after: tAfterOllama } 
+          timing: { before: tBeforeVision, after: tAfterVision } 
         })
       } catch (audErr) {
-        console.warn('⚠️ No se pudo guardar auditoría de fallo Ollama:', audErr.message)
+        console.warn('⚠️ No se pudo guardar auditoría de fallo IA:', audErr.message)
       }
-      
+
       return NextResponse.json({ 
         ok: false, 
-        error: `Error de Ollama: ${userMsg}`,
+        error: `Error de IA (vision): ${userMsg}`,
         retryable: true
       }, { status: 500 })
     }
@@ -739,6 +807,22 @@ export async function POST(req) {
           if (isDevol) {
             normalized.es_devolucion = true
 
+            // Asegurar que los subtotales de una devolución sean NEGATIVOS (según especificación)
+            try {
+              const unit = Number(normalized.precio_unitario || normalized.precio || 0) || 0
+              const qty = Number(normalized.cantidad || normalized.cantidad_documento || 0) || 0
+              const rawSubtotal = Number(normalized.subtotal || 0) || 0
+              const assumed = Math.abs(rawSubtotal) || Math.abs(unit * qty) || 0
+              const negative = assumed > 0 ? -Math.abs(assumed) : 0
+
+              // Aplicar a campos clave para asegurar coherencia en el downstream
+              normalized.subtotal = negative
+              normalized.subtotal_original = negative
+              normalized.subtotal_calculado = negative
+            } catch (subtotalErr) {
+              console.warn('⚠️ Error al normalizar subtotales de devolución:', subtotalErr.message)
+            }
+
             // Limpiar tags y prefijos (ej: [D552] Devoluci|n ...)
             let cleaned = descripcion.replace(/\[[^\]]+\]/g, '')
             cleaned = cleaned.replace(/\bdevolu\w*\b|\bdev\b|\bdevolución\b/ig, '')
@@ -748,48 +832,73 @@ export async function POST(req) {
 
             // Intentar inferir producto y presentacion desde la DB
             try {
-              const producto = await prisma.productos.findFirst({
-                where: {
-                  OR: [
-                    { nombre: { contains: normalized.descripcion_limpia, mode: 'insensitive' } },
-                    { descripcion: { contains: normalized.descripcion_limpia, mode: 'insensitive' } },
-                    { presentaciones: { some: { nombre: { contains: normalized.descripcion_limpia, mode: 'insensitive' } } } }
-                  ]
-                },
-                include: {
-                  presentaciones: {
-                    select: { id: true, nombre: true, cantidad: true, unidadMedida: true, esUnidadBase: true }
+              // Primero intentar emparejar contra alias de proveedor (ProveedorSkuAlias), para mejorar matches cuando el proveedor usa nombres propios
+              try {
+                const aliasMatch = await prisma.proveedorSkuAlias.findFirst({
+                  where: {
+                    OR: [
+                      { nombreEnProveedor: { contains: normalized.descripcion_limpia, mode: 'insensitive' } },
+                      { sku: { contains: normalized.descripcion_limpia, mode: 'insensitive' } }
+                    ]
+                  },
+                  include: { presentacion: true, producto: true, proveedor: true }
+                })
+
+                if (aliasMatch) {
+                  normalized.productoInferido = aliasMatch.producto ? { id: aliasMatch.producto.id, nombre: aliasMatch.producto.nombre } : normalized.productoInferido
+                  if (aliasMatch.presentacion) normalized.presentacionInferida = { id: aliasMatch.presentacion.id, nombre: aliasMatch.presentacion.nombre }
+                  normalized.proveedorAlias = { proveedorId: aliasMatch.proveedorId, proveedorNombre: aliasMatch.proveedor?.nombre || null, sku: aliasMatch.sku || null, nombreEnProveedor: aliasMatch.nombreEnProveedor || null, confidence: 0.95 }
+                  console.log('🔎 Match por alias de proveedor encontrado:', normalized.proveedorAlias)
+                }
+              } catch (aliasErr) {
+                console.warn('⚠️ Error buscando alias de proveedor:', aliasErr.message)
+              }
+
+              // Si alias no resolvió, buscar producto por nombre/descripcion/presentacion
+              if (!normalized.productoInferido) {
+                const producto = await prisma.productos.findFirst({
+                  where: {
+                    OR: [
+                      { nombre: { contains: normalized.descripcion_limpia, mode: 'insensitive' } },
+                      { descripcion: { contains: normalized.descripcion_limpia, mode: 'insensitive' } },
+                      { presentaciones: { some: { nombre: { contains: normalized.descripcion_limpia, mode: 'insensitive' } } } }
+                    ]
+                  },
+                  include: {
+                    presentaciones: {
+                      select: { id: true, nombre: true, cantidad: true, unidadMedida: true, esUnidadBase: true }
+                    }
                   }
-                }
-              })
+                })
 
-              if (producto) {
-                // Intentar emparejar presentación por nombre
-                let presentacionMatch = null
-                const descForMatch = normalized.descripcion_limpia.toLowerCase()
-                for (const p of producto.presentaciones || []) {
-                  if (!p.nombre) continue
-                  if (descForMatch.includes(p.nombre.toLowerCase()) || p.nombre.toLowerCase().includes(descForMatch)) {
-                    presentacionMatch = p
-                    break
+                if (producto) {
+                  // Intentar emparejar presentación por nombre
+                  let presentacionMatch = null
+                  const descForMatch = normalized.descripcion_limpia.toLowerCase()
+                  for (const p of producto.presentaciones || []) {
+                    if (!p.nombre) continue
+                    if (descForMatch.includes(p.nombre.toLowerCase()) || p.nombre.toLowerCase().includes(descForMatch)) {
+                      presentacionMatch = p
+                      break
+                    }
                   }
+
+                  // Si no se encontró, intentar heurística por 'kg', 'g', 'l', 'unid'
+                  if (!presentacionMatch && producto.presentaciones && producto.presentaciones.length) {
+                    presentacionMatch = producto.presentaciones.find(p => /kg|g|l|ml|pack|unid|unidad/i.test(p.nombre)) || producto.presentaciones[0]
+                  }
+
+                  normalized.productoInferido = { id: producto.id, nombre: producto.nombre }
+                  if (presentacionMatch) normalized.presentacionInferida = { id: presentacionMatch.id, nombre: presentacionMatch.nombre }
+
+                  // Para devoluciones: acción sobre stock
+                  normalized.stockAction = 'in' // devolución aumenta stock
+                  normalized.stockDelta = Math.abs(Number(normalized.cantidad) || 0)
+
+                  console.log('🔎 Devolución detectada - producto inferido:', normalized.productoInferido, 'presentacion:', normalized.presentacionInferida)
+                } else {
+                  console.log('🔎 Devolución detectada pero no se pudo inferir producto:', normalized.descripcion_limpia)
                 }
-
-                // Si no se encontró, intentar heurística por 'kg', 'g', 'l', 'unid'
-                if (!presentacionMatch && producto.presentaciones && producto.presentaciones.length) {
-                  presentacionMatch = producto.presentaciones.find(p => /kg|g|l|ml|pack|unid|unidad/i.test(p.nombre)) || producto.presentaciones[0]
-                }
-
-                normalized.productoInferido = { id: producto.id, nombre: producto.nombre }
-                if (presentacionMatch) normalized.presentacionInferida = { id: presentacionMatch.id, nombre: presentacionMatch.nombre }
-
-                // Para devoluciones: acción sobre stock
-                normalized.stockAction = 'in' // devolución aumenta stock
-                normalized.stockDelta = Math.abs(Number(normalized.cantidad) || 0)
-
-                console.log('🔎 Devolución detectada - producto inferido:', normalized.productoInferido, 'presentacion:', normalized.presentacionInferida)
-              } else {
-                console.log('🔎 Devolución detectada pero no se pudo inferir producto:', normalized.descripcion_limpia)
               }
             } catch (dbErr) {
               console.warn('⚠️ Error consultando DB para inferir producto de devolución:', dbErr.message)
@@ -812,7 +921,156 @@ export async function POST(req) {
       }
 
       parsedData.items = processedItems
-              console.warn('⚠️ No se encontraron items en parsedData')
+
+              // Intento rápido: extraer CUIT/numero/fecha directamente de OCR si faltan campos críticos
+              try {
+                const rawOcr = (vdata && vdata.ocr_text) ? vdata.ocr_text : (data?.vision_meta?.ocr_text || responseText || '')
+                try {
+                  if ((!parsedData.emisor || !parsedData.emisor.cuit) && rawOcr) {
+                    const cuitMatch = rawOcr.match(/(\d{2}-\d{8}-\d|\d{11})/)
+                    if (cuitMatch) {
+                      parsedData.emisor = { ...parsedData.emisor, cuit: cuitMatch[0] }
+                      console.log('🔎 CUIT heurístico detectado y aplicado:', cuitMatch[0])
+                    }
+                  }
+
+                  // Primary pattern search for document number
+                  if ((!parsedData.documento || !parsedData.documento.numero || String(parsedData.documento.numero).trim().length < 2) && rawOcr) {
+                    const nroMatch = rawOcr.match(/(?:Nro|Nº|Numero|Factura|Núm)[:\s]*([A-Za-z0-9\-\/]+)/i)
+                    if (nroMatch) {
+                      parsedData.documento = { ...parsedData.documento, numero: nroMatch[1] }
+                      console.log('🔎 Nro documento heurístico detectado y aplicado (primario):', nroMatch[1])
+                    } else {
+                      // Fallback: find common invoice/folio patterns like 0400-00172176 or long digit runs
+                      const fallbackMatch = rawOcr.match(/(\d{3,4}-\d{5,}|\d{6,}|\d{3,}-\d{3,})/)
+                      if (fallbackMatch) {
+                        parsedData.documento = { ...parsedData.documento, numero: fallbackMatch[0] }
+                        console.log('🔎 Nro documento heurístico detectado y aplicado (fallback):', fallbackMatch[0])
+                      }
+                    }
+                  }
+
+                  if ((!parsedData.documento || !parsedData.documento.fecha) && rawOcr) {
+                    const dateMatch = rawOcr.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/)
+                    if (dateMatch) {
+                      parsedData.documento = { ...parsedData.documento, fecha: dateMatch[1] }
+                      console.log('🔎 Fecha heurística detectada y aplicada:', dateMatch[1])
+                    }
+                  }
+                } catch (quickErr) { console.warn('⚠️ Heurística rápida falló:', quickErr.message) }
+              } catch(e) { console.warn('⚠️ Error preparando OCR heurístico:', e.message) }
+
+              // Validar la factura y usar heurística JS si la extracción falla en campos críticos
+              try {
+                const errors = validateParsedInvoice(parsedData)
+                if (errors.length) {
+                  console.warn('⚠️ Validación fallida de factura:', errors)
+                  const ocrForHeur = (vdata?.ocr_text || data?.vision_meta?.ocr_text) || responseText || ''
+                  const heur = simpleInvoiceParserJS(ocrForHeur)
+                  if (heur) {
+                    console.log('🔁 Heurística encontró:', heur)
+                    // Rellenar emisor/documento si faltan o son inválidos
+                    if ((!parsedData.emisor || !parsedData.emisor.nombre || String(parsedData.emisor.nombre).trim().length < 3) && heur.emisor?.nombre) {
+                      parsedData.emisor = { ...parsedData.emisor, ...heur.emisor }
+                      parsedData._heuristic_applied = true
+                    }
+                    if ((!parsedData.documento || !parsedData.documento.numero || String(parsedData.documento.numero).trim().length < 2) && heur.documento?.numero) {
+                      parsedData.documento = { ...parsedData.documento, ...heur.documento }
+                      parsedData._heuristic_applied = true
+                    }
+
+                    // Reemplazar items si los items originales estaban claramente malos
+                    if (errors.includes('items_missing') || errors.includes('items_bad')) {
+                      parsedData.items = (heur.items || []).map((it, i) => ({
+                        ordenEnFactura: i+1,
+                        descripcion_exacta: String(it.descripcion_exacta || it.descripcion_limpia || '').trim(),
+                        descripcion_limpia: String(it.descripcion_limpia || it.descripcion_exacta || '').trim(),
+                        cantidad_documento: Number(fixArgentineNumber(it.cantidad_documento || it.cantidad || 0)) || 0,
+                        precio_unitario: Number(fixArgentineNumber(it.precio_unitario || it.precio || 0)) || 0,
+                        subtotal_original: Number(fixArgentineNumber(it.subtotal_original || it.subtotal || 0)) || 0,
+                        subtotal_calculado: Number(fixArgentineNumber(it.subtotal_original || it.subtotal || 0)) || 0,
+                        descuento: Number(fixArgentineNumber(it.descuento || 0)) || 0,
+                        impuestos: Number(fixArgentineNumber(it.impuestos || 0)) || 0,
+                        es_devolucion: !!it.es_devolucion,
+                        presentacion_normalizada: it.presentacion_normalizada || '',
+                        presentacion_candidates: it.presentacion_candidates || [],
+                        producto_candidates: it.producto_candidates || []
+                      }))
+                      parsedData._heuristic_applied = true
+                      console.log('✅ Items reemplazados por heurística (count=' + parsedData.items.length + ')')
+                    }
+                  }
+
+                  // Revalidar
+                  const post = validateParsedInvoice(parsedData)
+                  console.log('🔁 Resultado validación post-heurística:', post)
+                  if (post.length) {
+                    parsedData._needs_manual_review = true
+                    parsedData._raw_ocr = vdata?.ocr_text || data?.vision_meta?.ocr_text || ''
+                    parsedData._raw_output = data.response || ''
+                    try {
+                      await guardarAuditoriaIaFailure({ model: data.model || 'qwen', mode, fileName: image.name, fileSize: image.size, responseStatus: 200, errorText: `Validation issues: ${errors.join(',')}`, timing: { before: tBeforeVision, after: Date.now() } })
+                    } catch (audErr) {
+                      console.warn('⚠️ No se pudo registrar auditoría de validación:', audErr.message)
+                    }
+
+                    // Último recurso: intentar reintento con un modelo más grande (si no estamos ya usando uno pesado)
+                    try {
+                      const heavyModel = 'qwen/Qwen-2.5-VL'
+                      if ((model || '').toLowerCase() !== heavyModel.toLowerCase()) {
+                        console.info(`🔁 Reintento con modelo pesado ${heavyModel} para mejorar extracción`) 
+                        const retryForm = new FormData()
+                        try {
+                          let optBuf = Buffer.from(optimized, 'base64')
+                          let b
+                          try { b = new Blob([optBuf], { type: 'image/jpeg' }) } catch(e) { b = optBuf }
+                          try { retryForm.append('image', b, image.name || 'upload.jpg') } catch(e) { retryForm.append('image', b) }
+                        } catch (e) {
+                          console.warn('⚠️ No se pudo preparar imagen para reintento:', e.message)
+                        }
+                        retryForm.append('enhance', '1')
+                        retryForm.append('mode', mode)
+                        retryForm.append('model', heavyModel)
+                        try { retryForm.append('prompt', prompt + '\n\n// Reintento con modelo pesado para mejorar campos críticos') } catch(e) {}
+
+                        let retryResp = null
+                        try {
+                          retryResp = await fetch(`${VISION_HOST}/restore`, { method: 'POST', body: retryForm })
+                        } catch (fetchErr) {
+                          console.warn('⚠️ Reintento con modelo pesado falló al conectar a vision:', fetchErr.message)
+                        }
+
+                        if (retryResp && retryResp.ok) {
+                          const rv = await retryResp.json().catch(()=>null)
+                          if (rv) {
+                            // Re-parse JSON salida del modelo pesado si viene
+                            const newText = rv.extraction ? (typeof rv.extraction === 'string' ? rv.extraction : JSON.stringify(rv.extraction)) : (rv.ocr_text || '')
+                            const jsonMatch2 = (newText || '').match(/\{[\s\S]*\}/)
+                            if (jsonMatch2) {
+                              try {
+                                const newParsed = JSON.parse(jsonMatch2[0])
+                                parsedData = newParsed
+                                parsedData._retried_with = heavyModel
+                                console.log('✅ Reintento con modelo pesado produjo JSON parseable')
+                              } catch (eJson) {
+                                console.warn('⚠️ Reintento con modelo pesado devolvió JSON inválido:', eJson.message)
+                              }
+                            }
+                          }
+                        } else {
+                          console.warn('⚠️ Reintento con modelo pesado no devolvió éxito')
+                        }
+                      }
+                    } catch (errRetry) {
+                      console.warn('⚠️ Error durante reintento con modelo pesado:', errRetry.message)
+                    }
+                  } else {
+                    console.log('✅ Heurística solucionó la validación')
+                  }
+                }
+              } catch (vErr) {
+                console.warn('⚠️ Error durante validación/heurística:', vErr.message)
+              }
             }
             
             console.log('✅ Números corregidos:', JSON.stringify(parsedData.totales))
@@ -851,8 +1109,8 @@ export async function POST(req) {
     const tEnd = Date.now()
     const timing = {
       totalMs: tEnd - tStart,
-      ollamaMs: (typeof tBeforeOllama !== 'undefined' && typeof tAfterOllama !== 'undefined') ? (tAfterOllama - tBeforeOllama) : undefined,
-      parseMs: (typeof tAfterParsing !== 'undefined') ? (tAfterParsing - tAfterOllama) : undefined,
+      visionMs: (typeof tBeforeVision !== 'undefined' && typeof tAfterVision !== 'undefined') ? (tAfterVision - tBeforeVision) : undefined,
+      parseMs: (typeof tAfterParsing !== 'undefined') ? (tAfterParsing - (typeof tAfterVision !== 'undefined' ? tAfterVision : tStart)) : undefined,
       human: `${(tEnd - tStart)}ms`
     }
 

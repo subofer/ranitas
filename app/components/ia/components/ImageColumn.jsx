@@ -1,5 +1,6 @@
 "use client"
 import { useRef, useEffect } from 'react'
+import ImageViewer from './ImageViewer'
 
 /**
  * Componente de columna de imagen
@@ -26,7 +27,22 @@ export function ImageColumn({
   setIsPanning,
   panStart,
   setPanStart,
-  onManualCrop
+  onManualCrop,
+  headerText = '📄 Imagen original',
+  // New props to integrate manual crop UI while keeping header/layout stable
+  manualCropOpen = false,
+  extraHeaderButtons = null,
+  manualComponent = null,
+  // Compare originals / carousel
+  originalPreview = null,
+  showOriginal = false,
+  onToggleShowOriginal = null,
+  onImageClick = null,
+  // Carousel handlers
+  onPrev = null,
+  onNext = null,
+  carouselCount = 0,
+  carouselIndex = 0,
 }) {
   const containerRef = useRef(null)
   
@@ -40,7 +56,7 @@ export function ImageColumn({
         e.preventDefault()
         e.stopPropagation()
         const delta = e.deltaY * -0.001
-        const newZoom = Math.min(Math.max(0.5, zoom + delta), 5)
+        const newZoom = Math.min(Math.max(0.2, zoom + delta), 5)
         setZoom(newZoom)
       }
     }
@@ -68,10 +84,17 @@ export function ImageColumn({
     if (isPanning && e.ctrlKey) {
       e.preventDefault()
       e.stopPropagation()
-      setPan({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      })
+      const nextX = e.clientX - panStart.x
+      const nextY = e.clientY - panStart.y
+      // Clamp to reasonable bounds based on container size to avoid disappearance
+      try {
+        const rect = containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 800, height: 600 }
+        const limitX = Math.max(400, rect.width * 3)
+        const limitY = Math.max(400, rect.height * 3)
+        setPan({ x: Math.max(-limitX, Math.min(limitX, nextX)), y: Math.max(-limitY, Math.min(limitY, nextY)) })
+      } catch (e) {
+        setPan({ x: nextX, y: nextY })
+      }
     }
   }
   
@@ -88,8 +111,10 @@ export function ImageColumn({
   return (
     <div className="bg-gray-50 border-2 border-gray-300 rounded-xl p-4 sticky top-4 h-fit">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-bold text-gray-900">📄 Imagen original</h3>
+        <h3 className="font-bold text-gray-900">{headerText}</h3>
         <div className="flex gap-2">
+          {/* If manual crop mode is active, show provided header buttons (Accept/Cancel/Encuadrar) */}
+          {!manualCropOpen ? (
             <button
               onClick={onManualCrop}
               className="px-3 py-1.5 rounded-lg transition-colors text-sm font-medium bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
@@ -97,6 +122,10 @@ export function ImageColumn({
             >
               ✂️ Crop
             </button>
+          ) : (
+            extraHeaderButtons || null
+          )}
+
           <button
             onClick={() => setMostrarControles(!mostrarControles)}
             className={`px-3 py-1.5 rounded-lg transition-colors text-sm font-medium ${
@@ -142,19 +171,39 @@ export function ImageColumn({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
+        {/* Image content (always present). If manual cropping is active, an absolute overlay will sit on top of the image to avoid layout shifts */}
+
         {!mostrarControles && (
-          <OptimizedImage
-            src={preview} 
-            alt="Factura" 
-            className="w-full shadow-lg"
-            style={{
-              transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-              transformOrigin: '0 0',
-              transition: isPanning ? 'none' : 'transform 0.1s ease-out'
-            }}
-          />
-        )}
-        
+            <div className="relative">
+              <ImageViewer
+                src={showOriginal && originalPreview ? originalPreview : preview}
+                zoom={zoom}
+                setZoom={setZoom}
+                pan={pan}
+                setPan={setPan}
+                isPanning={isPanning}
+                setIsPanning={setIsPanning}
+                onImageClick={() => onImageClick && onImageClick()}
+                className={`shadow-lg rounded-lg ${manualComponent ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                imageRef={imgOriginalRef}
+              >
+                {/* Children overlays (manualComponent) are rendered inside ImageViewer so transforms match */}
+                {manualComponent}
+
+                {/* Side overlay arrows for carousel (soft overlay, one each side) */}
+                {((originalPreview || typeof carouselCount === 'number') && (carouselCount || (originalPreview ? 1 : 0)) > 0 && !manualComponent) && (
+                  <>
+                    {carouselCount > 1 && (
+                      <>
+                        <button onClick={() => onPrev && onPrev()} title="Anterior" className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm border rounded-full p-2 shadow text-lg z-30">◀</button>
+                        <button onClick={() => onNext && onNext()} title="Siguiente" className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/80 backdrop-blur-sm border rounded-full p-2 shadow text-lg z-30">▶</button>
+                      </>
+                    )}
+                  </>
+                )}
+              </ImageViewer>
+            </div>
+          )}
         <OptimizedImage
           ref={imgOriginalRef}
           src={preview} 
@@ -162,12 +211,17 @@ export function ImageColumn({
           className="hidden" 
           crossOrigin="anonymous"
         />
-        
+
         {mostrarControles && (
           <canvas 
             ref={canvasRef}
             className="w-full rounded-lg shadow-lg border-2 border-blue-400"
           />
+        )}
+
+        {/* Manual component overlay (absolute) */}
+        {manualComponent && (
+          <div className="absolute inset-0 z-20 w-full h-full flex items-stretch p-0 m-0 pointer-events-auto bg-transparent">{manualComponent}</div>
         )}
         
         {mostrarControles && (

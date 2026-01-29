@@ -1,10 +1,10 @@
-# Servicio de Visión Docker - YOLOv11 + DocRes
+# Servicio de Visión Docker - YOLOv26 + DocRes
 
 Microservicio dockerizado para procesamiento de imágenes de facturas con detección de esquinas (YOLO) y restauración de documentos (DocRes).
 
 ## 🎯 Características
 
-- **Detección de esquinas**: YOLOv11 segmentation para encontrar bordes de documentos
+- **Detección de esquinas**: YOLOv26 segmentation para encontrar bordes de documentos
 - **Restauración de imágenes**: DocRes para "planchar" arrugas, sombras y mejorar legibilidad
 - **Parámetros configurables**: Ajusta el procesamiento desde la UI sin reiniciar el servicio
 - **Optimizado para GPU**: RTX 3090 con CUDA 12.1
@@ -72,7 +72,7 @@ docker run --rm --gpus all nvidia/cuda:12.1.0-base-ubuntu22.04 nvidia-smi
 ```
 
 Esto descarga:
-- ✅ `yolo11n-seg.pt` (automático)
+- ✅ `yolo26n-seg.pt` (automático)
 - ⚠️ `docres.pt` (manual, ver más abajo)
 
 ### 2. Iniciar Servicios
@@ -188,7 +188,9 @@ vision:
 
 ## 📦 Modelos
 
-### YOLOv11 (Automático)
+### YOLOv26 (Automático)
+
+Field detection (invoice regions): This service can optionally run text-prompted field detection using YOLOE/YOLO models that support text prompts. The env var `FIELD_PROMPTS` controls which fields to look for (comma-separated), and `FIELD_DET_CONF` controls per-field confidence threshold. Detected regions are returned as `fields` in `/detect` and streamed as a `fields` stage in `/restore`.
 Se descarga automáticamente al ejecutar `download-models.sh` o al iniciar el contenedor.
 
 ### DocRes (Manual)
@@ -274,7 +276,12 @@ docker-compose exec vision bash
 docker-compose exec vision python -c "import torch; print(torch.cuda.is_available())"
 
 # Rebuild después de cambios
-docker-compose build vision --no-cache
+# Usa el cache por defecto para ahorrar ancho de banda y tiempo.
+# Sólo usa `--no-cache` si sabes que necesitas forzar la reconstrucción completa.
+# Ejemplo (rápido y recomendado):
+docker-compose build vision
+# Forzar sin cache (sólo si es necesario):
+# docker-compose build vision --no-cache
 
 # Detener todo
 docker-compose down
@@ -312,7 +319,7 @@ Para modificar el código:
 
 ## 📚 Referencias
 
-- [Ultralytics YOLOv11](https://docs.ultralytics.com/)
+- [Ultralytics YOLOv26](https://docs.ultralytics.com/)
 - [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [PyTorch Docker](https://hub.docker.com/r/pytorch/pytorch)

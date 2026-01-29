@@ -120,6 +120,102 @@ function IAAdjustmentsEditor({ defaultValue, onSaved }) {
   )
 }
 
+function ImageEnhancementParams({ onSaved }) {
+  const defaultParams = {
+    // Valores al mínimo (menos agresivo)
+    clahe_clip: 1.0,
+    kernel_size: 15,
+    shadow_threshold: 10,
+    brightness_boost: 1.0,
+    denoise_strength: 3,
+    sharpen_amount: 1.0,
+    contrast_boost: 1.0
+  }
+
+  const [params, setParams] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('imageEnhancementParams')
+      return stored ? JSON.parse(stored) : defaultParams
+    }
+    return defaultParams
+  })
+
+  const paramConfig = {
+    clahe_clip: { min: 1.0, max: 4.0, step: 0.1, label: 'CLAHE Clip', desc: 'Límite de contraste adaptativo (mayor = más contraste)' },
+    kernel_size: { min: 15, max: 61, step: 2, label: 'Kernel Size', desc: 'Tamaño del kernel para sombras (mayor = menos detalle, impar)' },
+    shadow_threshold: { min: 10, max: 40, step: 1, label: 'Shadow Threshold', desc: 'Umbral para detectar sombras (mayor = menos corrección)' },
+    brightness_boost: { min: 1.0, max: 1.15, step: 0.01, label: 'Brightness Boost', desc: 'Multiplicador de brillo en zonas oscuras' },
+    denoise_strength: { min: 3, max: 12, step: 1, label: 'Denoise Strength', desc: 'Fuerza del denoising (mayor = más suave, puede perder texto)' },
+    sharpen_amount: { min: 1.0, max: 1.3, step: 0.01, label: 'Sharpen Amount', desc: 'Cantidad de sharpening (mayor = más nitidez)' },
+    contrast_boost: { min: 1.0, max: 1.1, step: 0.01, label: 'Contrast Boost', desc: 'Boost final de contraste' }
+  }
+
+  const handleChange = (key, value) => {
+    const config = paramConfig[key]
+    let val = parseFloat(value)
+    
+    // Validar rangos
+    val = Math.max(config.min, Math.min(config.max, val))
+    
+    // Para kernel_size, asegurar que sea impar
+    if (key === 'kernel_size') {
+      val = Math.round(val)
+      if (val % 2 === 0) val += 1
+    }
+    
+    const newParams = { ...params, [key]: val }
+    setParams(newParams)
+    localStorage.setItem('imageEnhancementParams', JSON.stringify(newParams))
+    onSaved && onSaved(newParams)
+  }
+
+  const resetToDefaults = () => {
+    setParams(defaultParams)
+    localStorage.setItem('imageEnhancementParams', JSON.stringify(defaultParams))
+    onSaved && onSaved(defaultParams)
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="font-semibold text-sm">Parámetros de Mejora de Imagen</h3>
+        <div className="flex gap-2">
+          <button onClick={resetToDefaults} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Restaurar Predeterminados</button>
+          <button onClick={() => { setParams({ clahe_clip:1.0,kernel_size:15,shadow_threshold:10,brightness_boost:1.0,denoise_strength:3,sharpen_amount:1.0,contrast_boost:1.0 }); localStorage.setItem('imageEnhancementParams', JSON.stringify({ clahe_clip:1.0,kernel_size:15,shadow_threshold:10,brightness_boost:1.0,denoise_strength:3,sharpen_amount:1.0,contrast_boost:1.0 })); onSaved && onSaved({ clahe_clip:1.0,kernel_size:15,shadow_threshold:10,brightness_boost:1.0,denoise_strength:3,sharpen_amount:1.0,contrast_boost:1.0 }) }} className="text-xs px-2 py-1 bg-yellow-50 hover:bg-yellow-100 rounded">Poner al mínimo</button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-600 mb-3">
+        Ajusta cómo se procesan las imágenes al usar &quot;Mejorar documento&quot;. Valores más conservadores preservan mejor el texto.
+      </p>
+      
+      <div className="space-y-3">
+        {Object.entries(paramConfig).map(([key, config]) => (
+          <div key={key} className="border-b pb-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-medium">{config.label}</label>
+              <span className="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded">{params[key]}</span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">{config.desc}</p>
+            <input
+              type="range"
+              min={config.min}
+              max={config.max}
+              step={config.step}
+              value={params[key]}
+              onChange={(e) => handleChange(key, e.target.value)}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
+              <span>{config.min}</span>
+              <span>{config.max}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function ConfiguracionPage() {
   const [config, setConfig] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -153,6 +249,39 @@ export default function ConfiguracionPage() {
     load()
   }, [])
 
+  function AuditLoginToggle({ defaultValue, onSaved }) {
+    const [value, setValue] = useState(defaultValue === true)
+    const [saving, setSaving] = useState(false)
+
+    useEffect(() => setValue(defaultValue === true), [defaultValue])
+
+    const save = async () => {
+      setSaving(true)
+      try {
+        const res = await fetch('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'audit.login.enabled', value }), headers: { 'Content-Type': 'application/json' } })
+        const js = await res.json()
+        if (js.ok) {
+          alert('Audit setting guardado')
+          onSaved && onSaved(value)
+        } else {
+          alert('Error guardando')
+        }
+      } catch (e) { alert('Error guardando') } finally { setSaving(false) }
+    }
+
+    return (
+      <div className="mb-3">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={value} onChange={(e) => setValue(e.target.checked)} />
+          <span className="text-sm">Habilitar auditoría de acceso / intentos de login</span>
+        </label>
+        <div className="mt-2">
+          <button onClick={save} disabled={saving} className="px-3 py-1 bg-blue-600 text-white rounded text-sm">{saving ? 'Guardando...' : 'Guardar'}</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -184,6 +313,19 @@ export default function ConfiguracionPage() {
                   setLoading(false)
                 }} />
 
+                {/* Audit login toggle */}
+                <div className="mb-2">
+                  <AuditLoginToggle defaultValue={config.settings?.['audit.login.enabled']} onSaved={async () => {
+                    setLoading(true)
+                    const s = await fetch('/api/settings')
+                    const json = await s.json()
+                    const merged = { ...config }
+                    if (json.ok && json.settings) merged.settings = json.settings
+                    setConfig(merged)
+                    setLoading(false)
+                  }} />
+                </div>
+
                 <div className="mb-2"><strong>NODE_ENV:</strong> {config.env.nodeEnv}</div>
                 <div className="mb-2"><strong>IA - Ajustes por defecto:</strong>
                   <IAAdjustmentsEditor defaultValue={config.ia.DEFAULT_ADJUSTMENTS} onSaved={async (newVal) => {
@@ -197,6 +339,13 @@ export default function ConfiguracionPage() {
                 </div>
                 <div className="mb-2"><strong>IA - Modos disponibles:</strong>
                   <pre className="bg-gray-50 p-2 rounded mt-1 text-xs overflow-auto">{JSON.stringify(config.ia.MODES, null, 2)}</pre>
+                </div>
+
+                {/* Image Enhancement Parameters */}
+                <div className="mb-2 border-t pt-3">
+                  <ImageEnhancementParams onSaved={(newParams) => {
+                    console.log('Parámetros de mejora guardados:', newParams)
+                  }} />
                 </div>
               </div>
             )}
