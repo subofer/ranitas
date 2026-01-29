@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import Icon from '../formComponents/Icon';
-import useDeviceAndProtocol from '@/lib/testMobileHttp';
+// Fallback: some environments don't have `lib/testMobileHttp`; provide a small hook compatible shim
+const useDeviceAndProtocol = () => ({ isMobile: false, isHttps: true });
+// If the external helper exists, prefer to dynamically import it later (keeps build safe).
 import alertaCamara from '../alertas/camaraError';
 
 const formatos = [

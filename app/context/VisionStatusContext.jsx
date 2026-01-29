@@ -22,7 +22,6 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
       let res = null
       try {
         res = await fetch('/api/ai/status', { signal: AbortSignal.timeout(5000) })
-        if (!res || !res.ok) res = null
       } catch (e) { res = null }
 
       if (!res) {
@@ -30,6 +29,7 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
         return { ok: false, hasUnloaded: false }
       }
 
+      // Attempt to parse body even if status is non-2xx; server may return partial debug info in body
       const data = await (async () => { try { return await res.json() } catch (e) { return null } })()
       if (!data) {
         setProbeState('error')
@@ -37,7 +37,33 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
       }
 
       // Trust the service payload as authoritative. Expose explicit docker service info (ia and db)
-      const si = { ...data, source: data.service === 'vision-ai' ? 'vision-ai' : 'proxy' }
+      // The server response puts runtime details inside `data.status` (see /api/ai/status)
+      const statusPayload = data?.status || {}
+      const si = { ...statusPayload, source: (statusPayload.service === 'vision-ai' || data?.service === 'vision-ai') ? 'vision-ai' : 'proxy' }
+
+      // Heuristic fallback: if the server included a `ps_raw` list but didn't set container_running,
+      // aggregate any PS output we can find and try to detect common container names (ranitas-vision, postgres)
+      try {
+        let psAggregate = ''
+        if (si && typeof si.container?.ps_raw === 'string') psAggregate += si.container.ps_raw + '\n'
+        if (si && typeof si.container?.db?.ps_raw === 'string') psAggregate += si.container.db.ps_raw + '\n'
+        if (si && typeof si.db?.ps_raw === 'string') psAggregate += si.db.ps_raw + '\n'
+
+        if (psAggregate) {
+          if (si && si.container && !si.container.container_running && psAggregate.includes('ranitas-vision')) {
+            si.container.container_running = true
+            si.container.name = si.container.name || 'ranitas-vision'
+            if (psAggregate.includes('(healthy)')) si.container.health = si.container.health || 'healthy'
+          }
+
+          if (si && si.db && !si.db.container_running && /postgres|postgres:|postgresql|pg/i.test(psAggregate)) {
+            si.db.container_running = true
+            si.db.name = si.db.name || si.db.container_candidate || (psAggregate.match(/\b(\S+)\s+ranitas-postgres-\S+/)?.[1] || 'postgres')
+            if (psAggregate.includes('(healthy)')) si.db.health = si.db.health || 'healthy'
+          }
+        }
+      } catch (heurErr) { /* ignore heuristics errors */ }
+
       setStatusInfo(si)
       setProbeState('ok')
 
@@ -49,7 +75,7 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
         // collect from known subsystems without inventing names
         const subsystemKeys = ['yolo', 'ollama']
         for (const key of subsystemKeys) {
-          const val = data[key]
+          const val = statusPayload[key] || data[key]
           if (val && Array.isArray(val.models) && val.models.length > 0) {
             for (const m of val.models) newLoadedModels.push({ name: m, loaded: true })
           } else if (val && typeof val.model === 'string') {
@@ -63,9 +89,11 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
       setLoadedModels(newLoadedModels)
 
       // Keep docker-specific info grouped for easy consumption by UI
+      // Prefer the post-processed `si` which may include heuristics derived from ps_raw
       const dockerServices = {
-        ia: data?.container || data?.vision || null,
-        db: data?.db || data?.postgres || null
+        ia: si?.container || si?.vision || statusPayload?.container || data?.container || null,
+        // Prefer the container-scoped db info (status.container.db) if present, then fall back to other fields
+        db: (statusPayload?.container && statusPayload.container.db) || si?.db || si?.postgres || statusPayload?.db || data?.db || null
       }
       setDockerServices(dockerServices)
 

@@ -128,7 +128,8 @@ function ControlHeader({
   preloading,
   preloadProgress,
   tab,
-  setTab
+  setTab,
+  minimalHeader = true
 }) {
   // Usar el contexto para reflejar estado real de los servicios Docker (IA/DB)
   const { loadedModels, refresh, probeState, statusInfo, dockerServices } = useVisionStatusContext()
@@ -148,7 +149,7 @@ function ControlHeader({
           <div className="flex items-start gap-4">
             <div className="flex flex-col gap-1">
               <div className="flex flex-col gap-1 w-full">
-                {(loadedModels && loadedModels.length > 0) ? (
+                {!minimalHeader && (loadedModels && loadedModels.length > 0) ? (
                   // Mostrar exactamente lo que el servicio reporta: nombre a la izquierda, tilde al final (alineado a la derecha)
                   loadedModels.map((lm, idx) => {
                     const name = lm.name || (typeof lm === 'string' ? lm : String(lm))
@@ -247,6 +248,7 @@ const IaPrompt = () => {
         preloadProgress={preloadProgress}
         tab={tab}
         setTab={setTab}
+        minimalHeader={true}
       />
 
       <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-6">

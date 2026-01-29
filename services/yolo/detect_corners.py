@@ -1406,9 +1406,23 @@ async def status_endpoint():
     # qwen presence inference
     qwen_present = any(OLLAMA_MODEL == m or (m and OLLAMA_MODEL.split(':')[0] in m) for m in ollama_models)
 
+    # Build a unified models list: ollama models first, then yolo model (if present)
+    unified_models = []
+    if ollama_models:
+        unified_models.extend([m for m in ollama_models if m])
+    if yolo_model_name:
+        if yolo_model_name not in unified_models:
+            unified_models.append(yolo_model_name)
+
+    # Ensure loaded_models reflects unified list
+    for m in unified_models:
+        if m and m not in loaded_models:
+            loaded_models.append(m)
+
     return JSONResponse({
         "ok": True,
         "service": "vision-ai",
+        "models": unified_models,
         "cuda": {
             "available": cuda_available,
             "gpu": gpu_name,
@@ -1424,8 +1438,13 @@ async def status_endpoint():
         "yolo": {
             "loaded": _yolo_model is not None,
             "path": MODEL_PATH,
-            "model": yolo_model_name
+            "model": yolo_model_name,
+            "models": ([yolo_model_name] if yolo_model_name else [])
         },
+        "services": [
+            {"name": "yolo/seg", "source": "ranitas-vision", "models": ([yolo_model_name] if yolo_model_name else []), "type": "vision"},
+            {"name": "ollama", "source": "ranitas-vision", "models": ollama_models, "type": "llm"}
+        ],
         "loadedModels": loaded_models
     })
 
