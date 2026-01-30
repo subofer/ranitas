@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState, useMemo, useRef } from "react"
+import { useEffect, useState, useMemo, useRef, useCallback } from "react"
 import IaChat from "./IaChat"
 import IaImage from "./IaImage"
 import FilterSelect from "../formComponents/FilterSelect"
@@ -135,10 +135,10 @@ function ControlHeader({
   const { loadedModels, refresh, probeState, statusInfo, dockerServices } = useVisionStatusContext()
 
   return (
-    <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-5 ia-control-header">
-      <div className="flex items-start gap-3">
+    <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-3 ia-control-header">
+      <div className="flex items-start gap-2">
         <div className="flex flex-col">
-          <div className="flex items-center gap-3 mb-2">
+          <div className="flex items-center gap-2 mb-1">
             {/* Controles mínimos incrustados en el header: icono Docker, nombre de contenedor, play/restart + stop */}
             <VisionControls minimal />
 
@@ -146,8 +146,8 @@ function ControlHeader({
 
           </div>
 
-          <div className="flex items-start gap-4">
-            <div className="flex flex-col gap-1">
+          <div className="flex items-start gap-3">
+            <div className="flex flex-col gap-0.5">
               <div className="flex flex-col gap-1 w-full">
                 {!minimalHeader && (loadedModels && loadedModels.length > 0) ? (
                   // Mostrar exactamente lo que el servicio reporta: nombre a la izquierda, tilde al final (alineado a la derecha)

@@ -50,14 +50,13 @@ export default function DockerServiceBlock({ target = 'vision', label = 'Service
   }
 
   const Controls = () => (
-    <div className={`flex items-center gap-2 ${compact ? 'text-xs' : 'text-sm'}`}>
+    <div className={`flex items-center gap-1 ${compact ? 'text-xs' : 'text-sm'}`}>
       {isRunning ? (
-        <button onClick={() => onAction('restart')} disabled={running} className="hover:underline">Reiniciar</button>
+        <button onClick={() => onAction('restart')} disabled={running} className="text-xs hover:underline">[rtart]</button>
       ) : (
-        <button onClick={() => onAction('start')} disabled={running} className="hover:underline">Iniciar</button>
+        <button onClick={() => onAction('start')} disabled={running} className="text-xs hover:underline">[start]</button>
       )}
-      <button onClick={() => onAction('stop')} disabled={running} className="hover:underline">Detener</button>
-      <button onClick={() => onAction('logs')} disabled={running} className="hover:underline">Logs</button>
+      <button onClick={() => onAction('stop')} disabled={running} className="text-xs hover:underline">[stop]</button>
     </div>
   )
 
@@ -81,6 +80,8 @@ export default function DockerServiceBlock({ target = 'vision', label = 'Service
             <div className="flex items-baseline gap-2">
               <span className={`${compact ? 'text-sm' : 'text-base'} font-medium`}>{name}</span>
               <span className={`ml-2 inline-block h-2 w-2 rounded-full ${isRunning ? 'bg-green-500' : 'bg-red-500'}`} />
+
+
             </div>
           </div>
 
@@ -92,7 +93,7 @@ export default function DockerServiceBlock({ target = 'vision', label = 'Service
           </div>
 
         {!controlsLeft && (
-          <div className="ml-auto flex items-center gap-2 text-xs text-gray-500">
+          <div className="ml-auto flex items-center gap-1 text-xs text-gray-500">
             <Controls />
             <button onClick={async () => {
               setRunning(true)

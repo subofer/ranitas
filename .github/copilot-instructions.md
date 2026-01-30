@@ -77,3 +77,5 @@
 - **Seguridad**: Handlers críticos protegidos con `try/catch`. Errores de hardware (Ollama, Cámara) logueados en auditoría.
 - **Calidad**: Uso de Linting obligatorio, JSDoc para funciones públicas y verificación estricta de `useState`.
 - **Arquitectura UI**: Filas expandibles para presentaciones y modales vinculados por `supplier_id`.
+
+POR AHORA NO HACEMOS NUNCA TESTS AUTOMATIZADOS.

@@ -84,11 +84,29 @@ export async function GET() {
                 if (!Array.isArray(data.loadedModels)) data.loadedModels = []
                 if (!data.loadedModels.includes(yname)) data.loadedModels.push(yname)
               }
-              if (data && !Array.isArray(data.services)) {
+              if (data) {
+                // Build services list only for subsystems that are ready/available. Use events to surface a 'since' timestamp when available.
                 const services = []
-                if (data.yolo) services.push({ name: 'yolo/seg', source: 'ranitas-vision', type: 'vision', models: data.yolo.models || [] })
-                if (data.ollama) services.push({ name: 'ollama', source: 'ranitas-vision', type: 'llm', models: data.ollama.models || [] })
-                data.services = services
+                const events = Array.isArray(data.events) ? data.events : []
+                const findSince = (svc) => {
+                  const ev = events.slice().reverse().find(e => e.service === svc && /load|ready|models_available|loaded/i.test(String(e.message)))
+                  return ev ? ev.ts : null
+                }
+
+                if (data.yolo && data.yolo.loaded) {
+                  services.push({ name: 'yolo/seg', source: 'ranitas-vision', type: 'vision', models: data.yolo.models || [], ready: true, since: findSince('yolo') })
+                }
+
+                if (data.geometry && data.geometry.status) {
+                  services.push({ name: 'geometry', source: 'ranitas-vision', type: 'geometry', models: [], ready: data.geometry.status === 'ready', since: findSince('geometry') })
+                }
+
+                if (data.ollama && (data.ollama.ready || (Array.isArray(data.ollama.models) && data.ollama.models.length > 0))) {
+                  services.push({ name: 'ollama', source: 'ranitas-vision', type: 'llm', models: data.ollama.models || [], ready: Boolean(data.ollama.ready), since: findSince('ollama') })
+                }
+
+                data.services = services.length ? services : null
+
                 // Ensure ollama models are reflected in loadedModels too
                 if (data.ollama && Array.isArray(data.ollama.models) && data.ollama.models.length > 0) {
                   if (!Array.isArray(data.loadedModels)) data.loadedModels = []

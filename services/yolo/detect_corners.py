@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-"""Production-ready FastAPI Vision Service - RTX 3090 Optimized
+# Legacy monolith removed. Placeholder kept to avoid accidental import-time failures.
+# Use the modular services instead: vision.py, inferencia.py, orchestrator.py, status.py
 
-Unified stack: YOLOv26 + Ollama (qwen2.5-vl:7b) + FastAPI
-All models stay in VRAM (keep_alive: -1)
-
-Zero waste: No transformers, no bitsandbytes, no local LLM loading.
-Pure Ollama orchestration for invoice parsing.
-"""
+# noop placeholder - no side effects
+__all__ = []
 
 import os
 import sys
@@ -70,6 +66,32 @@ VISION_VERBOSE = os.environ.get('VISION_VERBOSE', '0') in ('1', 'true', 'True', 
 
 # === GLOBALS ===
 _yolo_model = None
+_last_vram_reported = None
+
+# Use centralized state module for events and shared state
+try:
+    import services.yolo.state as state
+except Exception:
+    try:
+        # fallback if running from same dir
+        import state
+    except Exception:
+        state = None
+
+def add_event(service: str, message: str, level: str = 'info'):
+    """Proxy to centralized state.add_event when available; otherwise no-op.'"""
+    try:
+        if state is not None:
+            state.add_event(service, message, level)
+        else:
+            # best-effort: log locally
+            try:
+                ts = time.strftime('%Y-%m-%dT%H:%M:%S%z', time.localtime())
+                print(f"{ts} {service}: {message}")
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 app = FastAPI(title="Vision AI Service")
 
@@ -85,63 +107,90 @@ app.add_middleware(
 # === Startup preloads ===
 @app.on_event('startup')
 async def _vision_startup_preload():
-    """Preload heavy models so /status and /models show them as loaded.
-    - Load YOLO eagerly so the UI sees 'loaded'=True
-    - Probe Ollama availability and qwen model presence
+    """Schedule model preloads and probes in background tasks so FastAPI/Status starts immediately.
+    This ensures /status is available from the beginning and heavy loads run in separate threads.
     """
-    tprint('🚀 Starting unified Vision AI stack (RTX 3090 optimized)')
+    tprint('🚀 Starting unified Vision AI stack (scheduling background preload)')
 
-    # GPU probe
-    try:
-        import torch
-        if torch.cuda.is_available():
+    async def _background_preload():
+        # GPU probe (best-effort logging)
+        try:
+            import torch
+            if torch.cuda.is_available():
+                try:
+                    name = torch.cuda.get_device_name(0)
+                    mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                    tprint(f"✅ GPU: {name} ({mem:.1f}GB)")
+                except Exception:
+                    tprint('✅ GPU detected (details unavailable)')
+            else:
+                tprint('⚠️ GPU not available')
+        except Exception:
+            tprint('⚠️ Could not probe GPU')
+
+        # Pre-warm YOLO in executor (non-blocking for server startup)
+        try:
+            tprint('⏱ Scheduling YOLO pre-warm (background)')
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, get_yolo_model)
+            tprint('Startup: YOLO preload complete')
             try:
-                name = torch.cuda.get_device_name(0)
-                mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                tprint(f"✅ GPU: {name} ({mem:.1f}GB)")
-            except Exception:
-                tprint('✅ GPU detected (details unavailable)')
-        else:
-            tprint('⚠️ GPU not available')
-    except Exception:
-        tprint('⚠️ Could not probe GPU')
-
-    # Pre-warm YOLO
-    tprint('⏱ Pre-warming YOLO model (fast)')
-    try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, get_yolo_model)
-        tprint('Startup: YOLO preload complete')
-    except Exception:
-        logger.exception('Startup: YOLO preload failed')
-
-    # Probe Ollama and check configured model presence
-    tprint('🧠 Probing Ollama API...')
-    try:
-        resp = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=3)
-        if resp.status_code == 200:
-            tprint('✅ Ollama API ready')
-            try:
-                models = [m.get('name') for m in resp.json().get('models', [])]
-                tprint(f'⬇️ Checking for {OLLAMA_MODEL} locally... (OLLAMA_AUTO_PULL={os.environ.get("OLLAMA_AUTO_PULL", "0")})')
-                if OLLAMA_MODEL in models:
-                    tprint(f'ℹ️ Model {OLLAMA_MODEL} present locally')
-                    tprint(f'🔥 Warming {OLLAMA_MODEL} with keep_alive=-1 (permanent VRAM lock)...')
-                    # Optionally a warming call could be done here
-                    tprint(f'✅ {OLLAMA_MODEL} locked in VRAM (or warm attempted)')
+                if state is not None:
+                    try:
+                        import os as _os
+                        name = _os.path.splitext(_os.path.basename(MODEL_PATH))[0]
+                    except Exception:
+                        name = None
+                    state.set_yolo_loaded(True, model_name=name)
                 else:
-                    if os.environ.get('OLLAMA_AUTO_PULL', '0') in ('0', 'false', 'False'):
-                        tprint(f'⚠️ OLLAMA_AUTO_PULL=0 -> skipping automatic pull of {OLLAMA_MODEL}')
-                    else:
-                        tprint(f'⚠️ Model {OLLAMA_MODEL} not present locally')
+                    add_event('yolo', 'loaded (preload)')
             except Exception:
-                tprint('⚠️ Could not parse Ollama models list')
-        else:
-            tprint(f'⚠️ Ollama probe returned status {resp.status_code}')
-    except Exception:
-        tprint(f'⚠️ Ollama not reachable at {OLLAMA_HOST}')
+                pass
+        except Exception:
+            logger.exception('Background: YOLO preload failed')
 
-    tprint('🎯 Starting FastAPI...')
+        # Probe Ollama and check configured model presence (background)
+        try:
+            tprint('🧠 Probing Ollama API (background)')
+            resp = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                tprint('✅ Ollama API ready')
+                try:
+                    models = [m.get('name') for m in resp.json().get('models', [])]
+                    tprint(f'⬇️ Checking for {OLLAMA_MODEL} locally... (OLLAMA_AUTO_PULL={os.environ.get("OLLAMA_AUTO_PULL", "0")})')
+                    if OLLAMA_MODEL in models:
+                        tprint(f'ℹ️ Model {OLLAMA_MODEL} present locally')
+                        tprint(f'🔥 Warming {OLLAMA_MODEL} with keep_alive=-1 (permanent VRAM lock) (background)...')
+                        tprint(f'✅ {OLLAMA_MODEL} locked in VRAM (or warm attempted)')
+                        try:
+                            if models:
+                                if state is not None:
+                                    state.set_ollama(True, models=models)
+                                else:
+                                    add_event('ollama', f'models_available: {",".join(models)}')
+                        except Exception:
+                            pass
+                    else:
+                        if os.environ.get('OLLAMA_AUTO_PULL', '0') in ('0', 'false', 'False'):
+                            tprint(f'⚠️ OLLAMA_AUTO_PULL=0 -> skipping automatic pull of {OLLAMA_MODEL}')
+                        else:
+                            tprint(f'⚠️ Model {OLLAMA_MODEL} not present locally')
+                except Exception:
+                    tprint('⚠️ Could not parse Ollama models list')
+            else:
+                tprint(f'⚠️ Ollama probe returned status {resp.status_code}')
+        except Exception:
+            tprint(f'⚠️ Ollama not reachable at {OLLAMA_HOST}')
+
+    # Schedule background preload and return immediately so the app can accept status probes
+    try:
+        asyncio.create_task(_background_preload())
+    except Exception:
+        # Fallback: run synchronously but wrapped in thread to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        loop.run_in_executor(None, lambda: None)
+
+    tprint('🎯 FastAPI startup scheduled. Status endpoint available immediately.')
 
 
 def get_yolo_model():
@@ -158,6 +207,18 @@ def get_yolo_model():
             t1 = time.time()
             took_ms = int((t1 - t0) * 1000)
             tprint(f"YOLO pre-warm: loaded= True took_ms= {took_ms}")
+            try:
+                if state is not None:
+                    try:
+                        import os as _os
+                        name = _os.path.splitext(_os.path.basename(MODEL_PATH))[0]
+                    except Exception:
+                        name = None
+                    state.set_yolo_loaded(True, model_name=name)
+                else:
+                    add_event('yolo', 'loaded')
+            except Exception:
+                pass
         except Exception as e:
             logger.warning(f"YOLO warmup failed: {e}")
 
@@ -1358,95 +1419,43 @@ async def models_load(request: 'fastapi.Request'):
         return JSONResponse({'ok': False, 'error': 'invalid_json', 'details': str(e)}, status_code=400)
 
 
-@app.get("/status")
-async def status_endpoint():
-    """Health and model status"""
-    try:
-        import torch
-        cuda_available = torch.cuda.is_available()
-        gpu_name = torch.cuda.get_device_name(0) if cuda_available else None
-        vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**3 if cuda_available else 0
-    except:
-        cuda_available = False
-        gpu_name = None
-        vram_total = 0
-    
-    # Check Ollama
-    ollama_ready = False
-    ollama_models = []
-    try:
-        resp = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
-        if resp.status_code == 200:
-            ollama_ready = True
-            data = resp.json()
-            ollama_models = [m.get('name') for m in data.get('models', [])]
-    except:
-        pass
-    
-    # Derive explicit model names for reporting consistency
-    loaded_models = []
+# Include modular routers: prefer top-level modules (status, vision, inferencia),
+# fallback to `services.yolo.*` if needed. This ensures routers are available regardless of package layout.
 
-    # Ollama models (if any)
-    if ollama_models:
-        loaded_models.extend([m for m in ollama_models if m])
+def _include_router_by_names(names):
+    for name in names:
+        try:
+            mod = __import__(name, fromlist=['router'])
+            router = getattr(mod, 'router', None)
+            if router is not None:
+                app.include_router(router)
+                tprint(f'✅ Included router from {name}')
+            # call optional startup helpers if present
+            if hasattr(mod, 'start_prewarm'):
+                try:
+                    mod.start_prewarm()
+                    tprint(f'✅ Called start_prewarm in {name}')
+                except Exception as e:
+                    tprint(f'⚠️ start_prewarm in {name} failed: {e}')
+            if hasattr(mod, 'start_probe'):
+                try:
+                    mod.start_probe(OLLAMA_HOST, OLLAMA_MODEL)
+                    tprint(f'✅ Called start_probe in {name}')
+                except Exception as e:
+                    tprint(f'⚠️ start_probe in {name} failed: {e}')
+            return True
+        except Exception as e:
+            tprint(f'ℹ️ Could not import {name}: {e}')
+    return False
 
-    # YOLO: if model path exists and YOLO is loaded, derive a model name from the filename
-    yolo_model_name = None
-    try:
-        if _yolo_model is not None or (os.path.exists(MODEL_PATH)):
-            basename = os.path.basename(MODEL_PATH)
-            yolo_model_name = os.path.splitext(basename)[0]
-            loaded_models.append(yolo_model_name)
-    except Exception:
-        yolo_model_name = None
+# Try top-level first, then package-qualified names
+_include_router_by_names(['status', 'vision', 'inferencia'])
+_include_router_by_names(['services.yolo.status', 'services.yolo.vision', 'services.yolo.inferencia'])
 
-    # Normalize unique names
-    loaded_models = list(dict.fromkeys([s for s in loaded_models if s]))
+# Add orchestrator router if available
+_include_router_by_names(['orchestrator', 'services.yolo.orchestrator'])
 
-    # qwen presence inference
-    qwen_present = any(OLLAMA_MODEL == m or (m and OLLAMA_MODEL.split(':')[0] in m) for m in ollama_models)
-
-    # Build a unified models list: ollama models first, then yolo model (if present)
-    unified_models = []
-    if ollama_models:
-        unified_models.extend([m for m in ollama_models if m])
-    if yolo_model_name:
-        if yolo_model_name not in unified_models:
-            unified_models.append(yolo_model_name)
-
-    # Ensure loaded_models reflects unified list
-    for m in unified_models:
-        if m and m not in loaded_models:
-            loaded_models.append(m)
-
-    return JSONResponse({
-        "ok": True,
-        "service": "vision-ai",
-        "models": unified_models,
-        "cuda": {
-            "available": cuda_available,
-            "gpu": gpu_name,
-            "vram_gb": round(vram_total, 1)
-        },
-        "ollama": {
-            "ready": ollama_ready,
-            "host": OLLAMA_HOST,
-            "models": ollama_models,
-            "configured_model": OLLAMA_MODEL,
-            "qwen_present": qwen_present
-        },
-        "yolo": {
-            "loaded": _yolo_model is not None,
-            "path": MODEL_PATH,
-            "model": yolo_model_name,
-            "models": ([yolo_model_name] if yolo_model_name else [])
-        },
-        "services": [
-            {"name": "yolo/seg", "source": "ranitas-vision", "models": ([yolo_model_name] if yolo_model_name else []), "type": "vision"},
-            {"name": "ollama", "source": "ranitas-vision", "models": ollama_models, "type": "llm"}
-        ],
-        "loadedModels": loaded_models
-    })
+# Modular status now serves as the canonical /status provider.
 
 
 @app.post('/debug/restore')

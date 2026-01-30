@@ -88,6 +88,14 @@ export function VisionStatusProvider({ children, autoRefresh = true, refreshInte
 
       setLoadedModels(newLoadedModels)
 
+      // Adjust polling interval based on LLM loading state
+      const llmService = statusPayload?.services?.find(s => s.name === 'ollama')
+      const isLlmLoading = llmService && !llmService.ready
+      const newInterval = isLlmLoading ? 1000 : refreshInterval // 1 second when loading, normal interval otherwise
+      if (newInterval !== currentPollingInterval) {
+        setCurrentPollingInterval(newInterval)
+      }
+
       // Keep docker-specific info grouped for easy consumption by UI
       // Prefer the post-processed `si` which may include heuristics derived from ps_raw
       const dockerServices = {

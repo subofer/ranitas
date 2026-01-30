@@ -14,6 +14,24 @@ export default function VisionControls({ minimal = false }) {
   // Consider the service running if there are loadedModels, or if subsystems report themselves as ready
   const isRunning = Boolean((loadedModels && loadedModels.length > 0) || statusInfo?.yolo?.loaded)
 
+  // Function to clean command output by removing docker paths
+  const cleanCommandOutput = (output) => {
+    if (!output) return output
+    // Remove docker exec prefixes and keep only the actual command
+    return output
+      .split('\n')
+      .map(line => {
+        // Remove docker exec ... patterns
+        const dockerExecMatch = line.match(/docker exec [^\s]+ (.+)/)
+        if (dockerExecMatch) return dockerExecMatch[1]
+        // Remove full paths from commands, keep only basename
+        const pathMatch = line.match(/\/[^\s]*\/([^\s]+)/)
+        if (pathMatch) return line.replace(/\/[^\s]*\//, '')
+        return line
+      })
+      .join('\n')
+  }
+
   const callAction = async (action) => {
     setRunning(true)
     setError(null)
@@ -57,6 +75,7 @@ export default function VisionControls({ minimal = false }) {
     return (
       <>
         <div className="flex flex-col gap-1">
+          <div className="text-xs text-gray-500 font-medium mb-1">Servicios</div>
           <div className="w-full">
             <DockerStatusDisplay compact target="db" />
           </div>
@@ -70,11 +89,11 @@ export default function VisionControls({ minimal = false }) {
 
   return (
     <div className="flex flex-col items-end gap-4">
-      <div className="w-full flex flex-col gap-3">
+      <div className="w-full flex flex-col gap-0">
         {/* DB block above IA */}
         <div>
           <div className="text-xs text-gray-500 font-medium mb-1">Database</div>
-          <div className="px-3 py-2 bg-white rounded border border-gray-100 shadow-sm">
+          <div className="px-3 pt-2 pb-0 bg-white rounded border border-gray-100 shadow-sm">
             <DockerStatusDisplay controlsLeft target="db" />
           </div>
         </div>
@@ -82,7 +101,7 @@ export default function VisionControls({ minimal = false }) {
         {/* IA block (vision) */}
         <div>
           <div className="text-xs text-gray-500 font-medium mb-1">Servicio vision</div>
-          <div className="px-3 py-2 bg-white rounded border border-gray-100 shadow-sm">
+          <div className="px-3 pt-2 pb-0 bg-white rounded border border-gray-100 shadow-sm">
             <DockerStatusDisplay controlsLeft target="vision" />
 
           </div>
@@ -93,7 +112,7 @@ export default function VisionControls({ minimal = false }) {
 
       {running && <div className="text-xs text-gray-500 mt-1">Ejecutando...</div>}
       {lastOutput && (
-        <pre className="mt-2 max-w-2xl overflow-auto bg-gray-50 p-2 rounded text-xs text-gray-800 border border-gray-100 whitespace-pre-wrap">{lastOutput}</pre>
+        <pre className="mt-2 max-w-2xl overflow-auto bg-gray-50 p-2 rounded text-xs text-gray-800 border border-gray-100 whitespace-pre-wrap">{cleanCommandOutput(lastOutput)}</pre>
       )}
       {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
     </div>

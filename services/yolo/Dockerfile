@@ -38,7 +38,8 @@ RUN pip3 install --no-cache-dir \
     torchvision==0.17.0 \
     --index-url https://download.pytorch.org/whl/cu121
 
-# Install ultralytics and other deps
+
+# Instalar dependencias principales (incluye nvidia-ml-py3, no pynvml)
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Install ultralytics separately to ensure compatibility
@@ -50,7 +51,8 @@ RUN pip3 install --no-cache-dir "numpy<2"
 RUN pip3 install --no-cache-dir opencv-python-headless==4.9.0.80
 
 # Application code
-COPY detect_corners.py .
+# Copia todos los módulos python del contexto actual (como antes), pero sin copiar detect_corners.py
+COPY *.py .
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
