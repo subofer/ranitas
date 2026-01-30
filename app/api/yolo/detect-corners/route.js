@@ -69,9 +69,9 @@ export async function POST(req) {
     // Proxy the image to the YOLO service
     const proxyForm = new FormData()
     // The incoming File / Blob can be appended directly
-    proxyForm.append('image', image, image.name || 'upload.jpg')
+    proxyForm.append('file', image, image.name || 'upload.jpg')
 
-    const resp = await fetch(YOLO_URL + '/process-document', { method: 'POST', body: proxyForm })
+    const resp = await fetch(YOLO_URL + '/vision/detect', { method: 'POST', body: proxyForm })
     const data = await resp.json().catch(async (e) => {
       const txt = await resp.text().catch(() => '')
       return { ok: false, error: 'Invalid response from YOLO service', raw: txt }

@@ -4,13 +4,13 @@ const VISION_HOST = process.env.VISION_HOST || 'http://localhost:8000'
 
 export async function GET() {
   try {
-    // Forward to vision:/models to get list of available IA components and loaded models
-    const res = await fetch(`${VISION_HOST}/models`)
-    if (!res.ok) throw new Error(`Vision models HTTP ${res.status}`)
+    // Forward to vision:/status to get list of available IA components and loaded models
+    const res = await fetch(`${VISION_HOST}/status`)
+    if (!res.ok) throw new Error(`Vision status HTTP ${res.status}`)
 
     const data = await res.json()
-    // Normalize to simple model list for compatibility with frontend
-    const models = (data?.available || []).map(m => m.name)
+    // Extract models from status response
+    const models = data?.loadedModels || data?.models || []
 
     return NextResponse.json({ ok: true, models, raw: data })
   } catch (err) {

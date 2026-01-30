@@ -53,7 +53,7 @@ export async function POST(req) {
     // Record audit (fire-and-forget)
     try {
       const { auditAction } = await import('@/lib/actions/audit')
-      auditAction({ level: 'INFO', category: 'IA', action: 'CONTROL_VISION', message: `Executed ${action}`, metadata: { cmd, output: output ? (output.length ? output.slice(0, 2000) : output) : null } }).catch(()=>{})
+      auditAction({ level: 'INFO', category: 'SYSTEM', action: 'CONTROL_VISION', message: `Executed ${action}`, metadata: { cmd, output: output ? (output.length ? output.slice(0, 2000) : output) : null } }).catch(()=>{})
     } catch (auditErr) {
       console.warn('Could not create audit log for vision-control:', auditErr)
     }
@@ -64,7 +64,7 @@ export async function POST(req) {
     // Audit error
     try {
       const { auditAction } = await import('@/lib/actions/audit')
-      auditAction({ level: 'ERROR', category: 'IA', action: 'CONTROL_VISION', message: `Action ${action} failed`, metadata: { error: String(err) } }).catch(()=>{})
+      auditAction({ level: 'ERROR', category: 'SYSTEM', action: 'CONTROL_VISION', message: `Action ${action} failed`, metadata: { error: String(err) } }).catch(()=>{})
     } catch (auditErr) {
       console.warn('Could not create audit log for failed vision-control:', auditErr)
     }

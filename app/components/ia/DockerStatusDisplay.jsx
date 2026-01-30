@@ -13,10 +13,11 @@ export default function DockerStatusDisplay({ target = 'vision', compact = false
   const isRunning = Boolean(svc?.container_running)
   const name = isRunning ? (svc?.name || svc?.container_candidate || (target === 'vision' ? 'servidor llm' : target)) : (target === 'vision' ? 'servidor llm' : 'base de datos')
 
-  // Icon color: soft orange/red = offline, orange = starting, blue = running
-  const iconClass = !isRunning ? 'text-orange-300' : (svc?.health && /start/i.test(String(svc.health)) ? 'text-orange-500' : 'text-[#2496ED]')
+  // Icon color: grey = offline, orange = starting, blue = running
+  const iconClass = !isRunning ? 'text-gray-400' : (svc?.health && /starting|start/i.test(String(svc.health)) ? 'text-orange-500' : 'text-[#2496ED]')
 
-  // Derive services/models and formatted display pieces (GPU, VRAM used/total, and Models list)
+
+// Derive services/models and formatted display pieces (GPU, VRAM used/total, and Models list)
   let serviceItems = []
   let modelsList = []
   let gpuName = null
@@ -205,16 +206,28 @@ export default function DockerStatusDisplay({ target = 'vision', compact = false
       <div className="flex items-center justify-start gap-0.5" style={containerStyle}>
         <div className="flex items-center gap-1">
           {/* Docker icon */}
-          <svg className={`${iconClass} transition-colors`} width={20} height={20} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor" aria-hidden="true">
-            <path d="M13.983 11.078c0-.5-.166-.917-.496-1.25-.33-.333-.742-.5-1.236-.5-.494 0-.906.167-1.236.5-.33.333-.496.75-.496 1.25 0 .5.166.917.496 1.25.33.333.742.5 1.236.5.494 0 .906-.167 1.236-.5.33-.333.496-.75.496-1.25z"/>
-            <path d="M22.5 12c0-5.79-4.71-10.5-10.5-10.5S1.5 6.21 1.5 12s4.71 10.5 10.5 10.5S22.5 17.79 22.5 12zm-2.25 0c0 4.556-3.694 8.25-8.25 8.25S3.75 16.556 3.75 12 7.444 3.75 12 3.75s8.25 3.694 8.25 8.25z"/>
-            <path d="M12 6.75c-3.314 0-6 2.686-6 6s2.686 6 6 6 6-2.686 6-6-2.686-6-6-6zm0 10.5c-2.485 0-4.5-2.015-4.5-4.5s2.015-4.5 4.5-4.5 4.5 2.015 4.5 4.5-2.015 4.5-4.5 4.5z"/>
-            <path d="M12 9.75c-1.241 0-2.25 1.009-2.25 2.25s1.009 2.25 2.25 2.25 2.25-1.009 2.25-2.25-1.009-2.25-2.25-2.25z"/>
-          </svg>
+            <div className="flex-shrink-0 flex items-center justify-center w-[20px] h-[20px]">
+              <div 
+                className={`${iconClass} transition-colors duration-300`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: 'currentColor',
+                  maskImage: 'url("https://cdn.simpleicons.org/docker")',
+                  WebkitMaskImage: 'url("https://cdn.simpleicons.org/docker")',
+                  maskRepeat: 'no-repeat',
+                  WebkitMaskRepeat: 'no-repeat',
+                  maskPosition: 'center',
+                  WebkitMaskPosition: 'center',
+                  maskSize: 'contain',
+                  WebkitMaskSize: 'contain'
+                }}
+              />
+            </div>
 
           {/* Container name */}
           <span className={`${compact ? 'text-sm' : 'text-base'} font-medium whitespace-nowrap`}>
-            {name} <span className={`text-gray-500 text-[8px] ${expanded ? 'invisible' : ''}`}>{vramInfo}</span>
+            {name} <span className="text-gray-500 text-[10px] ml-1">{vramInfo}</span>
           </span>
         </div>
 

@@ -206,7 +206,10 @@ export async function GET() {
     const { mapStatusData } = await import('../../../../lib/statusMapper.js')
     const { loadedModels, status } = mapStatusData(data, containerInfo)
 
-    return NextResponse.json({ ok: true, loadedModels, count: loadedModels.length, status })
+    // If no models loaded and container not running, mark as not ok
+    const isOk = loadedModels.length > 0 || (data && data.service === 'vision-ai') || containerInfo.container_running
+
+    return NextResponse.json({ ok: isOk, loadedModels, count: loadedModels.length, status })
   } catch (error) {
     console.error('❌ Error obteniendo estado de vision:', error)
     try { const fs = await import('fs'); fs.appendFileSync('/tmp/status.error.log', `${new Date().toISOString()} ${error && error.stack ? error.stack : String(error)}\n`) } catch(e) { /* ignore logging error */ }
