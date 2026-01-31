@@ -466,7 +466,7 @@ export async function POST(req) {
     const debug = String(formData.get("debug") || "").toLowerCase() === 'true' || String(formData.get("debug") || "") === '1';
 
     if (!image) {
-      console.error("❌ No se recibió imagen");
+      logger.error("No se recibió imagen", '[image-route]');
       const tNow = Date.now();
       return NextResponse.json(
         {
@@ -480,14 +480,7 @@ export async function POST(req) {
       );
     }
 
-    console.log("📋 Parámetros:", {
-      model,
-      mode,
-      action,
-      fileName: image.name,
-      fileSize: image.size,
-      fileType: image.type,
-    });
+    logger.debug({ model, mode, action, fileName: image.name, fileSize: image.size, fileType: image.type }, '[image-route]');
 
     // Convertir imagen a buffer
     const bytes = await image.arrayBuffer();
@@ -495,7 +488,7 @@ export async function POST(req) {
 
     // Manejar diferentes actions
     if (action === 'detect-corners') {
-      console.log("🔍 Detectando esquinas (usando /crop)...");
+      logger.info('Detectando esquinas (usando /crop)...', '[image-route]');
       logger.debug({ name: image.name, size: image.size, type: image.type }, '[detect-corners]');
       
       try {
@@ -538,8 +531,8 @@ export async function POST(req) {
         }
 
         const tEnd = Date.now();
-        console.log("✅ Esquinas detectadas (from /crop):", { corners, detected: visionData.detected_class || visionData.detected });
-        console.log('INFO /api/ai/image detect-corners result', { ok: visionData.ok, detected_class: visionData.detected_class || visionData.detected, vision_src_coords_px: visionData.src_coords ? visionData.src_coords.slice(0,4) : null, has_debug: !!visionData.debug });
+        logger.info('Esquinas detectadas (from /crop)', '[image-route]');
+        logger.debug({ ok: visionData.ok, detected_class: visionData.detected_class || visionData.detected, vision_src_coords_px: visionData.src_coords ? visionData.src_coords.slice(0,4) : null, has_debug: !!visionData.debug }, '[image-route:detect-corners]');
 
         return NextResponse.json({
           ok: true,
@@ -555,7 +548,7 @@ export async function POST(req) {
           },
         });
       } catch (error) {
-        console.error("❌ Error detectando esquinas:", error);
+        logger.error(`Error detectando esquinas: ${error}`, '[image-route]');
         const tNow = Date.now();
         return NextResponse.json(
           {
@@ -572,7 +565,7 @@ export async function POST(req) {
 
     // Nueva action para enderezar imagen con puntos
     if (action === 'warp') {
-      console.log("🔧 Enderezando imagen con puntos...");
+      logger.info('Enderezando imagen con puntos...', '[image-route]');
 
       try {
         // Obtener puntos del form data
@@ -582,7 +575,7 @@ export async function POST(req) {
         }
 
         const points = JSON.parse(pointsParam);
-        console.log("Puntos para warp:", points);
+        logger.debug({ points }, '[image-route]');
 
         // Enviar imagen y puntos al servicio vision
         const form = new FormData();
@@ -603,7 +596,7 @@ export async function POST(req) {
         const visionData = await visionResponse.json();
         const tEnd = Date.now();
 
-        console.log("✅ Imagen enderezada");
+        logger.info('Imagen enderezada', '[image-route]');
 
         // Devolver la imagen enderezada como base64
         return NextResponse.json({
@@ -614,7 +607,7 @@ export async function POST(req) {
           },
         });
       } catch (error) {
-        console.error("❌ Error enderezando imagen:", error);
+        logger.error(`Error enderezando imagen: ${error}`, '[image-route]');
         const tNow = Date.now();
         return NextResponse.json(
           {
@@ -631,15 +624,15 @@ export async function POST(req) {
 
     // Para actions de procesamiento normal, continuar con optimización
     // Optimizar imagen para el modelo (grises, auto-crop, compresión)
-    console.log("🔧 Optimizando imagen para análisis...");
+    logger.info('Optimizando imagen para análisis...', '[image-route]');
     const {
       optimized,
       original,
       metadata: imageMeta,
     } = await optimizeImageForAI(buffer);
 
-    console.log("✅ Imágenes preparadas:");
-    console.log(
+    logger.info('Imágenes preparadas', '[image-route]');
+    logger.debug({ imageMeta }, '[image-route]');
       "   - Original:",
       imageMeta.original?.size || original.length,
       "chars",
@@ -650,7 +643,7 @@ export async function POST(req) {
       "chars",
     );
     if (imageMeta.reduction)
-      console.log("   - Reducción:", imageMeta.reduction);
+      logger.debug({ reduction: imageMeta.reduction }, '[image-route]');
 
     // Si el modelo es Qwen2.5-VL, producir una imagen "safe" (cuadrada y múltiplos de 28)
     let finalOptimized = optimized;
@@ -661,7 +654,7 @@ export async function POST(req) {
           finalOptimized = safeBuf.toString("base64");
           const sharp = (await import("sharp")).default;
           const mm = await sharp(Buffer.from(finalOptimized, "base64")).metadata();
-          console.log("🔒 Imagen ajustada para Qwen:", `${mm.width}x${mm.height}`);
+          logger.info(`Imagen ajustada para Qwen: ${mm.width}x${mm.height}`, '[image-route]');
         } catch (e) {
           console.warn("⚠️ No se pudo generar imagen segura para Qwen:", e.message);
           // seguir con 'optimized' como fallback
@@ -733,11 +726,11 @@ export async function POST(req) {
         if (cropResp && cropResp.ok) {
           const cropData = await cropResp.json();
           if (cropData && cropData.ok && cropData.image_b64) {
-            console.log('✅ Pre-crop succeeded: using warped image for analysis');
+            logger.info('Pre-crop succeeded: using warped image for analysis', '[image-route]');
             // cropData.image_b64 is raw base64
             imageToAnalyze = cropData.image_b64;
           } else {
-            console.log('⚠️ Pre-crop did not return warped image; continuing with optimized image');
+            logger.warn('Pre-crop did not return warped image; continuing with optimized image', '[image-route]');
           }
         } else {
           console.log('⚠️ Pre-crop request failed or vision returned error; continuing with optimized image');
@@ -753,7 +746,7 @@ export async function POST(req) {
       // Prefer the `/analyze` JSON endpoint if available in the vision service; fallback to form-based endpoints when needed
       const visionEndpoint = action === "crop" ? "/process-document" : "/analyze";
 
-      console.log(`🔍 Enviando imagen a vision service: ${visionEndpoint}`);
+      logger.info(`Enviando imagen a vision service: ${visionEndpoint}`, '[image-route]');
 
       // Forward optional flags if needed (could be exposed from frontend later)
       let resp;
@@ -927,7 +920,7 @@ export async function POST(req) {
 
             if (fallbackResp && fallbackResp.ok) {
               const fv = await fallbackResp.json();
-              console.log("✅ Fallback to original image succeeded");
+              logger.info('Fallback to original image succeeded', '[image-route]');
               data = {
                 response: fv.extraction
                   ? typeof fv.extraction === "string"
@@ -1168,8 +1161,8 @@ export async function POST(req) {
         const jsonMatch = responseText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           parsedData = JSON.parse(jsonMatch[0]);
-          console.log("✅ JSON parseado exitosamente");
-          console.log("📊 Estructura JSON:", Object.keys(parsedData));
+          logger.info('JSON parseado exitosamente', '[image-route]');
+          logger.debug({ parsed_keys: Object.keys(parsedData || {}) }, '[image-route]');
 
           // POST-PROCESAMIENTO: Corregir números argentinos mal interpretados
           if (mode === "factura" && parsedData) {

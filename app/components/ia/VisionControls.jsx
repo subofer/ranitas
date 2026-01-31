@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { useVisionStatusContext } from '@/context/VisionStatusContext'
 import DockerStatusDisplay from './DockerStatusDisplay'
 import logger from '@/lib/logger'
+import LogsModal from './LogsModal'
 
 export default function VisionControls({ minimal = false }) {
   const { loadedModels = [], refresh, probeState, statusInfo, dockerServices } = useVisionStatusContext()
@@ -10,6 +11,7 @@ export default function VisionControls({ minimal = false }) {
   const [lastOutput, setLastOutput] = useState(null)
   const [error, setError] = useState(null)
   const [showContainerDebug, setShowContainerDebug] = useState(false)
+  const [showLogsModal, setShowLogsModal] = useState(false)
 
   // Simplified actions for minimal UI: display container name with play/stop icons to the right
   // Consider the service running if there are loadedModels, or if subsystems report themselves as ready
@@ -92,6 +94,9 @@ export default function VisionControls({ minimal = false }) {
     <div className="flex flex-col items-end gap-4">
       <div className="w-full flex flex-col gap-0">
         {/* DB block above IA */}
+        <div className="flex items-center gap-2 justify-end mb-2">
+          <button className="px-3 py-1 bg-gray-100 rounded" onClick={()=>setShowLogsModal(true)}>📜 Logs</button>
+        </div>
         <div>
           <div className="text-xs text-gray-500 font-medium mb-1">Database</div>
           <div className="px-3 pt-2 pb-0 bg-white rounded border border-gray-100 shadow-sm">
@@ -116,6 +121,8 @@ export default function VisionControls({ minimal = false }) {
         <pre className="mt-2 max-w-2xl overflow-auto bg-gray-50 p-2 rounded text-xs text-gray-800 border border-gray-100 whitespace-pre-wrap">{cleanCommandOutput(lastOutput)}</pre>
       )}
       {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
+
+      {showLogsModal && <LogsModal open={showLogsModal} onClose={()=>setShowLogsModal(false)} />}
     </div>
   )
 }

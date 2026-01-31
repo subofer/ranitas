@@ -837,19 +837,17 @@ export default function IaImage({ model }) {
           const nombreProducto =
             item.descripcion || item.detalle || item.producto || item.articulo;
           if (nombreProducto && nombreProducto.trim()) {
-            console.log(`  🔎 Buscando producto: "${nombreProducto}"...`);
+            logger.debug({ searching: nombreProducto }, '[IaImage]');
             const productos = await buscarProducto(nombreProducto, proveedorId);
             busquedas[nombreProducto] = productos;
-            console.log(
-              `    ✅ ${productos.length} resultados para "${nombreProducto}"`,
-            );
+            logger.debug({ results: productos.length, term: nombreProducto }, '[IaImage]');
           }
         }
         setProductosBuscados(busquedas);
-        console.log("✅ Búsqueda de productos completado (sin crear aliases)");
+        logger.info('Búsqueda de productos completado (sin crear aliases)', '[IaImage]');
       }
     } catch (error) {
-      console.error("Error buscando datos relacionados:", error);
+      logger.error(`Error buscando datos relacionados: ${error}`, '[IaImage]');
     } finally {
       setBuscandoDatos(false);
     }
