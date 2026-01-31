@@ -84,13 +84,31 @@ export async function POST(req) {
     } catch (err) {
       logger.error(`No se pudo conectar al microservicio vision: ${err.message}`, '[image-route]');
       try { await guardarAuditoriaIaFailure({ model: model || 'unknown', mode, fileName: image?.name || 'unknown', fileSize: image?.size || buffer.length, responseStatus: 0, errorText: err.message, timing: { before: tStart, after: Date.now() } }); } catch (_) {}
-      return NextResponse.json({ ok: false, error: 'Vision microservice not available', retryable: true }, { status: 502 });
+      return NextResponse.json({ ok: false, error: 'El microservicio de visión (ranitas-vision) no está disponible. Verifica que el contenedor Docker esté corriendo.', retryable: true }, { status: 502 });
     }
 
     if (!resp.ok) {
       const text = await resp.text().catch(() => null);
+      let errorMsg = 'Vision microservice error';
+      let retryable = false;
+      
+      // Detect specific error types for better user messages
+      if (text) {
+        const textLower = text.toLowerCase();
+        if (textLower.includes('ollama') && (textLower.includes('not') || textLower.includes('unavailable') || textLower.includes('connection'))) {
+          errorMsg = 'No hay modelos LLM disponibles. Ollama no está corriendo o no tiene modelos cargados.';
+          retryable = true;
+        } else if (textLower.includes('model') && textLower.includes('not found')) {
+          errorMsg = 'El modelo LLM especificado no está disponible.';
+          retryable = true;
+        } else if (textLower.includes('timeout') || textLower.includes('time out')) {
+          errorMsg = 'Timeout procesando la imagen. El servicio está ocupado o lento.';
+          retryable = true;
+        }
+      }
+      
       try { await guardarAuditoriaIaFailure({ model: model || 'unknown', mode, fileName: image?.name || 'unknown', fileSize: image?.size || buffer.length, responseStatus: resp.status, errorText: text, timing: { before: tStart, after: Date.now() } }); } catch (_) {}
-      return NextResponse.json({ ok: false, error: 'Vision microservice error', details: text }, { status: 502 });
+      return NextResponse.json({ ok: false, error: errorMsg, details: text, retryable }, { status: resp.status || 502 });
     }
 
     const body = await resp.json().catch(() => null);
@@ -98,7 +116,7 @@ export async function POST(req) {
     return NextResponse.json({ ok: true, vision: body, metadata: { timing: { totalMs: tEnd - tStart, human: `${tEnd - tStart}ms` } } });
   } catch (error) {
     const tNow = Date.now();
-    console.error('❌ Error general:', error);
+    logger.error(`❌ Error general: ${String(error)}`, '[image-route]');
     return NextResponse.json({ ok: false, error: error.message, details: error.stack, metadata: { timing: { totalMs: typeof tStart !== 'undefined' ? tNow - tStart : undefined, human: typeof tStart !== 'undefined' ? `${tNow - tStart}ms` : undefined } } }, { status: 500 });
   }
 }
