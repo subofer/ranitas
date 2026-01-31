@@ -332,7 +332,7 @@ export default function IaImage({ model }) {
         });
       }
     } catch (e) {
-      console.warn("No se pudo guardar auditoría de crop/mejora:", e);
+      logger.warn(`No se pudo guardar auditoría de crop/mejora: ${e}`, '[IaImage]');
     }
 
     setResult(null);
@@ -351,10 +351,7 @@ export default function IaImage({ model }) {
         );
         setAutoEnfoqueAplicado(true);
       } catch (e) {
-        console.warn(
-          "No se pudo re-aplicar auto-enfoque en la imagen aceptada:",
-          e,
-        );
+        logger.warn(`No se pudo re-aplicar auto-enfoque en la imagen aceptada: ${e}`, '[IaImage]');
       }
     }, 100);
   };
@@ -370,12 +367,12 @@ export default function IaImage({ model }) {
   // Aplicar crop usando los puntos marcados manualmente
   const handleApplyCrop = async (points, options = { useBackendWarp: false }) => {
     if (!points || points.length < 3) {
-      console.warn("Se necesitan al menos 3 puntos para hacer crop");
+      logger.warn('Se necesitan al menos 3 puntos para hacer crop', '[IaImage]');
       return;
     }
 
     if (!file) {
-      console.warn("No hay archivo de imagen para crop");
+      logger.warn('No hay archivo de imagen para crop', '[IaImage]');
       return;
     }
 

@@ -78,7 +78,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
       const mapped = points.map(p => ({ x: p.x, y: p.y, pos: normalizedToContainerPixels(p, imgRect, containerRect) }))
       logger.debug({ mapped, imgRect, containerRect, zoom, pan }, '[AUTO-DETECT]')
     } catch (e) {
-      console.warn('AUTO-DETECT-DEBUG error mapping points', e)
+      logger.warn(`AUTO-DETECT-DEBUG error mapping points: ${e}`, '[AUTO-DETECT]')
     }
   }, [points, zoom, pan, ref])
 
@@ -111,7 +111,21 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
     if (!normalized) return
     const { x, y } = normalized
 
-    logger.debug({ rawClick:{ clientX: e.clientX, clientY: e.clientY }, rectBounds: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, relative: { rawX, rawY }, zoomCorrection: { zoom, rectWidthDivZoom: rect.width / zoom, rectHeightDivZoom: rect.height / zoom }, normalizedBeforeClamp: { normalizedX, normalizedY }, finalNormalized: { x, y }, containerDimensions }, '[COORD-CALC-DETAILED]')
+    // Compute raw offsets and pre-clamped normalized values for debugging
+    const rawX = e.clientX - rect.left
+    const rawY = e.clientY - rect.top
+    const normalizedX = rawX / rect.width
+    const normalizedY = rawY / rect.height
+
+    logger.debug({
+      rawClick: { clientX: e.clientX, clientY: e.clientY },
+      rectBounds: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      relative: { rawX, rawY },
+      zoomCorrection: { zoom, rectWidthDivZoom: rect.width / zoom, rectHeightDivZoom: rect.height / zoom },
+      normalizedBeforeClamp: { normalizedX, normalizedY },
+      finalNormalized: { x, y },
+      containerDimensions
+    }, '[COORD-CALC-DETAILED]')
 
     onPointAdd({ x, y })
   }

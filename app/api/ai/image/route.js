@@ -105,7 +105,7 @@ async function makeSafeImageForQwen(buffer, minSize = 672, maxSize = 896) {
     logger.info(`🔒 Imagen segura: ${m.width}x${m.height} (múltiplos de 28)`, '[image-route]');
     return final;
   } catch (err) {
-    console.warn("⚠️ No se pudo generar imagen segura para Qwen:", err.message);
+    logger.warn(`No se pudo generar imagen segura para Qwen: ${err.message}`, '[image-route]');
     throw err;
   }
 }
@@ -126,13 +126,7 @@ async function optimizeImageForAI(imageBuffer) {
     const image = sharp(imageBuffer);
     const metadata = await image.metadata();
 
-    console.log(
-      "📐 Imagen original:",
-      metadata.width,
-      "x",
-      metadata.height,
-      metadata.format,
-    );
+    logger.info(`📐 Imagen original: ${metadata.width}x${metadata.height} (${metadata.format})`, '[image-route]');
 
     // Normalizar dimensiones a múltiplos de 28 (requerido por Qwen2.5-VL)
     const normalized = normalizeToMultipleOf28(
@@ -155,9 +149,7 @@ async function optimizeImageForAI(imageBuffer) {
       const scale = maxSize / Math.max(metadata.width, metadata.height);
       resizeWidth = Math.round(metadata.width * scale);
       resizeHeight = Math.round(metadata.height * scale);
-      console.log(
-        `🔽 Downscale aplicado: ${metadata.width}x${metadata.height} → ${resizeWidth}x${resizeHeight}`,
-      );
+      logger.info(`🔽 Downscale aplicado: ${metadata.width}x${metadata.height} → ${resizeWidth}x${resizeHeight}`, '[image-route]');
     }
 
     // Calcular dimensiones objetivo como múltiplos de 28 (usamos ceil para pad)
@@ -195,13 +187,9 @@ async function optimizeImageForAI(imageBuffer) {
 
     // Verificar que las dimensiones sean múltiplos de 28
     if (optimizedMeta.width % 28 !== 0 || optimizedMeta.height % 28 !== 0) {
-      console.warn(
-        `⚠️ ADVERTENCIA: Dimensiones NO son múltiplos de 28: ${optimizedMeta.width}x${optimizedMeta.height}`,
-      );
+      logger.warn(`ADVERTENCIA: Dimensiones NO son múltiplos de 28: ${optimizedMeta.width}x${optimizedMeta.height}`, '[image-route]');
     } else {
-      console.log(
-        `✅ Dimensiones verificadas: ${optimizedMeta.width}x${optimizedMeta.height} (${optimizedMeta.width / 28}x${optimizedMeta.height / 28} parches)`,
-      );
+      logger.info(`✅ Dimensiones verificadas: ${optimizedMeta.width}x${optimizedMeta.height} (${optimizedMeta.width / 28}x${optimizedMeta.height / 28} parches)`, '[image-route]');
     }
 
     const originalBase64 = imageBuffer.toString("base64");
@@ -220,17 +208,8 @@ async function optimizeImageForAI(imageBuffer) {
       100
     ).toFixed(1);
 
-    console.log(
-      "✂️ Imagen procesada (mínimo):",
-      optimizedMeta.width,
-      "x",
-      optimizedMeta.height,
-    );
-    console.log(
-      "📊 Cambio de tamaño:",
-      reduction + "%",
-      `(${originalBase64.length} → ${optimizedBase64.length} caracteres)`,
-    );
+    logger.info(`✂️ Imagen procesada (mínimo): ${optimizedMeta.width}x${optimizedMeta.height}`, '[image-route]');
+    logger.info(`📊 Cambio de tamaño: ${reduction}% (${originalBase64.length} → ${optimizedBase64.length} caracteres)`, '[image-route]');
 
     return {
       optimized: optimizedBase64,
@@ -252,10 +231,7 @@ async function optimizeImageForAI(imageBuffer) {
       },
     };
   } catch (error) {
-    console.warn(
-      "⚠️ Error optimizando imagen, usando original:",
-      error.message,
-    );
+    logger.warn(`Error optimizando imagen, usando original: ${error.message}`, '[image-route]');
     const originalBase64 = imageBuffer.toString("base64");
     return {
       optimized: originalBase64,
@@ -622,246 +598,55 @@ export async function POST(req) {
       }
     }
 
-    // Para actions de procesamiento normal, continuar con optimización
-    // Optimizar imagen para el modelo (grises, auto-crop, compresión)
-    logger.info('Optimizando imagen para análisis...', '[image-route]');
-    const {
-      optimized,
-      original,
-      metadata: imageMeta,
-    } = await optimizeImageForAI(buffer);
+    // Simplify: act as a clean proxy for analysis — delegate optimization, pre-crop and prompt selection to the vision microservice.
+    logger.info('Proxying image to vision /analyze (no local optimization)', '[image-route]');
 
-    logger.info('Imágenes preparadas', '[image-route]');
-    logger.debug({ imageMeta }, '[image-route]');
-      "   - Original:",
-      imageMeta.original?.size || original.length,
-      "chars",
-    );
-    console.log(
-      "   - Optimizada:",
-      imageMeta.optimized?.size || optimized.length,
-      "chars",
-    );
-    if (imageMeta.reduction)
-      logger.debug({ reduction: imageMeta.reduction }, '[image-route]');
-
-    // Si el modelo es Qwen2.5-VL, producir una imagen "safe" (cuadrada y múltiplos de 28)
-    let finalOptimized = optimized;
-    try {
-      if (/qwen/i.test(String(model || ""))) {
-        try {
-          const safeBuf = await makeSafeImageForQwen(Buffer.from(optimized, "base64"));
-          finalOptimized = safeBuf.toString("base64");
-          const sharp = (await import("sharp")).default;
-          const mm = await sharp(Buffer.from(finalOptimized, "base64")).metadata();
-          logger.info(`Imagen ajustada para Qwen: ${mm.width}x${mm.height}`, '[image-route]');
-        } catch (e) {
-          console.warn("⚠️ No se pudo generar imagen segura para Qwen:", e.message);
-          // seguir con 'optimized' como fallback
-        }
-      }
-    } catch (e) {
-      console.warn("⚠️ Error verificando modelo para Qwen:", e.message);
+    const tBeforeVision = Date.now();
+    // Determine payload image base64 (strip data: prefix if present)
+    let payloadImageBase64 = null;
+    if (typeof image === 'string') {
+      payloadImageBase64 = image.replace(/^data:image\/[a-zA-Z]+;base64,/, '');
+    } else {
+      // use the previously created buffer
+      payloadImageBase64 = Buffer.from(buffer).toString('base64');
     }
 
-    // Usar directamente la API del microservicio vision (local Qwen)
-    const prompt = PROMPTS[mode] || PROMPTS.general;
+    // Build minimal JSON payload and forward to vision /analyze — allow vision server to decide prompts and optimization
+    const jsonBody = {
+      image: payloadImageBase64,
+      model: model || undefined,
+      mode: mode || undefined,
+    };
 
-    console.log(
-      "📤 Enviando imagen optimizada al microservicio vision para DocRes + OCR + Qwen...",
-    );
-    console.log("   - Modelo sugerido por frontend:", model);
-    console.log("   - Modo:", mode);
-    console.log("   - Tamaño imagen optimizada (final):", finalOptimized.length, "chars");
-    const tBeforeVision = Date.now();
-
-    let data;
-    let tAfterVision;
-
+    let resp;
     try {
-      // Convert optimized base64 to binary and attach as a Blob for FormData
-      const optimizedBuffer = Buffer.from(finalOptimized, "base64");
-      const form = new FormData();
-      // Use Web Blob in Node (Node 18+ supports global Blob). Fallback to Buffer if not available.
-      let blobForForm;
-      try {
-        blobForForm = new Blob([optimizedBuffer], { type: "image/jpeg" });
-      } catch (e) {
-        // older Node/builds may not have Blob global - use Buffer directly
-        blobForForm = optimizedBuffer;
-      }
+      resp = await fetch(`${VISION_HOST}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(jsonBody),
+      });
+    } catch (fetchErr) {
+      logger.error(`No se pudo conectar al microservicio vision: ${fetchErr.message}`, '[image-route]');
 
-      // Append image; some runtimes expect (name, Blob, filename)
-      try {
-        form.append("image", blobForForm, image.name || "upload.jpg");
-      } catch (appendErr) {
-        // As a last resort try object form to appease different FormData implementations
-        form.append("image", blobForForm);
-      }
-
-      form.append("enhance", "1");
-      form.append("mode", mode);
-      try {
-        form.append("model", model);
-      } catch (e) {
-        console.warn("Could not append model to form:", e.message);
-      }
-      // Send explicit prompt for invoices to the vision microservice so Docker Qwen uses the same schema
-      try {
-        form.append("prompt", prompt);
-      } catch (e) {
-        console.warn("Could not append prompt to form:", e.message);
-      }
-
-      // --- NEW: attempt an automatic crop/warp via /crop to send a straightened image to /analyze ---
-      // Use RAW base64 (no data: prefix) for the LLM multimodal API
-      // placeholder - will be set to finalOptimized below (or overridden by crop result)
-      let imageToAnalyze = null;
-      try {
-        console.log('🔬 Intentando pre-crop con vision /crop to get a straightened image...');
-        const cropForm = new FormData();
-        cropForm.append('file', blobForForm, image.name || 'upload.jpg');
-        // Prefer non-debug default; keep small timeout
-        const cropResp = await fetch(`${VISION_HOST}/crop`, { method: 'POST', body: cropForm });
-        if (cropResp && cropResp.ok) {
-          const cropData = await cropResp.json();
-          if (cropData && cropData.ok && cropData.image_b64) {
-            logger.info('Pre-crop succeeded: using warped image for analysis', '[image-route]');
-            // cropData.image_b64 is raw base64
-            imageToAnalyze = cropData.image_b64;
-          } else {
-            logger.warn('Pre-crop did not return warped image; continuing with optimized image', '[image-route]');
-          }
-        } else {
-          console.log('⚠️ Pre-crop request failed or vision returned error; continuing with optimized image');
-        }
-      } catch (preCropErr) {
-        console.warn('⚠️ Pre-crop attempt failed:', preCropErr.message);
-      }
-
-      // If crop did not provide an image, fall back to finalOptimized (Qwen-safe if applied)
-      if (!imageToAnalyze) imageToAnalyze = finalOptimized;
-
-      // Determine vision endpoint based on action
-      // Prefer the `/analyze` JSON endpoint if available in the vision service; fallback to form-based endpoints when needed
-      const visionEndpoint = action === "crop" ? "/process-document" : "/analyze";
-
-      logger.info(`Enviando imagen a vision service: ${visionEndpoint}`, '[image-route]');
-
-      // Forward optional flags if needed (could be exposed from frontend later)
-      let resp;
-      try {
-        if (visionEndpoint === "/analyze") {
-          // Send JSON payload expected by services/vision/routes_analyze.py
-          const jsonBody = {
-            image: imageToAnalyze,
-            prompt: prompt,
-            model: model,
-            mode: mode,
-          };
-
-          resp = await fetch(`${VISION_HOST}${visionEndpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+      // Fallback to localhost in dev if VISION_HOST looked like a service name
+      if (VISION_HOST && VISION_HOST.includes('vision')) {
+        try {
+          logger.info('Intentando fallback a http://localhost:8000 (entorno dev)', '[image-route]');
+          resp = await fetch('http://localhost:8000/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(jsonBody),
           });
-        } else {
-          // Legacy: send as multipart/form-data (for endpoints expecting files)
-          resp = await fetch(`${VISION_HOST}${visionEndpoint}`, {
-            method: "POST",
-            body: form,
-          });
+        } catch (fallbackErr) {
+          logger.error(`Fallback a localhost falló: ${fallbackErr.message}`, '[image-route]');
+          try { await guardarAuditoriaIaFailure({ model: model || 'unknown', mode, fileName: image?.name || 'unknown', fileSize: image?.size || buffer.length, responseStatus: 0, errorText: fallbackErr.message, timing: { before: tBeforeVision, after: Date.now() } }); } catch(e){ logger.warn('No se pudo registrar auditoría de fallo IA:', e.message); }
+          return NextResponse.json({ ok: false, error: 'Vision microservice not available', retryable: true }, { status: 502 });
         }
-      } catch (fetchErr) {
-        console.error(
-          "❌ No se pudo conectar al microservicio vision:",
-          fetchErr.message,
-        );
-
-        // Intento de recuperación: si VISION_HOST apunta a 'vision', probar http://localhost:8000 con JSON analize o legacy restore
-        if (VISION_HOST && VISION_HOST.includes("vision")) {
-          try {
-            console.info(
-              "🔁 Intentando fallback a http://localhost:8000 (entorno dev)",
-            );
-
-            // Try analyze JSON endpoint first
-            try {
-              const jsonBody = {
-                image: `data:image/jpeg;base64,${optimized}`,
-                prompt: prompt,
-                model: model,
-                mode: mode,
-              };
-              resp = await fetch("http://localhost:8000/analyze", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(jsonBody),
-              });
-            } catch (jsErr) {
-              // fallback to legacy restore with form
-              resp = await fetch("http://localhost:8000/restore", {
-                method: "POST",
-                body: form,
-              });
-            }
-          } catch (fallbackErr) {
-            console.error(
-              "❌ Fallback a localhost falló:",
-              fallbackErr.message,
-            );
-            try {
-              await guardarAuditoriaIaFailure({
-                model: "qwen",
-                mode,
-                fileName: image.name,
-                fileSize: image.size,
-                responseStatus: 0,
-                errorText: fallbackErr.message,
-                timing: { before: tBeforeVision, after: Date.now() },
-              });
-            } catch (audErr) {
-              console.warn(
-                "⚠️ No se pudo registrar auditoría de fallo IA:",
-                audErr.message,
-              );
-            }
-            return NextResponse.json(
-              {
-                ok: false,
-                error: "Vision microservice not available",
-                retryable: true,
-              },
-              { status: 502 },
-            );
-          }
-        } else {
-          try {
-            await guardarAuditoriaIaFailure({
-              model: "qwen",
-              mode,
-              fileName: image.name,
-              fileSize: image.size,
-              responseStatus: 0,
-              errorText: fetchErr.message,
-              timing: { before: tBeforeVision, after: Date.now() },
-            });
-          } catch (audErr) {
-            console.warn(
-              "⚠️ No se pudo registrar auditoría de fallo IA:",
-              audErr.message,
-            );
-          }
-          return NextResponse.json(
-            {
-              ok: false,
-              error: "Vision microservice not available",
-              retryable: true,
-            },
-            { status: 502 },
-          );
-        }
+      } else {
+        try { await guardarAuditoriaIaFailure({ model: model || 'unknown', mode, fileName: image?.name || 'unknown', fileSize: image?.size || buffer.length, responseStatus: 0, errorText: fetchErr.message, timing: { before: tBeforeVision, after: Date.now() } }); } catch(e) { logger.warn('No se pudo registrar auditoría de fallo IA:', e.message); }
+        return NextResponse.json({ ok: false, error: 'Vision microservice not available', retryable: true }, { status: 502 });
       }
+    }
 
       tAfterVision = Date.now();
       if (!resp.ok) {
@@ -870,9 +655,7 @@ export async function POST(req) {
 
         // Si el error indica que vision no pudo identificar la imagen, intentar reenviar la imagen ORIGINAL (no optimizada)
         if (/cannot identify image file/i.test(text)) {
-          console.warn(
-            "🔁 Vision no pudo identificar la imagen optimizada; reenviando imagen ORIGINAL como fallback",
-          );
+          logger.warn('Vision no pudo identificar la imagen optimizada; reenviando imagen ORIGINAL como fallback', '[image-route]');
           try {
             const originalBuffer = Buffer.from(original, "base64");
             const fallbackForm = new FormData();
@@ -898,10 +681,7 @@ export async function POST(req) {
             try {
               fallbackForm.append("model", model);
             } catch (e) {
-              console.warn(
-                "Could not append model to fallback form:",
-                e.message,
-              );
+              logger.warn(`Could not append model to fallback form: ${e.message}`, '[image-route]');
             }
 
             let fallbackResp;
@@ -911,10 +691,7 @@ export async function POST(req) {
                 body: fallbackForm,
               });
             } catch (frErr) {
-              console.error(
-                "❌ Fallback to vision with original image failed:",
-                frErr.message,
-              );
+              logger.error(`Fallback to vision with original image failed: ${frErr.message}`, '[image-route]');
               // Continue to record original error
             }
 
@@ -945,10 +722,7 @@ export async function POST(req) {
                   timing: { before: tBeforeVision, after: tAfterVision },
                 });
               } catch (audErr) {
-                console.warn(
-                  "⚠️ No se pudo registrar auditoría de fallo IA:",
-                  audErr.message,
-                );
+                logger.warn(`No se pudo registrar auditoría de fallo IA: ${audErr.message}`, '[image-route]');
               }
               return NextResponse.json(
                 {
@@ -960,7 +734,7 @@ export async function POST(req) {
               );
             }
           } catch (fallbackErr) {
-            console.error("❌ Fallback processing failed:", fallbackErr);
+            logger.error(`Fallback processing failed: ${String(fallbackErr)}`, '[image-route]');
             try {
               await guardarAuditoriaIaFailure({
                 model: "qwen",
@@ -972,10 +746,7 @@ export async function POST(req) {
                 timing: { before: tBeforeVision, after: tAfterVision },
               });
             } catch (audErr) {
-              console.warn(
-                "⚠️ No se pudo registrar auditoría de fallo IA:",
-                audErr.message,
-              );
+              logger.warn(`No se pudo registrar auditoría de fallo IA: ${audErr.message}`, '[image-route]');
             }
             return NextResponse.json(
               { ok: false, error: "Vision microservice error", details: text },
@@ -995,10 +766,7 @@ export async function POST(req) {
             timing: { before: tBeforeVision, after: tAfterVision },
           });
         } catch (audErr) {
-          console.warn(
-            "⚠️ No se pudo registrar auditoría de fallo IA:",
-            audErr.message,
-          );
+          logger.warn(`No se pudo registrar auditoría de fallo IA: ${audErr.message}`, '[image-route]');
         }
         return NextResponse.json(
           { ok: false, error: "Vision microservice error", details: text },
@@ -1015,15 +783,11 @@ export async function POST(req) {
         vdata = { text: txt };
       }
 
-      console.log(
-        "✅ Vision response received in",
-        ((tAfterVision - tBeforeVision) / 1000).toFixed(2),
-        "s",
-      );
+      logger.info(`Vision response received in ${((tAfterVision - tBeforeVision) / 1000).toFixed(2)}s`, '[image-route]');
       try {
-        console.log("📦 Vision response keys:", Object.keys(vdata));
+        logger.debug("Vision response keys:", Object.keys(vdata));
       } catch (e) {
-        console.log("📦 Vision response (non-JSON)");
+        logger.debug("Vision response (non-JSON)");
       }
 
       // Build a best-effort text response that covers multiple service contracts
@@ -1069,7 +833,7 @@ export async function POST(req) {
       // Detect internal model assertion failures (GGML) and attempt OCR-only JS fallback
       const errText = (vdata && (vdata.error || vdata.message || "")) || responseTextFromVision || "";
       if (/GGML_ASSERT|assert\(|panic/i.test(errText) || /GGML_ASSERT|assert\(|panic/i.test(responseTextFromVision)) {
-        console.warn("⚠️ Modelo reportó GGML_ASSERT/panic; intentando fallback con OCR/heurística JS");
+        logger.warn("Modelo reportó GGML_ASSERT/panic; intentando fallback con OCR/heurística JS", '[image-route]');
         const ocrText = (vdata && vdata.ocr_text) || responseTextFromVision || "";
         try {
           const parsedFallback = simpleInvoiceParserJS(ocrText);
@@ -1081,9 +845,9 @@ export async function POST(req) {
               done: true,
               vision_meta: { ...vdata, llm_error: true, llm_error_msg: errText },
             };
-            console.log("✅ Fallback JS parse succeeded (GGML_ASSERT)");
+            logger.info("Fallback JS parse succeeded (GGML_ASSERT)", '[image-route]');
           } else {
-            console.warn("❌ Fallback JS parse failed to extract invoice - returning model error to client");
+            logger.warn("Fallback JS parse failed to extract invoice - returning model error to client", '[image-route]');
             return NextResponse.json(
               {
                 ok: false,
@@ -1097,7 +861,7 @@ export async function POST(req) {
             );
           }
         } catch (fbErr) {
-          console.warn("❌ Error running JS fallback:", fbErr.message);
+          logger.warn(`Error running JS fallback: ${fbErr.message}`, '[image-route]');
         }
       }
 
@@ -1106,12 +870,12 @@ export async function POST(req) {
       } catch (e) {}
 
       try {
-        console.log("📦 Estructura de respuesta vision:", Object.keys(vdata || {}));
+        logger.debug("Estructura de respuesta vision:", Object.keys(vdata || {}), '[image-route]');
       } catch (e) {}
     } catch (visionErr) {
       tAfterVision = Date.now();
 
-      console.error("❌ Error llamando al microservicio vision:", visionErr);
+      logger.error(`Error llamando al microservicio vision: ${String(visionErr)}`, '[image-route]');
 
       const errorMsg = visionErr.message || String(visionErr);
       let userMsg = errorMsg;
@@ -1132,10 +896,7 @@ export async function POST(req) {
           timing: { before: tBeforeVision, after: tAfterVision },
         });
       } catch (audErr) {
-        console.warn(
-          "⚠️ No se pudo guardar auditoría de fallo IA:",
-          audErr.message,
-        );
+        logger.warn(`No se pudo guardar auditoría de fallo IA: ${audErr.message}`, '[image-route]');
       }
 
       return NextResponse.json(
@@ -1150,10 +911,7 @@ export async function POST(req) {
 
     let responseText = data.response || "";
     let parsedData = null;
-    console.log(
-      "📝 Respuesta texto (primeros 500 chars):",
-      responseText.substring(0, 500),
-    );
+    logger.debug(`Respuesta texto (primeros 500 chars): ${responseText.substring(0, 500)}`, '[image-route]');
     const tAfterParsing = Date.now();
     if (mode === "factura" || mode === "producto") {
       try {
@@ -1170,12 +928,12 @@ export async function POST(req) {
             if (parsedData.productos && !parsedData.items) {
               parsedData.items = parsedData.productos;
               delete parsedData.productos;
-              console.log("✅ Normalizado: productos → items");
+              logger.info("Normalizado: productos → items", '[image-route]');
             }
             if (parsedData.itens && !parsedData.items) {
               parsedData.items = parsedData.itens;
               delete parsedData.itens;
-              console.log("✅ Normalizado: itens → items");
+              logger.info("Normalizado: itens → items", '[image-route]');
             }
 
             // Normalizar número del documento
@@ -1421,7 +1179,7 @@ export async function POST(req) {
                 }
               }
 
-              console.log("💰 Totales normalizados:", parsedData.totales);
+              logger.debug('Totales normalizados', parsedData.totales, '[image-route]');
             }
 
             // Corregir totales_calculados si existen
@@ -1443,7 +1201,7 @@ export async function POST(req) {
 
             // Corregir items
             if (parsedData.items && Array.isArray(parsedData.items)) {
-              console.log(`📦 Items encontrados: ${parsedData.items.length}`);
+              logger.info(`Items encontrados: ${parsedData.items.length}`, '[image-route]');
               console.log(
                 "📋 Primer item RAW:",
                 JSON.stringify(parsedData.items[0], null, 2),
