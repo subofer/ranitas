@@ -684,6 +684,47 @@ export function ImageColumn({
                 )
               })()}
 
+              {/* Floating expanded JSON viewer for incoming detected points */}
+              {incomingCropPoints && cropMode && (
+                <div className="absolute right-3 top-3 bg-white/95 border rounded-lg p-2 shadow-lg z-50 max-w-xs text-xs">
+                  <details>
+                    <summary className="font-semibold">Puntos detectados ({incomingCropPoints.length})</summary>
+                    <pre className="mt-2 whitespace-pre-wrap overflow-auto max-h-40">{JSON.stringify(incomingCropPoints, null, 2)}</pre>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(JSON.stringify(incomingCropPoints, null, 2))
+                          } catch (e) {
+                            console.warn('Clipboard write failed', e)
+                          }
+                        }}
+                        className="px-2 py-1 bg-gray-100 border rounded text-xs"
+                      >Copiar</button>
+
+                      <button
+                        onClick={() => {
+                          // Apply points taking into account whether they are normalized or pixel coords
+                          if (incomingPointsAreNormalized) {
+                            onCropPointsChange && onCropPointsChange(incomingCropPoints)
+                          } else {
+                            const rect = getImageRect()
+                            if (rect) {
+                              const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
+                              onCropPointsChange && onCropPointsChange(normalized)
+                            } else {
+                              // If we can't get rect, still attempt to apply raw points
+                              onCropPointsChange && onCropPointsChange(incomingCropPoints)
+                            }
+                          }
+                        }}
+                        className="px-2 py-1 bg-green-50 border rounded text-xs"
+                      >Aplicar puntos</button>
+                    </div>
+                  </details>
+                </div>
+              )}
+
 
             </div>
           )}
