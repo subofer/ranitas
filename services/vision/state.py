@@ -8,13 +8,30 @@ OLLAMA_HOST = os.getenv('OLLAMA_HOST','http://127.0.0.1:11434')
 # Vision targets focused for document detection (open-vocabulary set)
 TARGETS = {"invoice","receipt","ticket","scanned document","printed page"}
 # Prompt phrases / synonyms fed to YOLO-E (open-vocabulary prompt)
-PROMPT_PHRASES = ["piece of paper","receipt","invoice","document","ticket","printed ticket","printed document","factura","comprobante","scanned document","printed page"]
+PROMPT_PHRASES = ["piece of paper","receipt","invoice","document","ticket","printed ticket","printed document","printed page","factura","comprobante","scanned document","printed page"]
 
 state = {
   'yolo': {'status':'init','model':VISION_MODEL},
   'llm': {'status':'service_offline','model':LLM_MODEL,'present':False},
   'hardware':{}, 'audit':{}, 'counters':{'tasks':{}, 'errors':0}
 }
+
+# Lightweight in-memory log buffer for /logs endpoint
+_LOG_BUFFER = []
+_BUFFER_MAX = 1000
+
+def push_log(level, tag, msg):
+  try:
+    _LOG_BUFFER.append({'ts': time.time(), 'level': level, 'tag': tag, 'msg': str(msg)})
+    while len(_LOG_BUFFER) > _BUFFER_MAX:
+      _LOG_BUFFER.pop(0)
+  except Exception:
+    pass
+
+
+def get_logs(n=200):
+  out = _LOG_BUFFER[-n:]
+  return [{'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(int(r['ts']))), 'level': r['level'], 'tag': r['tag'], 'msg': r['msg']} for r in out]
 # expose prompts and canonical targets to runtime state for routes and diagnostics
 state['TARGETS'] = TARGETS
 state['PROMPT_PHRASES'] = PROMPT_PHRASES
@@ -52,7 +69,12 @@ def get_vram():
 def load_yolo():
   state['yolo'].update({'status':'initializing'})
   try:
+    # log state transition
+    try: push_log('info','yolo','initializing')
+    except: pass
     state['yolo']['status']='loading_vram'
+    try: push_log('info','yolo','loading_vram')
+    except: pass
     m = YOLO(VISION_MODEL)
     # Try to configure model to focus on document classes (open-vocabulary / set_classes)
     try:
@@ -79,20 +101,73 @@ def load_yolo():
     except Exception as e:
       # non-fatal: record a warning for diagnostics
       state['yolo']['load_warn'] = str(e)
+      try: push_log('warn','yolo', f'load_warn: {e}')
+      except: pass
     state['yolo']['_model'] = m
     state['yolo']['status'] = 'ready'
+    try: push_log('info','yolo','ready')
+    except: pass
   except Exception as e:
     state['yolo'].update({'status':'error','error':str(e)})
+    try: push_log('error','yolo', str(e))
+    except: pass
 
 def monitor_ollama(loop_delay=5):
   import time
   while True:
-    state['llm']['status']='checking_tags'
+    state['llm']['status'] = 'checking_tags'
     try:
       r = requests.get(f"{OLLAMA_HOST}/api/tags", timeout=5)
-      tags = r.json() if r.status_code==200 else []
-      present = any(LLM_MODEL in str(t) for t in tags)
-      state['llm'].update({'status':'ready' if present else 'model_missing','present':present,'tags':tags})
+      tags = r.json() if r.status_code == 200 else []
+
+      # Normalize tags into a simple models list for robust matching
+      models = []
+      try:
+        if isinstance(tags, list):
+          for t in tags:
+            if isinstance(t, str):
+              models.append(t)
+            elif isinstance(t, dict):
+              # Ollama may return objects; try common keys
+              name = t.get('name') or t.get('model') or t.get('id')
+              size = t.get('size') or t.get('tag') or t.get('model_size')
+              if name and size:
+                models.append(f"{name}:{size}")
+              elif name:
+                models.append(str(name))
+              else:
+                models.append(str(t))
+        elif isinstance(tags, dict):
+          # Defensive: convert dict into single-entry list representation
+          models.append(str(tags))
+        else:
+          models = [str(tags)]
+      except Exception:
+        models = [str(t) for t in tags]
+
+      # Deduplicate and store
+      models = list(dict.fromkeys(models))
+
+      # Determine presence: accept exact match, substring or reverse substring to tolerate formatting
+      present = any(
+        LLM_MODEL == m or LLM_MODEL in m or m in LLM_MODEL
+        for m in models
+      )
+
+      # Update state with richer info (tags raw + normalized models list)
+      new_status = 'ready' if present else 'model_missing'
+      state['llm'].update({
+        'status': new_status,
+        'present': present,
+        'tags': tags,
+        'models': models,
+      })
+      try:
+        push_log('info','llm', f'status={new_status} models={models}')
+      except Exception:
+        pass
     except Exception as e:
-      state['llm'].update({'status':'service_offline','error':str(e)})
+      state['llm'].update({'status': 'service_offline', 'error': str(e)})
+      try: push_log('error','llm', str(e))
+      except: pass
     time.sleep(loop_delay)

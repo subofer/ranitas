@@ -4,6 +4,7 @@ import { buscarContactosSimilares } from '@/prisma/serverActions/contactos'
 import Icon from '@/components/formComponents/Icon'
 import { ModalCrearProveedor } from './components/ModalCrearProveedor'
 import { ModalVincularProveedor } from './components/ModalVincularProveedor'
+import logger from '@/lib/logger'
 
 export default function SelectorProveedorSimilar({ 
   proveedorDetectado, 
@@ -28,7 +29,7 @@ export default function SelectorProveedorSimilar({
       })
       setContactosSimilares(similares)
     } catch (error) {
-      console.error('Error buscando contactos similares:', error)
+      logger.error(`Error buscando contactos similares: ${error}`, '[SelectorProveedorSimilar]')
       setContactosSimilares([])
     } finally {
       setLoading(false)
@@ -54,7 +55,7 @@ export default function SelectorProveedorSimilar({
   }
 
   const handleProveedorVinculado = ({ proveedor, alias }) => {
-    console.log('✅ Proveedor vinculado:', proveedor, 'con alias:', alias)
+    logger.info({ proveedor, alias }, '[SelectorProveedorSimilar]')
     setMostrarModalVincular(false)
     onSeleccionar && onSeleccionar(proveedor)
   }

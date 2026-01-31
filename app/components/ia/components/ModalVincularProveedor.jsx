@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect } from 'react'
 import { vincularNombreEscaneadoConContacto } from '@/prisma/serverActions/aliasActions'
+import logger from '@/lib/logger'
 
 /**
  * Modal para vincular un nombre escaneado (que no se encontró) con un proveedor existente
@@ -33,7 +34,7 @@ export function ModalVincularProveedor({ nombreEscaneado, isOpen, onCancelar, on
         setProveedores(data.contactos || [])
       }
     } catch (err) {
-      console.error('Error cargando proveedores:', err)
+      logger.error(`Error cargando proveedores: ${err}`, '[ModalVincularProveedor]')
       setError('No se pudieron cargar los proveedores')
     } finally {
       setCargandoProveedores(false)
@@ -65,11 +66,7 @@ export function ModalVincularProveedor({ nombreEscaneado, isOpen, onCancelar, on
     setError(null)
 
     try {
-      console.log('🔗 Vinculando:', {
-        nombreEscaneado,
-        proveedorId: proveedorSeleccionado.id,
-        proveedorNombre: proveedorSeleccionado.nombre
-      })
+      logger.info({ nombreEscaneado, proveedorId: proveedorSeleccionado.id, proveedorNombre: proveedorSeleccionado.nombre }, '[ModalVincularProveedor]')
 
       const alias = await vincularNombreEscaneadoConContacto({
         nombreEscaneado: nombreEscaneado.trim(),
@@ -78,7 +75,7 @@ export function ModalVincularProveedor({ nombreEscaneado, isOpen, onCancelar, on
         userId: null // TODO: obtener del contexto de sesión
       })
 
-      console.log('✅ Alias creado exitosamente:', alias)
+      logger.info({ alias }, '[ModalVincularProveedor]')
       
       // Mostrar éxito
       setExito(true)
@@ -98,7 +95,7 @@ export function ModalVincularProveedor({ nombreEscaneado, isOpen, onCancelar, on
         setExito(false)
       }, 1500)
     } catch (err) {
-      console.error('❌ Error vinculando proveedor:', err)
+      logger.error(`Error vinculando proveedor: ${err}`, '[ModalVincularProveedor]')
       const errorMsg = err.message || 'Error al vincular el proveedor'
       setError(errorMsg)
       

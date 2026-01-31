@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import logger from '@/lib/logger'
 
 const useParentForm = () => {
   const [reset, setReset] = useState();
@@ -11,11 +12,11 @@ const useParentForm = () => {
   }
   
   const submiting = (e) => {
-    console.log("submit", e)
+    logger.debug('submit event', '[useParentForm]')
   }
 
   const generalEvent = (e) => {
-    console.log("submit", e)
+    logger.debug('general form event', '[useParentForm]')
   }
   useEffect(() => {
     const form = refPadre.current.closest('form');

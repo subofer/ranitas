@@ -35,8 +35,12 @@ services:
       - MASK_THRESHOLD=0.5
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
       - OLLAMA_HOST=http://127.0.0.1:11434
-      # Set to 0 to avoid auto-pulling the configured OLLAMA model on every container start
+      # Avoid auto-pulling the configured OLLAMA model on every container start
       - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-0}
+      # Where ultralytics and other libs should place caches (persisted to docker volume)
+      - XDG_CACHE_HOME=/root/.cache
+      # Optional explicit path for a pre-downloaded mobileclip: set to /app/models/mobileclip2_b.ts or a mounted path
+      - MOBILECLIP_PATH=/app/models/mobileclip2_b.ts
       # Container timezone (set TZ in your environment or .env to match host timezone, default UTC)
       - TZ=${TZ:-UTC}
       - NVIDIA_VISIBLE_DEVICES=all

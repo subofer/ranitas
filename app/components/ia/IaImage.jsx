@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import NextImage from "next/image";
 import { useVisionStatusContext } from "@/context/VisionStatusContext";
+import logger from '@/lib/logger'
 // ImageCropper modal moved to 'cementerio' — preserved as commented JSX below
 // import ImageCropper from './ImageCropper'
 import FilterSelect from "../formComponents/FilterSelect";
@@ -155,7 +156,7 @@ export default function IaImage({ model }) {
       setFile(f);
       setPreview(previewUrl);
       setImageBlobs({ [previewUrl]: f });
-      setSavedCropPoints([]); // Reset saved points for new image
+      // No saved points to reset (we don't persist previous crop points)
       setResult(null);
       setAutoEnfoqueAplicado(false);
       setZoom(1);
@@ -170,7 +171,7 @@ export default function IaImage({ model }) {
 
       // No aplicar auto-enfoque automático
     } catch (e) {
-      console.error("Error procesando archivo:", e);
+      logger.error(`Error procesando archivo: ${e}`, '[IaImage]');
       setErrorMessage(
         "No se pudo procesar la imagen. Intenta subirla nuevamente.",
       );
@@ -194,7 +195,7 @@ export default function IaImage({ model }) {
         setPreview(nuevoUrl);
         setMostrarControles(false);
 
-        console.log("✅ Ajustes aplicados a la imagen");
+        logger.info('Ajustes aplicados a la imagen', '[IaImage]');
       },
       file.type,
       0.95,
@@ -217,16 +218,15 @@ export default function IaImage({ model }) {
       setAutoEnfoqueAplicado(false);
       setMostrarControles(false); // Cerrar controles si están abiertos
 
-      console.log("↩️ Auto-enfoque deshecho, imagen original restaurada");
+      logger.info('Auto-enfoque deshecho, imagen original restaurada', '[IaImage]');
     }
   };
 
   // Estado para crop points
   const [cropPoints, setCropPoints] = useState([])
-  const [savedCropPoints, setSavedCropPoints] = useState([])
-  // Guardados para debugging/comparación: puntos detectados por la IA y puntos movidos manualmente
-  const [lastDetectedPoints, setLastDetectedPoints] = useState(null)
-  const [lastManualPoints, setLastManualPoints] = useState(null)
+  // Temporary suggestion from auto-detect (not persisted)
+  const [detectedCropPoints, setDetectedCropPoints] = useState(null)
+  // No saved points stored persistently anymore (we always show current suggestion vs current manual points)
 
   // Handler compartido para procesamiento de capturas de cámara
   const handleCameraCapture = async (dataUrl) => {
@@ -258,7 +258,7 @@ export default function IaImage({ model }) {
       onFile(file);
       setCameraOpen(false);
     } catch (e) {
-      console.error("Error procesando imagen capturada:", e);
+      logger.error(`Error procesando imagen capturada: ${e}`, '[IaImage]');
       setErrorMessage(
         "No se pudo procesar la foto de la cámara. Intenta nuevamente.",
       );
@@ -281,6 +281,8 @@ export default function IaImage({ model }) {
 
     setFile((images.enhanced || images.cropped).file);
     setPreview(newPreviewUrl);
+    // Guardar blob para que el submit incluya correctamente esta imagen (tanto enhanced como cropped)
+    setImageBlobs(prev => ({ ...prev, [newPreviewUrl]: (images.enhanced || images.cropped).file }));
 
     // Ajustar zoom para mantener tamaño visual constante: si la nueva imagen es más pequeña, incrementar zoom en la misma proporción
     try {
@@ -478,8 +480,8 @@ export default function IaImage({ model }) {
         setImagenStatus("recortada");
         setShowOriginalPreview(true);
         setCropMode(false); // Cerrar el modo crop después de aplicar
-        setSavedCropPoints(cropPoints); // Guardar puntos para restaurar si se vuelve a crop desde original
-        setCropPoints([]); // Limpiar puntos del polígono
+        // Do not persist saved crop points. Clear current crop points after applying.
+        setCropPoints([]);
         
         // Auditoría del crop manual
         try {
@@ -514,8 +516,8 @@ export default function IaImage({ model }) {
     }
   };
 
-  // State to hold detected suggestion points
-  const [detectedCropPoints, setDetectedCropPoints] = useState(null)
+  // Flag to avoid double / concurrent auto-detect calls
+  const [autoDetectInFlight, setAutoDetectInFlight] = useState(false)
 
   // Autodetectar puntos de crop usando YOLO
   const handleAutoDetectCrop = async (autoApply = false, silent = false) => {
@@ -523,6 +525,14 @@ export default function IaImage({ model }) {
       if (!silent) setErrorMessage("No hay imagen para procesar");
       return;
     }
+
+    if (autoDetectInFlight) {
+      // Ya hay una llamada en curso; evitar duplicados
+      if (!silent) setErrorMessage("Auto-detección ya en curso. Espera un momento.");
+      return;
+    }
+
+    setAutoDetectInFlight(true)
 
     try {
       if (!silent) {
@@ -557,9 +567,8 @@ export default function IaImage({ model }) {
 
 
 
+        // Keep the detected suggestion in temporary state; do not persist historic points
         setDetectedCropPoints(points)
-        // Guardar los puntos detectados para comparación
-        setLastDetectedPoints(points)
 
         if (autoApply) {
           // Aplicar crop automáticamente (use warp on backend to generate final image)
@@ -570,7 +579,7 @@ export default function IaImage({ model }) {
           setCropMode(true);
         }
 
-        console.log('✅ Puntos detectados automáticamente:', points);
+        logger.info({ points }, '[IaImage:auto-detect]')
       } else {
         if (!silent) setErrorMessage("No se pudieron detectar esquinas en la imagen");
       }
@@ -580,6 +589,7 @@ export default function IaImage({ model }) {
       if (!silent) setErrorMessage(`Error detectando esquinas: ${error.message}`);
     } finally {
       if (!silent) setLoading(false);
+      setAutoDetectInFlight(false)
     }
   };
 
@@ -659,11 +669,10 @@ export default function IaImage({ model }) {
   }, [previewOriginal, preview, imagenMejorada]);
 
   // Restaurar puntos de crop cuando se entra en modo crop desde la original
+  // No persistent saved crop points: do not re-apply on carousel change
   useEffect(() => {
-    if (cropMode && carouselIndex === 0 && savedCropPoints.length > 0) {
-      setCropPoints(savedCropPoints);
-    }
-  }, [cropMode, carouselIndex, savedCropPoints]);
+    if (!cropMode) return;
+  }, [cropMode, carouselIndex]);
 
   // Función helper para esperar que un modelo se cargue
   const waitForModelLoad = (modelName, timeout = 300000) => {
@@ -700,12 +709,7 @@ export default function IaImage({ model }) {
     }
 
     try {
-      console.log("📤 Frontend: Enviando imagen a /api/ai/image", {
-        hasFile: !!file,
-        hasOriginal: !!imagenOriginal,
-        model: model || "llava:latest",
-        mode,
-      });
+      logger.debug({ sending: '/api/ai/image', payload: { name: image?.name, size: image?.size } }, '[IaImage]')
 
       // Enviar la imagen actual y la original
       const fd = new FormData();
@@ -720,14 +724,7 @@ export default function IaImage({ model }) {
       const res = await fetch("/api/ai/image", { method: "POST", body: fd });
       const data = await res.json();
 
-      console.log("📥 Frontend: Respuesta de /api/ai/image", {
-        ok: data.ok,
-        hasText: !!data.text,
-        hasMetadata: !!data.metadata,
-        visionMetaKeys: data.metadata?.vision_meta
-          ? Object.keys(data.metadata.vision_meta)
-          : null,
-      });
+      logger.debug({ endpoint: '/api/ai/image', status: resp.status, ok: resp.ok }, '[IaImage]')
 
       if (data.ok) {
         setResult(data.text);
@@ -742,7 +739,7 @@ export default function IaImage({ model }) {
           );
         } else {
           setParsedData(data.data);
-          console.log("📊 Datos recibidos:", data.data);
+          logger.debug({ data_preview: data.data ? (Array.isArray(data.data.items) ? { items: data.data.items.length } : {}) : null }, '[IaImage]')
         }
 
         setErrorMessage(null);
@@ -1255,7 +1252,7 @@ export default function IaImage({ model }) {
     setImagenMejorada(null);
     setPreviewOriginal(null);
     setImageBlobs({});
-    setSavedCropPoints([]);
+    // No saved points to clear
     setAutoEnfoqueAplicado(false);
     setCropMode(false);
     setShowOriginalPreview(false);
@@ -1423,9 +1420,7 @@ export default function IaImage({ model }) {
                 originalPreview={previewOriginal}
                 incomingCropPoints={detectedCropPoints}
                 incomingPointsAreNormalized={true}
-                // Saved points for comparison
-                detectedSavedPoints={lastDetectedPoints}
-                manualSavedPoints={lastManualPoints}
+                // We no longer persist saved points; ImageViewer will compare current suggestion and current manual points
                 extraHeaderButtons={cropMode ? (
                   <div className="flex gap-2">
                     <button
@@ -1451,7 +1446,6 @@ export default function IaImage({ model }) {
                 onCropPointsChange={(nextOrUpdater) => {
                   const nextPoints = typeof nextOrUpdater === 'function' ? nextOrUpdater(cropPoints) : nextOrUpdater
                   setCropPoints(nextPoints)
-                  setLastManualPoints(nextPoints)
                 }}
                 showOriginal={showOriginalPreview}
                 onToggleShowOriginal={(v) => setShowOriginalPreview(!!v)}
@@ -1914,7 +1908,11 @@ export default function IaImage({ model }) {
               </summary>
               <div className="mt-2 flex gap-2">
                 <button
-                  onClick={() => setCropMode(true)}
+                  onClick={() => {
+                    // Abrir modo crop y forzar una nueva autodetección al tocar el botón
+                    setCropMode(true)
+                    handleAutoDetectCrop(false, true)
+                  }}
                   className="flex-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 border border-blue-200 font-medium text-xs"
                 >
                   ✂️ Recortar

@@ -3,6 +3,7 @@ import { imagenRanita } from '@/lib/imagenTransparente';
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import Icon from './Icon';
+import logger from '@/lib/logger'
 import ImageToBase64Uploader from '../LoadImage64';
 import CameraCaptureModal from './CameraCapture';
 import { ChevronPair } from './Chevron';
@@ -13,9 +14,9 @@ const SelectorImagenes = ({ imagenes: imagenesProp, proceder, onClick, className
   const [imagenes, setImagenes] = useState(imagenesProp)
 
   useEffect(() => {
-    console.log(imagenes[currentIndex])
+    logger.debug({ current: imagenes[currentIndex] }, '[SelectorImagenes]')
     if(imagenes?.[currentIndex]?.imagen?.src){ 
-      console.log('cambia', imagenes?.[currentIndex]?.imagen?.src)
+      logger.debug({ src: imagenes?.[currentIndex]?.imagen?.src }, '[SelectorImagenes]')
       proceder(imagenes?.[currentIndex]?.imagen?.src)
     }
   },[currentIndex, imagenes, proceder])

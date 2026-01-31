@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { formatCurrency } from '@/lib/formatters'
 import { prepararBusquedaWeb } from '@/prisma/serverActions/facturaActions'
 import { crearAliasSimple } from '@/prisma/serverActions/buscarAliases'
+import logger from '@/lib/logger'
 
 /**
  * Item individual de producto en factura
@@ -59,7 +60,7 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
         alert('Error creando alias: ' + resultado.error)
       }
     } catch (error) {
-      console.error('Error:', error)
+      logger.error(`Error creando alias: ${error}`, '[ProductoItem]')
       alert('Error creando alias')
     } finally {
       setCreandoAlias(false)
@@ -75,7 +76,7 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
   }
   
   const handleAgregarStock = () => {
-    console.log('Agregar stock:', producto, productosEncontrados[0])
+    logger.info({ producto, suggestion: productosEncontrados[0] }, '[ProductoItem]')
     alert(`Agregar ${producto.cantidad} de "${producto.descripcion}"\nFuncionalidad en desarrollo`)
   }
   
@@ -96,10 +97,10 @@ export function ProductoItem({ producto, index, productosBuscados, buscandoDatos
         })
         
         if (resultado.success) {
-          console.log('✅ Alias creado automáticamente:', resultado.alias)
+          logger.info({ alias: resultado.alias }, '[ProductoItem]')
         }
       } catch (error) {
-        console.error('Error creando alias automático:', error)
+        logger.error(`Error creando alias automático: ${error}`, '[ProductoItem]')
       }
     }
     

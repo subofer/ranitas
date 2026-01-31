@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState } from 'react'
+import logger from '@/lib/logger'
 
 export function useAiChat({ model }) {
   const [messages, setMessages] = useState([])
@@ -16,11 +17,11 @@ export function useAiChat({ model }) {
 
   const send = async (text) => {
     if (!text || !model) {
-      console.error('❌ Falta texto o modelo:', { text, model })
+      logger.warn(`Falta texto o modelo: model=${model} textLength=${text?.length || 0}`, '[useAiChat]')
       return
     }
     
-    console.log('📤 Enviando mensaje:', { model, textLength: text.length })
+    logger.debug({ action: 'send', model, textLength: text.length }, '[useAiChat]')
     
     setMessages((m) => [...m, { role: 'user', text }])
     setLoading(true)
@@ -41,12 +42,12 @@ export function useAiChat({ model }) {
         signal: controller.signal 
       })
 
-      console.log('📡 Respuesta recibida:', { status: res.status, ok: res.ok })
+      logger.debug({ status: res.status, ok: res.ok }, '[useAiChat]')
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         const errorMsg = `Error ${res.status}: ${data?.error || res.statusText}`
-        console.error('❌', errorMsg)
+        logger.error(errorMsg, '[useAiChat]')
         setMessages((m) => {
           const copy = [...m]
           copy[copy.length - 1] = { role: 'assistant', text: errorMsg }
@@ -56,7 +57,7 @@ export function useAiChat({ model }) {
       }
 
       if (!res.body) {
-        console.warn('⚠️ Sin body en respuesta, intentando JSON')
+        logger.warn('Sin body en respuesta; fallback to JSON', '[useAiChat]')
         const data = await res.json()
         setMessages((m) => {
           const copy = [...m]
@@ -67,7 +68,7 @@ export function useAiChat({ model }) {
       }
 
       // Streaming
-      console.log('📊 Iniciando streaming...')
+      logger.info('Iniciando streaming...', '[useAiChat]')
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let assistantText = ''
@@ -77,7 +78,7 @@ export function useAiChat({ model }) {
       while (true) {
         const { done, value } = await reader.read()
         if (done) {
-          console.log('✅ Stream completo. Total caracteres:', assistantText.length)
+          logger.info(`Stream completo. Total caracteres: ${assistantText.length}`, '[useAiChat]')
           break
         }
         const chunk = decoder.decode(value, { stream: true })
@@ -105,20 +106,20 @@ export function useAiChat({ model }) {
         // Remover mensaje de carga en el primer chunk
         if (isFirstChunk) {
           isFirstChunk = false
-          console.log('🚀 Modelo cargado, iniciando generación')
+          logger.info('Modelo cargado, iniciando generación', '[useAiChat]')
         }
       }
 
     } catch (e) {
       if (e.name === 'AbortError') {
-        console.log('⏹️ Stream cancelado por usuario')
+        logger.info('Stream cancelado por usuario', '[useAiChat]')
         setMessages((m) => {
           const copy = [...m]
           copy[copy.length - 1] = { role: 'assistant', text: '⏹️ [Cancelado por usuario]' }
           return copy
         })
       } else {
-        console.error('❌ Error en send:', e)
+        logger.error(`Error en send: ${e}`, '[useAiChat]')
         setMessages((m) => {
           const copy = [...m]
           copy[copy.length - 1] = { role: 'assistant', text: `❌ Error: ${e.message}` }

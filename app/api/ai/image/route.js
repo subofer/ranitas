@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import prisma from "@/prisma/prisma";
 import { guardarAuditoriaIaFailure } from "@/prisma/serverActions/facturaActions";
+import logger from '@/lib/logger';
 
 // Configuración de timeout para esta ruta (10 minutos)
 // NOTE: Ollama external dependency removed; now we call local vision microservice which hosts Qwen
@@ -40,9 +41,7 @@ function normalizeToMultipleOf28(width, height, maxSize = 896) {
   if (newWidth < 28) newWidth = 28;
   if (newHeight < 28) newHeight = 28;
 
-  console.log(
-    `📏 Normalizado: ${width}x${height} → ${newWidth}x${newHeight} (múltiplo de 28)`,
-  );
+  logger.info(`📏 Normalizado: ${width}x${height} → ${newWidth}x${newHeight} (múltiplo de 28)`, '[image-route]');
 
   return { width: newWidth, height: newHeight };
 }
@@ -103,7 +102,7 @@ async function makeSafeImageForQwen(buffer, minSize = 672, maxSize = 896) {
       .toBuffer();
 
     const m = await sharp(final).metadata();
-    console.log(`🔒 Imagen segura: ${m.width}x${m.height} (múltiplos de 28)`);
+    logger.info(`🔒 Imagen segura: ${m.width}x${m.height} (múltiplos de 28)`, '[image-route]');
     return final;
   } catch (err) {
     console.warn("⚠️ No se pudo generar imagen segura para Qwen:", err.message);
@@ -457,13 +456,14 @@ function validateParsedInvoice(parsed) {
 export async function POST(req) {
   try {
     const tStart = Date.now();
-    console.log("🖼️ Iniciando análisis de imagen...");
+    logger.info("🖼️ Iniciando análisis de imagen...", '[image-route]');
 
     const formData = await req.formData();
     const image = formData.get("image");
     const model = formData.get("model") || "minicpm-v";
     const mode = formData.get("mode") || "general";
     const action = formData.get("action") || "process";
+    const debug = String(formData.get("debug") || "").toLowerCase() === 'true' || String(formData.get("debug") || "") === '1';
 
     if (!image) {
       console.error("❌ No se recibió imagen");
@@ -495,34 +495,63 @@ export async function POST(req) {
 
     // Manejar diferentes actions
     if (action === 'detect-corners') {
-      console.log("🔍 Detectando esquinas con YOLO...");
+      console.log("🔍 Detectando esquinas (usando /crop)...");
+      logger.debug({ name: image.name, size: image.size, type: image.type }, '[detect-corners]');
       
       try {
-        // Enviar imagen directamente al servicio vision sin optimización
+        // Enviar imagen al endpoint /crop del servicio vision
         const form = new FormData();
-        // Crear Blob correctamente
         const imageBlob = new Blob([buffer], { type: image.type });
         form.append('file', imageBlob, image.name || 'upload.jpg');
+        if (debug) form.append('debug', 'true');
 
-        const visionResponse = await fetch(VISION_HOST + '/vision/detect', {
+        const visionResponse = await fetch(VISION_HOST + '/crop', {
           method: 'POST',
           body: form,
         });
 
         const visionData = await visionResponse.json();
 
-        if (!visionResponse.ok) {
-          throw new Error(visionData.detail || 'Error en detección de esquinas');
+        // If vision indicates no detection, return debug info to the client for inspection
+        if (!visionResponse.ok || (visionData && visionData.ok === false)) {
+          return NextResponse.json({ ok: false, error: visionData?.error || 'Error en detección de esquinas (vision/crop)', debug: visionData?.debug || null, vision_raw: visionData }, { status: 500 });
+        }
+
+        // Obtener dimensiones de la imagen para normalizar puntos
+        const sharp = (await import('sharp')).default;
+        const imageMeta = await sharp(buffer).metadata();
+        const imgW = imageMeta.width || 1;
+        const imgH = imageMeta.height || 1;
+
+        // visionData.src_coords expected as [[x1,y1],[x2,y2],...]
+        let corners = [];
+        if (visionData.src_coords && Array.isArray(visionData.src_coords)) {
+          corners = visionData.src_coords.slice(0,4).map(pt => {
+            const x = (pt[0] || 0) / imgW;
+            const y = (pt[1] || 0) / imgH;
+            return [x, y];
+          });
+        }
+
+        if (!corners || corners.length === 0) {
+          throw new Error(visionData?.error || 'no_target_detected');
         }
 
         const tEnd = Date.now();
-        console.log("✅ Esquinas detectadas:", visionData);
+        console.log("✅ Esquinas detectadas (from /crop):", { corners, detected: visionData.detected_class || visionData.detected });
+        console.log('INFO /api/ai/image detect-corners result', { ok: visionData.ok, detected_class: visionData.detected_class || visionData.detected, vision_src_coords_px: visionData.src_coords ? visionData.src_coords.slice(0,4) : null, has_debug: !!visionData.debug });
 
         return NextResponse.json({
           ok: true,
-          corners: visionData.corners || [],
+          corners,
+          class: visionData.detected_class || visionData.detected,
+          confidence: visionData.confidence,
+          cropped_image_b64: visionData.image_b64 ? `data:image/jpeg;base64,${visionData.image_b64}` : null,
+          vision_src_coords_px: visionData.src_coords || null,
+          vision_debug: visionData.debug || null,
           metadata: {
             timing: { totalMs: tEnd - tStart, human: `${tEnd - tStart}ms` },
+            model: 'vision/crop'
           },
         });
       } catch (error) {
@@ -561,7 +590,7 @@ export async function POST(req) {
         form.append('file', imageBlob, image.name || 'upload.jpg');
         form.append('points', JSON.stringify(points));
 
-        const visionResponse = await fetch(VISION_HOST + '/vision/warp', {
+        const visionResponse = await fetch(VISION_HOST + '/warp', {
           method: 'POST',
           body: form,
         });
@@ -623,6 +652,25 @@ export async function POST(req) {
     if (imageMeta.reduction)
       console.log("   - Reducción:", imageMeta.reduction);
 
+    // Si el modelo es Qwen2.5-VL, producir una imagen "safe" (cuadrada y múltiplos de 28)
+    let finalOptimized = optimized;
+    try {
+      if (/qwen/i.test(String(model || ""))) {
+        try {
+          const safeBuf = await makeSafeImageForQwen(Buffer.from(optimized, "base64"));
+          finalOptimized = safeBuf.toString("base64");
+          const sharp = (await import("sharp")).default;
+          const mm = await sharp(Buffer.from(finalOptimized, "base64")).metadata();
+          console.log("🔒 Imagen ajustada para Qwen:", `${mm.width}x${mm.height}`);
+        } catch (e) {
+          console.warn("⚠️ No se pudo generar imagen segura para Qwen:", e.message);
+          // seguir con 'optimized' como fallback
+        }
+      }
+    } catch (e) {
+      console.warn("⚠️ Error verificando modelo para Qwen:", e.message);
+    }
+
     // Usar directamente la API del microservicio vision (local Qwen)
     const prompt = PROMPTS[mode] || PROMPTS.general;
 
@@ -631,7 +679,7 @@ export async function POST(req) {
     );
     console.log("   - Modelo sugerido por frontend:", model);
     console.log("   - Modo:", mode);
-    console.log("   - Tamaño imagen optimizada:", optimized.length, "chars");
+    console.log("   - Tamaño imagen optimizada (final):", finalOptimized.length, "chars");
     const tBeforeVision = Date.now();
 
     let data;
@@ -639,7 +687,7 @@ export async function POST(req) {
 
     try {
       // Convert optimized base64 to binary and attach as a Blob for FormData
-      const optimizedBuffer = Buffer.from(optimized, "base64");
+      const optimizedBuffer = Buffer.from(finalOptimized, "base64");
       const form = new FormData();
       // Use Web Blob in Node (Node 18+ supports global Blob). Fallback to Buffer if not available.
       let blobForForm;
@@ -672,35 +720,98 @@ export async function POST(req) {
         console.warn("Could not append prompt to form:", e.message);
       }
 
+      // --- NEW: attempt an automatic crop/warp via /crop to send a straightened image to /analyze ---
+      // Use RAW base64 (no data: prefix) for the LLM multimodal API
+      // placeholder - will be set to finalOptimized below (or overridden by crop result)
+      let imageToAnalyze = null;
+      try {
+        console.log('🔬 Intentando pre-crop con vision /crop to get a straightened image...');
+        const cropForm = new FormData();
+        cropForm.append('file', blobForForm, image.name || 'upload.jpg');
+        // Prefer non-debug default; keep small timeout
+        const cropResp = await fetch(`${VISION_HOST}/crop`, { method: 'POST', body: cropForm });
+        if (cropResp && cropResp.ok) {
+          const cropData = await cropResp.json();
+          if (cropData && cropData.ok && cropData.image_b64) {
+            console.log('✅ Pre-crop succeeded: using warped image for analysis');
+            // cropData.image_b64 is raw base64
+            imageToAnalyze = cropData.image_b64;
+          } else {
+            console.log('⚠️ Pre-crop did not return warped image; continuing with optimized image');
+          }
+        } else {
+          console.log('⚠️ Pre-crop request failed or vision returned error; continuing with optimized image');
+        }
+      } catch (preCropErr) {
+        console.warn('⚠️ Pre-crop attempt failed:', preCropErr.message);
+      }
+
+      // If crop did not provide an image, fall back to finalOptimized (Qwen-safe if applied)
+      if (!imageToAnalyze) imageToAnalyze = finalOptimized;
+
       // Determine vision endpoint based on action
-      const visionEndpoint =
-        action === "crop" ? "/process-document" : "/restore";
+      // Prefer the `/analyze` JSON endpoint if available in the vision service; fallback to form-based endpoints when needed
+      const visionEndpoint = action === "crop" ? "/process-document" : "/analyze";
 
       console.log(`🔍 Enviando imagen a vision service: ${visionEndpoint}`);
 
       // Forward optional flags if needed (could be exposed from frontend later)
       let resp;
       try {
-        resp = await fetch(`${VISION_HOST}${visionEndpoint}`, {
-          method: "POST",
-          body: form,
-        });
+        if (visionEndpoint === "/analyze") {
+          // Send JSON payload expected by services/vision/routes_analyze.py
+          const jsonBody = {
+            image: imageToAnalyze,
+            prompt: prompt,
+            model: model,
+            mode: mode,
+          };
+
+          resp = await fetch(`${VISION_HOST}${visionEndpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(jsonBody),
+          });
+        } else {
+          // Legacy: send as multipart/form-data (for endpoints expecting files)
+          resp = await fetch(`${VISION_HOST}${visionEndpoint}`, {
+            method: "POST",
+            body: form,
+          });
+        }
       } catch (fetchErr) {
         console.error(
           "❌ No se pudo conectar al microservicio vision:",
           fetchErr.message,
         );
 
-        // Intento de recuperación: si VISION_HOST apunta a 'vision', probar 'http://localhost:8000' para entornos de desarrollo
+        // Intento de recuperación: si VISION_HOST apunta a 'vision', probar http://localhost:8000 con JSON analize o legacy restore
         if (VISION_HOST && VISION_HOST.includes("vision")) {
           try {
             console.info(
               "🔁 Intentando fallback a http://localhost:8000 (entorno dev)",
             );
-            resp = await fetch("http://localhost:8000/restore", {
-              method: "POST",
-              body: form,
-            });
+
+            // Try analyze JSON endpoint first
+            try {
+              const jsonBody = {
+                image: `data:image/jpeg;base64,${optimized}`,
+                prompt: prompt,
+                model: model,
+                mode: mode,
+              };
+              resp = await fetch("http://localhost:8000/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(jsonBody),
+              });
+            } catch (jsErr) {
+              // fallback to legacy restore with form
+              resp = await fetch("http://localhost:8000/restore", {
+                method: "POST",
+                body: form,
+              });
+            }
           } catch (fallbackErr) {
             console.error(
               "❌ Fallback a localhost falló:",
@@ -762,7 +873,7 @@ export async function POST(req) {
       tAfterVision = Date.now();
       if (!resp.ok) {
         const text = await resp.text();
-        console.error("❌ Vision service returned error:", resp.status, text);
+        logger.error(`Vision service returned error: ${resp.status} ${text}`, '[vision-service]');
 
         // Si el error indica que vision no pudo identificar la imagen, intentar reenviar la imagen ORIGINAL (no optimizada)
         if (/cannot identify image file/i.test(text)) {
@@ -902,33 +1013,108 @@ export async function POST(req) {
         );
       }
 
-      const vdata = await resp.json();
+      // Try to parse JSON response, fallback to text
+      let vdata;
+      try {
+        vdata = await resp.json();
+      } catch (parseErr) {
+        const txt = await resp.text();
+        vdata = { text: txt };
+      }
+
       console.log(
         "✅ Vision response received in",
         ((tAfterVision - tBeforeVision) / 1000).toFixed(2),
         "s",
       );
-      console.log("📦 Vision response keys:", Object.keys(vdata));
-      console.log("🔍 Vision extraction_meta:", vdata.extraction_meta);
-      console.log(
-        "📝 Vision ocr_text preview:",
-        (vdata.ocr_text || "").substring(0, 200),
-      );
+      try {
+        console.log("📦 Vision response keys:", Object.keys(vdata));
+      } catch (e) {
+        console.log("📦 Vision response (non-JSON)");
+      }
+
+      // Build a best-effort text response that covers multiple service contracts
+      let responseTextFromVision = "";
+
+      if (vdata) {
+        if (vdata.extraction) {
+          responseTextFromVision =
+            typeof vdata.extraction === "string"
+              ? vdata.extraction
+              : JSON.stringify(vdata.extraction);
+        } else if (vdata.ocr_text) {
+          responseTextFromVision = vdata.ocr_text;
+        } else if (vdata.result) {
+          responseTextFromVision =
+            typeof vdata.result === "string"
+              ? vdata.result
+              : JSON.stringify(vdata.result);
+        } else if (vdata.response) {
+          responseTextFromVision =
+            typeof vdata.response === "string"
+              ? vdata.response
+              : JSON.stringify(vdata.response);
+        } else if (vdata.text) {
+          responseTextFromVision = vdata.text;
+        } else if (typeof vdata === "string") {
+          responseTextFromVision = vdata;
+        } else {
+          responseTextFromVision = JSON.stringify(vdata);
+        }
+      }
 
       // Normalize into `data` (keeping compatibility with existing flow)
       data = {
-        response: vdata.extraction
-          ? typeof vdata.extraction === "string"
-            ? vdata.extraction
-            : JSON.stringify(vdata.extraction)
-          : vdata.ocr_text || "",
-        model: vdata.extraction_meta?.model || "qwen",
+        response: responseTextFromVision || "",
+        model:
+          vdata?.extraction_meta?.model || vdata?.model || vdata?.model_name || "qwen",
         created_at: new Date().toISOString(),
         done: true,
         vision_meta: vdata,
       };
 
-      console.log("📦 Estructura de respuesta vision:", Object.keys(vdata));
+      // Detect internal model assertion failures (GGML) and attempt OCR-only JS fallback
+      const errText = (vdata && (vdata.error || vdata.message || "")) || responseTextFromVision || "";
+      if (/GGML_ASSERT|assert\(|panic/i.test(errText) || /GGML_ASSERT|assert\(|panic/i.test(responseTextFromVision)) {
+        console.warn("⚠️ Modelo reportó GGML_ASSERT/panic; intentando fallback con OCR/heurística JS");
+        const ocrText = (vdata && vdata.ocr_text) || responseTextFromVision || "";
+        try {
+          const parsedFallback = simpleInvoiceParserJS(ocrText);
+          if (parsedFallback && Array.isArray(parsedFallback.items) && parsedFallback.items.length>0) {
+            data = {
+              response: JSON.stringify(parsedFallback),
+              model: data.model,
+              created_at: new Date().toISOString(),
+              done: true,
+              vision_meta: { ...vdata, llm_error: true, llm_error_msg: errText },
+            };
+            console.log("✅ Fallback JS parse succeeded (GGML_ASSERT)");
+          } else {
+            console.warn("❌ Fallback JS parse failed to extract invoice - returning model error to client");
+            return NextResponse.json(
+              {
+                ok: false,
+                error: "model_internal_error",
+                details: "GGML_ASSERT",
+                message:
+                  "Error interno del modelo durante el análisis (GGML_ASSERT). Intenta reintentar, usar otro modelo o reducir la resolución de la imagen.",
+                retryable: true,
+              },
+              { status: 500 },
+            );
+          }
+        } catch (fbErr) {
+          console.warn("❌ Error running JS fallback:", fbErr.message);
+        }
+      }
+
+      try {
+        logger.debug({ extraction_meta: vdata.extraction_meta || vdata.model || null, ocr_preview: (responseTextFromVision || "").substring(0, 200) }, '[vision-response]');
+      } catch (e) {}
+
+      try {
+        console.log("📦 Estructura de respuesta vision:", Object.keys(vdata || {}));
+      } catch (e) {}
     } catch (visionErr) {
       tAfterVision = Date.now();
 
@@ -1971,7 +2157,7 @@ export async function POST(req) {
       human: `${tEnd - tStart}ms`,
     };
 
-    console.log("⏱️ Tiempos:", timing);
+    logger.info({ timing }, '[image-route]');
 
     return NextResponse.json({
       ok: true,

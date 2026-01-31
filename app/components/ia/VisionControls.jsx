@@ -2,6 +2,7 @@
 import { useState, useMemo } from 'react'
 import { useVisionStatusContext } from '@/context/VisionStatusContext'
 import DockerStatusDisplay from './DockerStatusDisplay'
+import logger from '@/lib/logger'
 
 export default function VisionControls({ minimal = false }) {
   const { loadedModels = [], refresh, probeState, statusInfo, dockerServices } = useVisionStatusContext()
@@ -49,19 +50,19 @@ export default function VisionControls({ minimal = false }) {
         const { auditAction } = await import('@/lib/actions/audit')
         auditAction({ level: 'INFO', category: 'IA', action: 'CONTROL_VISION', message: `Action: ${action}`, metadata: { action } }).catch(()=>{})
       } catch (auditErr) {
-        console.warn('No se pudo registrar auditoría de control vision:', auditErr)
+        logger.warn(`No se pudo registrar auditoría de control vision: ${auditErr}`, '[VisionControls]')
       }
 
       // Refresh immediately so UI reflects new state as soon as possible
       try { await refresh() } catch (e) { /* ignore */ }
     } catch (err) {
-      console.error('Vision control error', err)
+      logger.error(`Vision control error: ${err}`, '[VisionControls]')
       setError(err.message || String(err))
       try {
         const { auditAction } = await import('@/lib/actions/audit')
         auditAction({ level: 'ERROR', category: 'IA', action: 'CONTROL_VISION', message: `Action failed: ${action}`, metadata: { action, error: String(err) } }).catch(()=>{})
       } catch (auditErr) {
-        console.warn('No se pudo registrar auditoría de fallo:', auditErr)
+        logger.warn(`No se pudo registrar auditoría de fallo: ${auditErr}`, '[VisionControls]')
       }
     } finally {
       setRunning(false)

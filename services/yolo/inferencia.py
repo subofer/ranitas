@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import httpx
 import base64
 import asyncio
+import os
 
 try:
     from status import update_llm_status
@@ -14,17 +15,18 @@ router = APIRouter()
 OLLAMA_HOST = 'http://127.0.0.1:11434'
 MODEL = 'qwen2.5vl:7b'
 
+# Use file-based flag to prevent duplicate messages across workers
+_LOADED_FLAG = '/tmp/qwen_loaded.flag'
+
 async def load_qwen():
     try:
-        print('🤖 Iniciando carga de Ollama Qwen...', flush=True)
-        update_llm_status('loading')
+        # Indicate we're about to attempt pulling/loading the model
+        update_llm_status('downloading')
         
-        print(f'📥 Verificando/descargando modelo {MODEL}...', flush=True)
-        # Pull model if needed
+        # Pull model if needed (silently)
         async with httpx.AsyncClient(timeout=300) as c:
             resp = await c.post(f"{OLLAMA_HOST}/api/pull", json={'name': MODEL})
             if resp.status_code == 200:
-                print('🔥 Realizando warmup del modelo...', flush=True)
                 # Quick warmup call
                 warmup_payload = {
                     'model': MODEL,
@@ -34,16 +36,12 @@ async def load_qwen():
                 }
                 warmup_resp = await c.post(f"{OLLAMA_HOST}/api/generate", json=warmup_payload)
                 if warmup_resp.status_code == 200:
-                    print('✅ Ollama Qwen listo y operativo!', flush=True)
                     update_llm_status('ready', MODEL)
                 else:
-                    print(f'⚠️ Pull OK pero warmup falló: {warmup_resp.status_code}', flush=True)
                     update_llm_status('ready', MODEL)  # Still mark as ready if pull worked
             else:
-                print(f'❌ Error descargando modelo: {resp.status_code}', flush=True)
                 update_llm_status('error')
     except Exception as e:
-        print(f'❌ Error cargando Ollama: {e}', flush=True)
         update_llm_status('error')
         raise
 
@@ -58,7 +56,7 @@ async def analyze(req: AnalyzeRequest):
         # Send to Ollama with keep_alive=-1
         payload = {
             'model': MODEL,
-            'prompt': 'Analyze this invoice image and extract all relevant information as JSON.',
+            'prompt': 'Encontra principalmente el CUIT y analiza esta imagen de factura para extraer toda la información relevante en formato JSON.',
             'images': [req.image],  # base64
             'keep_alive': -1,
             'stream': False

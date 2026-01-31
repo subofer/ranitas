@@ -71,11 +71,22 @@ export async function POST(req) {
     // The incoming File / Blob can be appended directly
     proxyForm.append('file', image, image.name || 'upload.jpg')
 
-    const resp = await fetch(YOLO_URL + '/vision/detect', { method: 'POST', body: proxyForm })
+    const resp = await fetch(YOLO_URL + '/vision/yolo', { method: 'POST', body: proxyForm })
     const data = await resp.json().catch(async (e) => {
       const txt = await resp.text().catch(() => '')
-      return { ok: false, error: 'Invalid response from YOLO service', raw: txt }
+      return { ok: false, error: 'Invalid response from YOLOE service', raw: txt }
     })
+
+    // Normalizar respuesta para compatibilidad
+    if (data.ok) {
+      return NextResponse.json({
+        ok: true,
+        corners: data.four_corners || [],
+        class: data.detected,
+        confidence: data.confidence,
+        metadata: { model: 'YOLOE-26x-seg' }
+      }, { status: resp.status })
+    }
 
     return NextResponse.json(data, { status: resp.status })
   } catch (err) {

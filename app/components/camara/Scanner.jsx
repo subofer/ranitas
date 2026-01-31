@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Html5Qrcode } from 'html5-qrcode';
 import Icon from '../formComponents/Icon';
+import logger from '@/lib/logger'
 // Fallback: some environments don't have `lib/testMobileHttp`; provide a small hook compatible shim
 const useDeviceAndProtocol = () => ({ isMobile: false, isHttps: true });
 // If the external helper exists, prefer to dynamically import it later (keeps build safe).
@@ -36,9 +37,9 @@ const QrReader = ({ onScan, onError }) => {
         html5QrCodeRef.current.clear();
         html5QrCodeRef.current = null;
         setIsScanning(false);
-        console.log("Scanner stopped.");
+        logger.info('Scanner stopped', '[Scanner]');
       } catch (e) {
-        console.error("Failed to stop the scanner: ", e);
+        logger.error(`Failed to stop the scanner: ${e}`, '[Scanner]');
       }
     }
   }, []);
@@ -53,7 +54,7 @@ const QrReader = ({ onScan, onError }) => {
     }
 
     if (html5QrCodeRef.current) {
-      console.log("Scanner is already running.", html5QrCodeRef.current);
+      logger.debug('Scanner is already running', '[Scanner]')
       return;
     }
 
@@ -76,7 +77,7 @@ const QrReader = ({ onScan, onError }) => {
         { facingMode: "environment" },
         config,
         (decodedText, decodedResult) => {
-          console.log(`Code scanned = ${decodedText}`, decodedResult);
+          logger.info({ code: decodedText, result: decodedResult }, '[Scanner]')
           onScan(decodedText);
           stopScanner();
         }

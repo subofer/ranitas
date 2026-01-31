@@ -1,137 +1,126 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException
-from pydantic import BaseModel
 import numpy as np
 import cv2
 import os
-import asyncio
-
-try:
-    from status import update_yolo_status
-except Exception:
-    update_yolo_status = lambda *args: None
-
+import base64
 router = APIRouter()
 
-# YOLO model
-_YOLO = None
-MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', '/app/models/yolov26l-seg.pt')
+# --- CONFIGURACIÓN GLOBAL ---
+import os
+MODEL_PATH = os.environ.get('YOLO_MODEL_PATH', '/app/models/yoloe-26x-seg.pt')
+PROMPT_CLASSES = ["invoice", "piece of paper", "printed document", "receipt"]
+_MODEL = None
 
-try:
-    from ultralytics import YOLO
-except Exception:
-    YOLO = None
+# NOTE: The model is loaded asynchronously by `loader.ensure_and_load_all()` at startup.
+# Vision endpoints should handle the case when `_MODEL` is None (still loading or missing).
 
-async def load_yolo():
-    global _YOLO
-    try:
-        print('🚀 Iniciando carga de YOLO...', flush=True)
-        update_yolo_status('loading')
-        if YOLO is None:
-            raise RuntimeError('Ultralytics YOLO not available')
-        
-        print(f'📦 Cargando modelo YOLO desde {MODEL_PATH}...', flush=True)
-        _YOLO = YOLO(MODEL_PATH)
-        
-        print('🎮 Moviendo modelo a GPU...', flush=True)
-        _YOLO.to('cuda:0')
-        
-        print('🔥 Realizando warmup del modelo...', flush=True)
-        dummy = np.zeros((640, 640, 3), dtype=np.uint8)
-        _YOLO.predict(dummy, verbose=False)
-        
-        print('✅ YOLO listo y operativo!', flush=True)
-        update_yolo_status('ready', MODEL_PATH)
-    except Exception as e:
-        print(f'❌ Error cargando YOLO: {e}', flush=True)
-        update_yolo_status('error')
-        raise
-
-class WarpRequest(BaseModel):
-    image: bytes  # base64 encoded? Wait, for simplicity, use UploadFile
-    points: list[list[int]]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
-
-def detect_document_corners_opencv(img_np):
-    gray = (0.299 * img_np[:, :, 2] + 0.587 * img_np[:, :, 1] + 0.114 * img_np[:, :, 0]).astype('uint8')
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edged = cv2.Canny(blurred, 50, 150)
-    contours, _ = cv2.findContours(edged, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None
-    h, w = img_np.shape[:2]
-    best = None
-    best_area = 0
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < (w * h * 0.01) or area > (w * h * 0.95):
-            continue
-        epsilon = 0.02 * cv2.arcLength(cnt, True)
-        approx = cv2.approxPolyDP(cnt, epsilon, True)
-        if len(approx) == 4 and area > best_area:
-            best = approx.reshape(-1, 2)
-            best_area = area
-    if best is not None:
-        return _order_corners(best)
-    return None
-
-def _order_corners(pts):
-    pts = np.array(pts).reshape(-1, 2)
+def _order_points(pts):
+    """Ordena 4 puntos en: Top-Left, Top-Right, Bottom-Right, Bottom-Left"""
+    rect = np.zeros((4, 2), dtype="float32")
     s = pts.sum(axis=1)
-    diff = np.diff(pts, axis=1).reshape(-1)
-    return [
-        tuple(map(int, pts[np.argmin(s)])),
-        tuple(map(int, pts[np.argmin(diff)])),
-        tuple(map(int, pts[np.argmax(s)])),
-        tuple(map(int, pts[np.argmax(diff)])),
-    ]
+    rect[0] = pts[np.argmin(s)]      # TL
+    rect[2] = pts[np.argmax(s)]      # BR
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]   # TR
+    rect[3] = pts[np.argmax(diff)]   # BL
+    return rect
 
-def _detect_from_bytes(contents: bytes):
+def get_four_corners(polygon_points, w, h):
+    """Simplifica la máscara de YOLO a 4 esquinas"""
+    pts = (np.array(polygon_points) * [w, h]).astype(np.float32)
+    epsilon = 0.02 * cv2.arcLength(pts, True)
+    approx = cv2.approxPolyDP(pts, epsilon, True)
+
+    if len(approx) == 4:
+        corners = approx.reshape(4, 2)
+    else:
+        # Si la máscara no es perfecta, usamos el rectángulo de área mínima
+        rect = cv2.minAreaRect(pts)
+        corners = cv2.boxPoints(rect)
+    
+    return _order_points(corners)
+
+@router.post('/crop')
+async def crop_document(file: UploadFile = File(...)):
+    """Detecta, endereza y devuelve la info + imagen escaneada"""
+    # Quick debug: ensure numpy importable and print version (helps diagnose runtime import issues)
     try:
+        import numpy as _np
+        print(f"🧪 numpy version in worker: {_np.__version__}")
+    except Exception as _e:
+        print(f"❌ numpy import failed in worker: {_e}")
+        raise HTTPException(status_code=500, detail=str(_e))
+
+    if _MODEL is None:
+            # Prefer returning a 503-like response indicating the model is not ready
+            raise HTTPException(status_code=503, detail="Modelo YOLO no cargado o en carga (intente nuevamente más tarde)")
+    try:
+        # 1. Leer imagen
+        contents = await file.read()
         nparr = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
-            return {'ok': False, 'error': 'invalid image'}
-        pts = detect_document_corners_opencv(img)
-        if pts is None:
-            return {'ok': False, 'error': 'no_corners'}
-        return {'ok': True, 'points': pts}
-    except Exception as e:
-        return {'ok': False, 'error': str(e)}
-
-@router.post('/detect')
-async def detect(file: UploadFile = File(...)):
-    try:
-        contents = await file.read()
-        return _detect_from_bytes(contents)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.post('/warp')
-async def warp(file: UploadFile = File(...), points: str = None):  # points as JSON string for simplicity
-    try:
-        import json
-        pts = json.loads(points) if points else None
-        if not pts or len(pts) != 4:
-            raise HTTPException(status_code=400, detail='Need 4 points')
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        if img is None:
-            raise HTTPException(status_code=400, detail='Invalid image')
+            raise HTTPException(status_code=400, detail="Imagen inválida")
+        
         h, w = img.shape[:2]
-        dst_pts = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
-        src_pts = np.array(pts, dtype=np.float32)
+
+        # 2. Inferencia YOLO26-seg
+        results = _MODEL.predict(img, conf=0.3, retina_masks=True, verbose=False)
+        result = results[0]
+
+        if not result.masks:
+            return {"ok": False, "error": "No se detectó el documento"}
+
+        # 3. Obtener esquinas reales (píxeles)
+        src_pts = get_four_corners(result.masks.xyn[0], w, h)
+
+        # 4. Calcular dimensiones del documento para el Warp
+        # Usamos la distancia entre puntos para que el recorte sea proporcional
+        width_top = np.linalg.norm(src_pts[1] - src_pts[0])
+        width_btm = np.linalg.norm(src_pts[2] - src_pts[3])
+        max_w = max(int(width_top), int(width_btm))
+
+        height_left = np.linalg.norm(src_pts[3] - src_pts[0])
+        height_right = np.linalg.norm(src_pts[2] - src_pts[1])
+        max_h = max(int(height_left), int(height_right))
+
+        # 5. Aplicar Transformación de Perspectiva
+        dst_pts = np.array([
+            [0, 0],
+            [max_w - 1, 0],
+            [max_w - 1, max_h - 1],
+            [0, max_h - 1]
+        ], dtype="float32")
+
         M = cv2.getPerspectiveTransform(src_pts, dst_pts)
-        warped = cv2.warpPerspective(img, M, (w, h))
-        # Encode to bytes
-        success, encoded = cv2.imencode('.jpg', warped)
-        if not success:
-            raise HTTPException(status_code=500, detail='Encoding failed')
-        return {'ok': True, 'image': encoded.tobytes()}
+        warped = cv2.warpPerspective(img, M, (max_w, max_h))
+
+        # 6. Encode a Base64
+        _, buffer = cv2.imencode('.jpg', warped, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        encoded_img = base64.b64encode(buffer).decode('utf-8')
+
+        return {
+            "ok": True,
+            "detected": (PROMPT_CLASSES[int(result.boxes.cls[0])] if hasattr(result, 'boxes') and len(result.boxes) > 0 else None),
+            "confidence": (float(result.boxes.conf[0]) if hasattr(result, 'boxes') and len(result.boxes) > 0 else None),
+            "corners_normalized": [[float(p[0]/w), float(p[1]/h)] for p in src_pts],
+            "image": encoded_img
+        }
+
     except Exception as e:
+        import traceback, sys
+        tb = traceback.format_exc()
+        print(f"❌ Exception in /vision/crop: {e}\n{tb}", file=sys.stderr)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get('/health')
 async def health():
-    return {'ok': True, 'yolo_loaded': _YOLO is not None, 'model_path': MODEL_PATH}
+    return {'ok': True, 'yolo_loaded': _MODEL is not None, 'model_path': MODEL_PATH}
+
+@router.get('/debug/numpy')
+async def debug_numpy():
+    try:
+        import numpy as np
+        return {'ok': True, 'numpy': np.__version__}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}

@@ -9,8 +9,69 @@ import traceback
 from typing import Dict, Any
 
 # logging helper using required icons
+_LAST_LOG = {'msg': None, 'ts': 0, 'count': 0}
+_LOG_BUFFER = []
+_BUFFER_MAX = 1000
+
+def _push_buffer(level, tag, msg):
+    try:
+        _LOG_BUFFER.append({'ts': time.time(), 'level': level, 'tag': tag, 'msg': str(msg)})
+        while len(_LOG_BUFFER) > _BUFFER_MAX:
+            _LOG_BUFFER.pop(0)
+    except Exception:
+        pass
+
 def _log(msg, icon='📊', tag='[STATUS]'):
-    print(f"{icon} {tag} {msg}")
+    """Improved log helper:
+    - Dedupes identical messages within a short window
+    - Highlights errors (red color in terminals)
+    - Prints a short summary if a previous message was repeated
+    - Stores logs in an internal buffer for /logs
+    """
+    try:
+        formatted = f"{icon} {tag} {msg}"
+        now = time.time()
+        # determine level heuristically
+        level = 'info'
+        if '❌' in icon or 'error' in str(msg).lower():
+            level = 'error'
+        elif '⚠️' in icon or 'warn' in str(msg).lower():
+            level = 'warn'
+
+        # push to buffer always
+        _push_buffer(level, tag, formatted)
+
+        # If same message within window, increment counter and suppress immediate print
+        if _LAST_LOG['msg'] == formatted and (now - _LAST_LOG['ts']) < 5:
+            _LAST_LOG['count'] += 1
+            return
+
+        # If a previous message was repeated, flush a summary before printing new message
+        if _LAST_LOG['count'] > 1 and _LAST_LOG['msg'] != formatted:
+            print(f"⤴️ (previous message repeated {_LAST_LOG['count']} times) {_LAST_LOG['msg']}")
+
+        # Highlight errors
+        if level == 'error':
+            RED = '\033[91m'; RESET = '\033[0m'
+            print(f"{RED}{formatted}{RESET}")
+        else:
+            print(formatted)
+
+        # Update last log
+        _LAST_LOG['msg'] = formatted
+        _LAST_LOG['ts'] = now
+        _LAST_LOG['count'] = 1
+    except Exception:
+        # Fallback to safe print
+        try:
+            print(f"{icon} {tag} {msg}")
+        except Exception:
+            pass
+
+
+def get_logs(n=200):
+    out = _LOG_BUFFER[-n:]
+    return [{'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(int(r['ts']))), 'level': r['level'], 'tag': r['tag'], 'msg': r['msg']} for r in out]
 
 try:
     # prefer pynvml (provided by nvidia-ml-py)
@@ -81,9 +142,35 @@ async def hardware():
 async def services():
     return {'ok': True, 'services': _MONITOR.get('service_health')}
 
+@router.get('/logs')
+async def logs(n: int = 200, container: str | None = None, tail: int = 200):
+    """Return last n monitor logs (from internal buffer) and optionally docker logs for containers 'ranitas-vision' and 'ranitas-postgres'."""
+    # local buffer
+    try:
+        local = get_logs(n)
+    except Exception:
+        local = []
+
+    docker_logs = None
+    if container in ('vision', 'postgres'):
+        import subprocess, shlex
+        cname = 'ranitas-vision' if container == 'vision' else 'ranitas-postgres'
+        try:
+            cmd = f"docker logs --tail {tail} {cname}"
+            proc = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=4)
+            if proc.returncode == 0:
+                docker_logs = proc.stdout.splitlines()[-tail:]
+            else:
+                docker_logs = [proc.stderr or f'docker logs failed code {proc.returncode}']
+        except Exception as e:
+            docker_logs = [f'Error fetching docker logs: {e}']
+
+    return {'ok': True, 'logs': local, 'docker_logs': docker_logs}
+
 
 class BackgroundMonitor:
-    def __init__(self, interval: float = 1.0):
+    def __init__(self, interval: float = 5.0):
+        """Default interval is 5s to avoid very frequent status noise. Can be overridden with RANITAS_STATUS_INTERVAL env var."""
         self.interval = interval
         self._stop = False
         self.thread = threading.Thread(target=self._loop, daemon=True)
@@ -165,7 +252,7 @@ class BackgroundMonitor:
 
 import os
 _AUTO_START = os.getenv('RANITAS_AUTO_START_MONITOR', '0').lower() in ('1', 'true', 'yes')
-_MON = BackgroundMonitor(interval=1.0)
+_MON = BackgroundMonitor(interval=float(os.getenv('RANITAS_STATUS_INTERVAL', '5.0')))
 if _AUTO_START:
     _log('Auto-starting BackgroundMonitor (via RANITAS_AUTO_START_MONITOR)', '⚠️', '[STATUS]')
     _MON.start()

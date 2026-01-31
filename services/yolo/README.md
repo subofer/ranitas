@@ -73,3 +73,15 @@ curl -X POST http://localhost:8000/llm/analyze \
 - YOLO: 50-80ms
 - Geometry: 150ms
 - LLM: 2-4s (Qwen2.5-VL:7b caliente)
+
+---
+
+## Model management and recommended mounting
+**Do not bake heavy model weights into the image.** Instead keep your weights in `services/yolo/models` and mount them into the container as `/app/models` (the included `docker-compose.yml` already does this).
+
+Recommended variables:
+- `YOLO_MODEL_PATH` (defaults to `/app/models/yoloe-26x-seg.pt`)
+- `YOLO_WAIT_FOR_MODEL` (seconds to wait for the file to appear; default `60`)
+- `REQUIRE_GPU` (set to `false` to skip GPU check during startup)
+
+This allows faster image builds, easier model upgrades and simpler local development.

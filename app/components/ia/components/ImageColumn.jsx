@@ -3,6 +3,7 @@ import { useRef, useEffect, useState } from 'react'
 import ImageViewer from './ImageViewer'
 import ManualVertexCropper from '../ManualVertexCropper'
 import { getImgRectFromViewerRef, normalizePointFromRect, normalizeRectFromImageCoords } from '../utils/cropUtils'
+import logger from '@/lib/logger'
 
 /**
  * Componente de columna de imagen
@@ -51,12 +52,9 @@ export function ImageColumn({
   onPointUpdate = null,
   // Nueva prop para auto-detect crop
   onAutoDetectCrop = null,
-  // Prop entrante con puntos detectados (puede ser pixel coords o normalizados)
+  // Prop entrante con puntos detectados (puede ser pixeles o normalizados)
   incomingCropPoints = null,
   incomingPointsAreNormalized = true,
-  // Saved points (for debugging / comparison)
-  detectedSavedPoints = null,
-  manualSavedPoints = null,
 
 }) {
   const containerRef = useRef(null)
@@ -92,27 +90,28 @@ export function ImageColumn({
   
   // Auto-detect crop cuando se activa el modo crop
   useEffect(() => {
-    if (cropMode && onAutoDetectCrop && cropPoints.length === 0 && !hasAttemptedAutoDetect) {
-      // Solo intentar detectar automáticamente si no hay puntos ya dibujados y no se ha intentado antes
+    // Evitar doble invocación: no auto-detect si ya llegaron puntos detectados desde el padre
+    if (cropMode && onAutoDetectCrop && cropPoints.length === 0 && !hasAttemptedAutoDetect && !(incomingCropPoints && incomingCropPoints.length > 0)) {
+      // Solo intentar detectar automáticamente si no hay puntos ya dibujados, no se ha intentado antes y no hay puntos entrantes
       setHasAttemptedAutoDetect(true)
       onAutoDetectCrop(false, true) // autoApply=false, silent=true
     }
 
     // Si llegan puntos detectados desde props (por ejemplo, servicio en construcción), aplicarlos
     if (cropMode && incomingCropPoints && incomingCropPoints.length > 0 && cropPoints.length === 0) {
-      console.log('AUTO-DETECT-APPLY: incomingCropPoints', incomingCropPoints, 'incomingNormalized?', incomingPointsAreNormalized)
+      logger.debug({ incomingCropPoints, incomingPointsAreNormalized }, '[AUTO-DETECT]')
       if (incomingPointsAreNormalized) {
         // Log image rect to debug mapping
         const rect = getImageRect()
-        console.log('AUTO-DETECT-APPLY: imageRect', rect)
+        logger.debug({ rect }, '[AUTO-DETECT]')
         onCropPointsChange && onCropPointsChange(incomingCropPoints)
       } else {
         // Convertir de pixeles absolutos del image rect a normalizados
         const rect = getImageRect()
-        console.log('AUTO-DETECT-APPLY: imageRect (pix->norm)', rect)
+        logger.debug({ rect, mode: 'pix->norm' }, '[AUTO-DETECT]')
         if (rect) {
           const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
-          console.log('AUTO-DETECT-APPLY: converted normalized', normalized)
+          logger.debug({ normalized }, '[AUTO-DETECT]')
           onCropPointsChange && onCropPointsChange(normalized)
         }
       }
@@ -318,11 +317,11 @@ export function ImageColumn({
           onCropPointsChange(prev => {
             // Limit to 4 points maximum
             if (prev.length >= 4) {
-              console.log('Maximum 4 points reached, ignoring new point')
+              logger.warn('Maximum 4 points reached, ignoring new point', '[ImageColumn]')
               return prev
             }
             const newPoints = [...prev, normalizedPoint]
-            console.log('New cropPoints:', newPoints)
+            logger.debug({ newPoints }, '[ImageColumn]')
             return newPoints
           })
         }
@@ -359,55 +358,7 @@ export function ImageColumn({
   // Estado para el cursor
   const [currentCursor, setCurrentCursor] = useState('crosshair')
   
-  // LLM / Ollama quick analysis state
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState(null)
-  const [analysisError, setAnalysisError] = useState(null)
 
-  // Realiza un POST rápido al endpoint /llm/analyze con la imagen actual
-  const analyzeImage = async () => {
-    try {
-      setAnalyzing(true)
-      setAnalysisResult(null)
-      setAnalysisError(null)
-
-      if (!preview) {
-        setAnalysisError('No hay imagen para analizar')
-        setAnalyzing(false)
-        return
-      }
-
-      // Obtener dataURL (si ya es data: usar tal cual, si no fetch->blob->dataURL)
-      let dataUrl = preview
-      if (!dataUrl.startsWith('data:')) {
-        const r = await fetch(preview)
-        const blob = await r.blob()
-        dataUrl = await new Promise((resolve) => {
-          const reader = new FileReader()
-          reader.onloadend = () => resolve(reader.result)
-          reader.readAsDataURL(blob)
-        })
-      }
-
-      const resp = await fetch('/llm/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: dataUrl })
-      })
-
-      const json = await resp.json()
-      if (json.ok) {
-        setAnalysisResult(json.result)
-      } else {
-        setAnalysisError(json.error || json.text || `Status ${json.status_code || resp.status}`)
-      }
-    } catch (e) {
-      console.error('analyzeImage error', e)
-      setAnalysisError(String(e))
-    } finally {
-      setAnalyzing(false)
-    }
-  }
 
   // Función para detectar si un punto está dentro del rectángulo formado por 4 puntos
   const isPointInRectangle = (px, py, points) => {
@@ -491,30 +442,30 @@ export function ImageColumn({
   // }, [cropMode])
 
   const handlePointAdd = (point) => {
-    console.log('ImageColumn handlePointAdd:', point)
+    logger.debug({ point }, '[ImageColumn]')
     if (onCropPointsChange) {
       onCropPointsChange(prev => {
         // Limit to 4 points maximum
         if (prev.length >= 4) {
-          console.log('Maximum 4 points reached, ignoring new point')
+          logger.warn('Maximum 4 points reached, ignoring new point', '[ImageColumn]')
           return prev
         }
         const newPoints = [...prev, point]
-        console.log('New cropPoints:', newPoints)
+        logger.debug({ newPoints }, '[ImageColumn]')
         return newPoints
       })
     }
   }
 
   const handlePointUpdate = (index, newPoint) => {
-    console.log('ImageColumn handlePointUpdate:', index, newPoint)
+    logger.debug({ index, newPoint }, '[ImageColumn]')
     if (onCropPointsChange) {
       onCropPointsChange(prev => {
         const newPoints = [...prev]
         if (index >= 0 && index < newPoints.length) {
           newPoints[index] = newPoint
         }
-        console.log('Updated cropPoints:', newPoints)
+        logger.debug({ newPoints }, '[ImageColumn]')
         return newPoints
       })
     }
@@ -599,15 +550,6 @@ export function ImageColumn({
                       title="Recortar manualmente con 4 vértices (se enderezará automáticamente)"
                     >
                       ✂️ Crop
-                    </button>
-
-                    <button
-                      onClick={analyzeImage}
-                      disabled={analyzing}
-                      className={`px-3 py-1.5 rounded-lg transition-colors text-sm font-medium ${analyzing ? 'bg-gray-200 text-gray-600' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
-                      title="Enviar imagen al modelo para extraer datos (Ollama)"
-                    >
-                      {analyzing ? '⏳ Analizando...' : '🤖 Analizar IA'}
                     </button>
                   </div>
                 );
@@ -699,8 +641,9 @@ export function ImageColumn({
                     zoom={zoom}
                     pan={pan}
                     points={tempPoints}
-                    detectedPoints={detectedSavedPoints}
-                    manualPoints={manualSavedPoints}
+                    // Show current suggestion (incoming) vs current manual points as comparison
+                    detectedPoints={incomingCropPoints}
+                    manualPoints={cropPoints}
                     cropMode={cropMode}
                     onPointAdd={handlePointAdd}
                     onPointUpdate={handlePointUpdate}
@@ -750,103 +693,9 @@ export function ImageColumn({
                 )
               })()}
 
-              {/* Floating expanded JSON viewer for incoming detected points and saved comparisons */}
-              {( (incomingCropPoints && incomingCropPoints.length>0) || (detectedSavedPoints) || (manualSavedPoints) ) && cropMode && (
-                <div className="absolute right-3 top-3 bg-white/95 border rounded-lg p-2 shadow-lg z-50 max-w-xs text-xs">
-                  <details>
-                    <summary className="font-semibold">Puntos detectados (preview / guardados)</summary>
 
-                    {/* Current suggestion (incoming) */}
-                    {incomingCropPoints && (
-                      <div className="mt-2">
-                        <div className="font-medium">Sugerencia actual</div>
-                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(incomingCropPoints, null, 2)}</pre>
-                        <div className="flex gap-2 mt-1">
-                          <button
-                            onClick={async () => {
-                              try { await navigator.clipboard.writeText(JSON.stringify(incomingCropPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) }
-                            }}
-                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
-                          >Copiar</button>
-                          <button
-                            onClick={() => {
-                              if (incomingPointsAreNormalized) {
-                                onCropPointsChange && onCropPointsChange(incomingCropPoints)
-                              } else {
-                                const rect = getImageRect()
-                                if (rect) {
-                                  const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
-                                  onCropPointsChange && onCropPointsChange(normalized)
-                                } else {
-                                  onCropPointsChange && onCropPointsChange(incomingCropPoints)
-                                }
-                              }
-                            }}
-                            className="px-2 py-1 bg-green-50 border rounded text-xs"
-                          >Aplicar</button>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Detected saved */}
-                    {detectedSavedPoints && (
-                      <div className="mt-3">
-                        <div className="font-medium">Detectado guardado</div>
-                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(detectedSavedPoints, null, 2)}</pre>
-                        <div className="flex gap-2 mt-1">
-                          <button
-                            onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(detectedSavedPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
-                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
-                          >Copiar</button>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* Manual saved */}
-                    {manualSavedPoints && (
-                      <div className="mt-3">
-                        <div className="font-medium">Manual guardado</div>
-                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(manualSavedPoints, null, 2)}</pre>
-                        <div className="flex gap-2 mt-1">
-                          <button
-                            onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(manualSavedPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
-                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
-                          >Copiar</button>
-                        </div>
-                      </div>
-                    )}
-
-                  </details>
-                </div>
-              )}
-
-              {(analysisResult || analysisError) && (
-                <div className="absolute left-3 bottom-3 bg-white/95 border rounded-lg p-3 shadow-lg z-50 max-w-xs text-xs">
-                  <div className="font-medium">🤖 Resultado IA</div>
-                  {analysisError && (
-                    <div className="text-red-600 mt-1 text-xs">{analysisError}</div>
-                  )}
-
-                  {analysisResult && (
-                    <div className="mt-1 text-xs space-y-1">
-                      <div><strong>Fecha:</strong> {analysisResult.date || analysisResult.fecha || analysisResult.emision || '-'}</div>
-                      <div><strong>Total:</strong> {analysisResult.total || (analysisResult.totales && analysisResult.totales.total) || '-'}</div>
-                      <div><strong>Emisor:</strong> {analysisResult.issuer?.name || analysisResult.emisor?.nombre || analysisResult.emisor?.name || '-'}</div>
-
-                      <div className="mt-2 flex gap-2">
-                        <button
-                          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(analysisResult, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
-                          className="px-2 py-1 bg-gray-100 border rounded text-xs"
-                        >Copiar JSON</button>
-                        <button
-                          onClick={() => { setAnalysisResult(null); setAnalysisError(null) }}
-                          className="px-2 py-1 bg-white border rounded text-xs"
-                        >Cerrar</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
 
 
             </div>

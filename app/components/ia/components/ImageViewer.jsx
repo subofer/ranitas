@@ -2,6 +2,7 @@
 import React, { forwardRef, useState, useEffect, useRef, useCallback } from 'react'
 import OptimizedImage from '@/app/components/ia/components/OptimizedImage'
 import { normalizePointFromRect, normalizedToContainerPixels } from '../utils/cropUtils'
+import logger from '@/lib/logger'
 
 // Presentation-only ImageViewer
 // Props:
@@ -19,7 +20,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
   const localImageRef = useRef(null)
   const [draggedPointIndex, setDraggedPointIndex] = useState(null)
 
-  console.log('ImageViewer render:', { cropMode, points: points.length, onPointAdd: !!onPointAdd, zoom, pan })
+  logger.info({ cropMode, points: points.length, onPointAdd: !!onPointAdd, zoom, pan }, '[ImageViewer]')
 
   // Get container dimensions after mount
   useEffect(() => {
@@ -30,7 +31,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
         const containerWidth = localImageRef.current.offsetWidth / zoom
         const containerHeight = localImageRef.current.offsetHeight / zoom
 
-        console.log('Setting container (unscaled) dimensions to:', { containerWidth, containerHeight, zoom })
+        logger.debug({ containerWidth, containerHeight, zoom }, '[ImageViewer]')
 
         setContainerDimensions({
           width: containerWidth,
@@ -75,39 +76,34 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
       const imgRect = localImageRef.current.getBoundingClientRect()
       const containerRect = ref.current.getBoundingClientRect()
       const mapped = points.map(p => ({ x: p.x, y: p.y, pos: normalizedToContainerPixels(p, imgRect, containerRect) }))
-      console.log('AUTO-DETECT-DEBUG: points mapping', { mapped, imgRect, containerRect, zoom, pan })
+      logger.debug({ mapped, imgRect, containerRect, zoom, pan }, '[AUTO-DETECT]')
     } catch (e) {
       console.warn('AUTO-DETECT-DEBUG error mapping points', e)
     }
-  }, [points, zoom, pan])
+  }, [points, zoom, pan, ref])
 
   // Handle clicks on the image when in crop mode
   const handleImageClick = (e) => {
     // Don't add new points if we're dragging
     if (draggedPointIndex !== null) return
 
-    console.log('ImageViewer handleImageClick called:', { cropMode, onPointAdd, event: e.type, target: e.target.tagName })
+    logger.debug({ cropMode, onPointAdd, event: e.type, target: e.target.tagName }, '[ImageViewer]')
     if (!cropMode || !onPointAdd) {
-      console.log('Crop mode not active or no onPointAdd, returning')
+      logger.debug('Crop mode not active or no onPointAdd, returning', '[ImageViewer]')
       return
     }
 
     // Find the image element within the container
     const img = e.currentTarget.querySelector('img')
     if (!img) {
-      console.log('No image found in container')
+      logger.warn('No image found in container', '[ImageViewer]')
       return
     }
 
     const rect = img.getBoundingClientRect()
 
     // Debug: log detailed information
-    console.log('=== COORDINATE CALCULATION DEBUG ===')
-    console.log('Event:', { clientX: e.clientX, clientY: e.clientY })
-    console.log('Rect:', { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
-    console.log('Image natural:', { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight })
-    console.log('Image displayed:', { offsetWidth: img.offsetWidth, offsetHeight: img.offsetHeight })
-    console.log('Transform:', { zoom, pan })
+    logger.debug({ event: { clientX: e.clientX, clientY: e.clientY }, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, image: { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, offsetWidth: img.offsetWidth, offsetHeight: img.offsetHeight }, transform: { zoom, pan } }, '[COORD-CALC]')
 
     // CORRECTED APPROACH: getBoundingClientRect() gives us the bounds of the transformed image
     // To get normalized coordinates, we need to account for the zoom scaling
@@ -115,15 +111,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
     if (!normalized) return
     const { x, y } = normalized
 
-    console.log('=== DETAILED COORDINATE CALCULATION ===')
-    console.log('Raw click:', { clientX: e.clientX, clientY: e.clientY })
-    console.log('Rect bounds:', { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
-    console.log('Relative position:', { rawX, rawY })
-    console.log('Zoom correction:', { zoom, rectWidthDivZoom: rect.width / zoom, rectHeightDivZoom: rect.height / zoom })
-    console.log('Normalized before clamp:', { normalizedX, normalizedY })
-    console.log('Final normalized:', { x, y })
-    console.log('Container dimensions:', containerDimensions)
-    console.log('=== END DETAILED DEBUG ===')
+    logger.debug({ rawClick:{ clientX: e.clientX, clientY: e.clientY }, rectBounds: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, relative: { rawX, rawY }, zoomCorrection: { zoom, rectWidthDivZoom: rect.width / zoom, rectHeightDivZoom: rect.height / zoom }, normalizedBeforeClamp: { normalizedX, normalizedY }, finalNormalized: { x, y }, containerDimensions }, '[COORD-CALC-DETAILED]')
 
     onPointAdd({ x, y })
   }
@@ -140,17 +128,12 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
 
     const img = localImageRef.current
     if (!img) {
-      console.log('No image ref for drag update')
+      logger.warn('No image ref for drag update', '[ImageViewer]')
       return
     }
 
     const rect = img.getBoundingClientRect()
-    console.log('=== DRAG COORDINATE CALCULATION DEBUG ===')
-    console.log('Event:', { clientX: e.clientX, clientY: e.clientY })
-    console.log('Rect:', { left: rect.left, top: rect.top, width: rect.width, height: rect.height })
-    console.log('Image natural:', { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight })
-    console.log('Image displayed:', { offsetWidth: img.offsetWidth, offsetHeight: img.offsetHeight })
-    console.log('Transform:', { zoom, pan })
+    logger.debug({ event: { clientX: e.clientX, clientY: e.clientY }, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }, image: { naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight, offsetWidth: img.offsetWidth, offsetHeight: img.offsetHeight }, transform: { zoom, pan } }, '[DRAG-CALC]')
 
     // CORRECTED APPROACH: getBoundingClientRect() gives us the bounds of the transformed image
     // To get normalized coordinates, we need to account for the zoom scaling
@@ -158,8 +141,8 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
     if (!normalized) return
     const { x, y } = normalized
 
-    console.log('Drag corrected calculation:', { x, y, rectWidth: rect.width, rectHeight: rect.height, zoom })
-    console.log('=== END DRAG DEBUG ===')
+    logger.debug({ x, y, rectWidth: rect.width, rectHeight: rect.height, zoom }, '[DRAG-CALC]')
+    logger.debug('End drag calculation', '[DRAG-CALC]')
 
     if (onPointUpdate) {
       onPointUpdate(draggedPointIndex, { x, y })
@@ -174,11 +157,11 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
   // Add global mouse event listeners for dragging
   useEffect(() => {
     if (draggedPointIndex !== null) {
-      console.log('Adding drag listeners for point:', draggedPointIndex)
+      logger.debug('Adding drag listeners for point', `[ImageViewer:${draggedPointIndex}]`)
       document.addEventListener('mousemove', updateDraggedPoint)
       document.addEventListener('mouseup', stopDragging)
       return () => {
-        console.log('Removing drag listeners')
+        logger.debug('Removing drag listeners', '[ImageViewer]')
         document.removeEventListener('mousemove', updateDraggedPoint)
         document.removeEventListener('mouseup', stopDragging)
       }
@@ -298,40 +281,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
                   )
                 })()}
 
-                {/* --- New: draw comparison lines between detected and manual saved points --- */}
-                {(() => {
-                  // props: detectedPoints, manualPoints (both normalized)
-                  if (!detectedPoints || !manualPoints) return null
-                  const imgRect = localImageRef?.current?.getBoundingClientRect()
-                  const containerRect = ref?.current?.getBoundingClientRect()
-                  if (!imgRect || !containerRect) return null
 
-                  return detectedPoints.map((dp, i) => {
-                    const mp = manualPoints[i]
-                    if (!mp) return null
-                    const dpos = normalizedToContainerPixels(dp, imgRect, containerRect)
-                    const mpos = normalizedToContainerPixels(mp, imgRect, containerRect)
-                    if (!dpos || !mpos) return null
-                    const dx = mpos.x - dpos.x
-                    const dy = mpos.y - dpos.y
-                    const dist = Math.hypot(dx, dy)
-                    const midx = (dpos.x + mpos.x) / 2
-                    const midy = (dpos.y + mpos.y) / 2
-
-                    return (
-                      <g key={`cmp-${i}`}>
-                        {/* line connecting detected -> manual */}
-                        <line x1={dpos.x} y1={dpos.y} x2={mpos.x} y2={mpos.y} stroke="#EF4444" strokeWidth="2" strokeDasharray="6" opacity="0.9" />
-                        {/* detected point marker */}
-                        <circle cx={dpos.x} cy={dpos.y} r="5" fill="#EF4444" stroke="#fff" strokeWidth="2" />
-                        {/* manual point marker */}
-                        <circle cx={mpos.x} cy={mpos.y} r="5" fill="#10B981" stroke="#fff" strokeWidth="2" />
-                        {/* distance label */}
-                        <text x={midx + 6} y={midy - 6} fill="#111" fontSize="12" fontFamily="monospace" style={{ background: 'white' }}>{Math.round(dist)}px</text>
-                      </g>
-                    )
-                  })
-                })()}
               </svg>
             </div>
           )}
