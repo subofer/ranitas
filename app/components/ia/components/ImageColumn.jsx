@@ -97,13 +97,19 @@ export function ImageColumn({
 
     // Si llegan puntos detectados desde props (por ejemplo, servicio en construcción), aplicarlos
     if (cropMode && incomingCropPoints && incomingCropPoints.length > 0 && cropPoints.length === 0) {
+      console.log('AUTO-DETECT-APPLY: incomingCropPoints', incomingCropPoints, 'incomingNormalized?', incomingPointsAreNormalized)
       if (incomingPointsAreNormalized) {
+        // Log image rect to debug mapping
+        const rect = getImageRect()
+        console.log('AUTO-DETECT-APPLY: imageRect', rect)
         onCropPointsChange && onCropPointsChange(incomingCropPoints)
       } else {
         // Convertir de pixeles absolutos del image rect a normalizados
         const rect = getImageRect()
+        console.log('AUTO-DETECT-APPLY: imageRect (pix->norm)', rect)
         if (rect) {
           const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
+          console.log('AUTO-DETECT-APPLY: converted normalized', normalized)
           onCropPointsChange && onCropPointsChange(normalized)
         }
       }
