@@ -13,7 +13,7 @@ import { normalizePointFromRect, normalizedToContainerPixels } from '../utils/cr
 // - onPointAdd: callback when a point is added (receives {x, y} in pixels)
 // - zoom: current zoom level
 // - pan: current pan {x, y}
-function ImageViewer({ src, points = [], mode = 'default', className = '', cropMode = false, onPointAdd, onPointUpdate, zoom = 1, pan = {x: 0, y: 0}, imageRef }, ref) {
+function ImageViewer({ src, points = [], mode = 'default', className = '', cropMode = false, onPointAdd, onPointUpdate, zoom = 1, pan = {x: 0, y: 0}, imageRef, detectedPoints = null, manualPoints = null }, ref) {
   const isNormalized = points && points.length > 0 && points[0].x <= 1 && points[0].y <= 1
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
   const localImageRef = useRef(null)
@@ -296,6 +296,41 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
                       opacity="0.8"
                     />
                   )
+                })()}
+
+                {/* --- New: draw comparison lines between detected and manual saved points --- */}
+                {(() => {
+                  // props: detectedPoints, manualPoints (both normalized)
+                  if (!detectedPoints || !manualPoints) return null
+                  const imgRect = localImageRef?.current?.getBoundingClientRect()
+                  const containerRect = ref?.current?.getBoundingClientRect()
+                  if (!imgRect || !containerRect) return null
+
+                  return detectedPoints.map((dp, i) => {
+                    const mp = manualPoints[i]
+                    if (!mp) return null
+                    const dpos = normalizedToContainerPixels(dp, imgRect, containerRect)
+                    const mpos = normalizedToContainerPixels(mp, imgRect, containerRect)
+                    if (!dpos || !mpos) return null
+                    const dx = mpos.x - dpos.x
+                    const dy = mpos.y - dpos.y
+                    const dist = Math.hypot(dx, dy)
+                    const midx = (dpos.x + mpos.x) / 2
+                    const midy = (dpos.y + mpos.y) / 2
+
+                    return (
+                      <g key={`cmp-${i}`}>
+                        {/* line connecting detected -> manual */}
+                        <line x1={dpos.x} y1={dpos.y} x2={mpos.x} y2={mpos.y} stroke="#EF4444" strokeWidth="2" strokeDasharray="6" opacity="0.9" />
+                        {/* detected point marker */}
+                        <circle cx={dpos.x} cy={dpos.y} r="5" fill="#EF4444" stroke="#fff" strokeWidth="2" />
+                        {/* manual point marker */}
+                        <circle cx={mpos.x} cy={mpos.y} r="5" fill="#10B981" stroke="#fff" strokeWidth="2" />
+                        {/* distance label */}
+                        <text x={midx + 6} y={midy - 6} fill="#111" fontSize="12" fontFamily="monospace" style={{ background: 'white' }}>{Math.round(dist)}px</text>
+                      </g>
+                    )
+                  })
                 })()}
               </svg>
             </div>

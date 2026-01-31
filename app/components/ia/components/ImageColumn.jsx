@@ -359,6 +359,56 @@ export function ImageColumn({
   // Estado para el cursor
   const [currentCursor, setCurrentCursor] = useState('crosshair')
   
+  // LLM / Ollama quick analysis state
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState(null)
+  const [analysisError, setAnalysisError] = useState(null)
+
+  // Realiza un POST rápido al endpoint /llm/analyze con la imagen actual
+  const analyzeImage = async () => {
+    try {
+      setAnalyzing(true)
+      setAnalysisResult(null)
+      setAnalysisError(null)
+
+      if (!preview) {
+        setAnalysisError('No hay imagen para analizar')
+        setAnalyzing(false)
+        return
+      }
+
+      // Obtener dataURL (si ya es data: usar tal cual, si no fetch->blob->dataURL)
+      let dataUrl = preview
+      if (!dataUrl.startsWith('data:')) {
+        const r = await fetch(preview)
+        const blob = await r.blob()
+        dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader()
+          reader.onloadend = () => resolve(reader.result)
+          reader.readAsDataURL(blob)
+        })
+      }
+
+      const resp = await fetch('/llm/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: dataUrl })
+      })
+
+      const json = await resp.json()
+      if (json.ok) {
+        setAnalysisResult(json.result)
+      } else {
+        setAnalysisError(json.error || json.text || `Status ${json.status_code || resp.status}`)
+      }
+    } catch (e) {
+      console.error('analyzeImage error', e)
+      setAnalysisError(String(e))
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   // Función para detectar si un punto está dentro del rectángulo formado por 4 puntos
   const isPointInRectangle = (px, py, points) => {
     if (!points || points.length !== 4) return false
@@ -542,13 +592,24 @@ export function ImageColumn({
                 if (!isOriginal) return null; // Solo mostrar botón en imagen original
                 
                 return (
-                  <button
-                    onClick={() => setCropMode && setCropMode(true)}
-                    className="px-3 py-1.5 rounded-lg transition-colors text-sm font-medium bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
-                    title="Recortar manualmente con 4 vértices (se enderezará automáticamente)"
-                  >
-                    ✂️ Crop
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCropMode && setCropMode(true)}
+                      className="px-3 py-1.5 rounded-lg transition-colors text-sm font-medium bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                      title="Recortar manualmente con 4 vértices (se enderezará automáticamente)"
+                    >
+                      ✂️ Crop
+                    </button>
+
+                    <button
+                      onClick={analyzeImage}
+                      disabled={analyzing}
+                      className={`px-3 py-1.5 rounded-lg transition-colors text-sm font-medium ${analyzing ? 'bg-gray-200 text-gray-600' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'}`}
+                      title="Enviar imagen al modelo para extraer datos (Ollama)"
+                    >
+                      {analyzing ? '⏳ Analizando...' : '🤖 Analizar IA'}
+                    </button>
+                  </div>
                 );
               })()
             ) : (
@@ -638,6 +699,8 @@ export function ImageColumn({
                     zoom={zoom}
                     pan={pan}
                     points={tempPoints}
+                    detectedPoints={detectedSavedPoints}
+                    manualPoints={manualSavedPoints}
                     cropMode={cropMode}
                     onPointAdd={handlePointAdd}
                     onPointUpdate={handlePointUpdate}
@@ -754,6 +817,34 @@ export function ImageColumn({
                     )}
 
                   </details>
+                </div>
+              )}
+
+              {(analysisResult || analysisError) && (
+                <div className="absolute left-3 bottom-3 bg-white/95 border rounded-lg p-3 shadow-lg z-50 max-w-xs text-xs">
+                  <div className="font-medium">🤖 Resultado IA</div>
+                  {analysisError && (
+                    <div className="text-red-600 mt-1 text-xs">{analysisError}</div>
+                  )}
+
+                  {analysisResult && (
+                    <div className="mt-1 text-xs space-y-1">
+                      <div><strong>Fecha:</strong> {analysisResult.date || analysisResult.fecha || analysisResult.emision || '-'}</div>
+                      <div><strong>Total:</strong> {analysisResult.total || (analysisResult.totales && analysisResult.totales.total) || '-'}</div>
+                      <div><strong>Emisor:</strong> {analysisResult.issuer?.name || analysisResult.emisor?.nombre || analysisResult.emisor?.name || '-'}</div>
+
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(analysisResult, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
+                          className="px-2 py-1 bg-gray-100 border rounded text-xs"
+                        >Copiar JSON</button>
+                        <button
+                          onClick={() => { setAnalysisResult(null); setAnalysisError(null) }}
+                          className="px-2 py-1 bg-white border rounded text-xs"
+                        >Cerrar</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
