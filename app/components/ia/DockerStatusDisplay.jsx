@@ -13,8 +13,22 @@ export default function DockerStatusDisplay({ target = 'vision', compact = false
   const isRunning = Boolean(svc?.container_running)
   const name = isRunning ? (svc?.name || svc?.container_candidate || (target === 'vision' ? 'servidor llm' : target)) : (target === 'vision' ? 'servidor llm' : 'base de datos')
 
-  // Icon color: grey = offline, orange = starting, blue = running
-  const iconClass = !isRunning ? 'text-gray-400' : (svc?.health && /starting|start/i.test(String(svc.health)) ? 'text-orange-500' : 'text-[#2496ED]')
+  // Icon color:
+  // - grey = offline
+  // - orange = starting
+  // - blue = running healthy
+  // - red = docker reports 'unhealthy' (explicit Docker health status)
+  let iconClass = 'text-gray-400'
+  if (isRunning) {
+    const health = svc?.health ? String(svc.health) : ''
+    if (/unhealthy/i.test(health)) {
+      iconClass = 'text-red-500'
+    } else if (/starting|start/i.test(health)) {
+      iconClass = 'text-orange-500'
+    } else {
+      iconClass = 'text-[#2496ED]'
+    }
+  }
 
 
 // Derive services/models and formatted display pieces (GPU, VRAM used/total, and Models list)
