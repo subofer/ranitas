@@ -2,6 +2,7 @@
 import { useRef, useEffect, useState } from 'react'
 import ImageViewer from './ImageViewer'
 import ManualVertexCropper from '../ManualVertexCropper'
+import { getImgRectFromViewerRef, normalizePointFromRect, normalizeRectFromImageCoords } from '../utils/cropUtils'
 
 /**
  * Componente de columna de imagen
@@ -50,8 +51,18 @@ export function ImageColumn({
   onPointUpdate = null,
   // Nueva prop para auto-detect crop
   onAutoDetectCrop = null,
+  // Prop entrante con puntos detectados (puede ser pixel coords o normalizados)
+  incomingCropPoints = null,
+  incomingPointsAreNormalized = true,
 }) {
   const containerRef = useRef(null)
+  const viewerRef = useRef(null)
+  const [hasAttemptedAutoDetect, setHasAttemptedAutoDetect] = useState(false)
+
+  // Use shared crop utils
+  const getImageRect = () => getImgRectFromViewerRef(viewerRef)
+  const clientToNormalized = (clientX, clientY) => normalizePointFromRect(clientX, clientY, getImageRect())
+  const normalizeRectanglePoints = (minX, maxX, minY, maxY) => normalizeRectFromImageCoords(minX, maxX, minY, maxY, getImageRect())
   // Agregar event listener nativo para prevenir zoom del navegador
   useEffect(() => {
     const container = containerRef.current
@@ -75,6 +86,36 @@ export function ImageColumn({
     }
   }, [zoom, setZoom])
   
+  // Auto-detect crop cuando se activa el modo crop
+  useEffect(() => {
+    if (cropMode && onAutoDetectCrop && cropPoints.length === 0 && !hasAttemptedAutoDetect) {
+      // Solo intentar detectar automáticamente si no hay puntos ya dibujados y no se ha intentado antes
+      setHasAttemptedAutoDetect(true)
+      onAutoDetectCrop(false, true) // autoApply=false, silent=true
+    }
+
+    // Si llegan puntos detectados desde props (por ejemplo, servicio en construcción), aplicarlos
+    if (cropMode && incomingCropPoints && incomingCropPoints.length > 0 && cropPoints.length === 0) {
+      if (incomingPointsAreNormalized) {
+        onCropPointsChange && onCropPointsChange(incomingCropPoints)
+      } else {
+        // Convertir de pixeles absolutos del image rect a normalizados
+        const rect = getImageRect()
+        if (rect) {
+          const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
+          onCropPointsChange && onCropPointsChange(normalized)
+        }
+      }
+    }
+  }, [cropMode, onAutoDetectCrop, cropPoints.length, hasAttemptedAutoDetect, incomingCropPoints, incomingPointsAreNormalized, onCropPointsChange])
+  
+  // Resetear el flag cuando se sale del modo crop
+  useEffect(() => {
+    if (!cropMode) {
+      setHasAttemptedAutoDetect(false)
+    }
+  }, [cropMode])
+  
   // Manejar inicio de pan con Ctrl + click o inicio de drag en crop mode
   const handleMouseDown = (e) => {
     if (e.ctrlKey) {
@@ -87,12 +128,12 @@ export function ImageColumn({
       // En crop mode
       if (cropPoints.length === 4) {
         // Si ya hay caja dibujada, solo permitir interacciones con ella
-        const rect = e.currentTarget.getBoundingClientRect()
-        const containerWidth = rect.width
-        const containerHeight = rect.height
-        const clickX = (e.clientX - rect.left - pan.x) / zoom / containerWidth
-        const clickY = (e.clientY - rect.top - pan.y) / zoom / containerHeight
-        
+        // Calcular coordenadas normalizadas respecto a la imagen
+        const normalized = clientToNormalized(e.clientX, e.clientY)
+        if (!normalized) return
+        const clickX = normalized.x
+        const clickY = normalized.y
+
         // Primero verificar si está en una arista (prioridad sobre drag de caja)
         const edge = getEdgeNearPoint(clickX, clickY, cropPoints)
         if (edge) {
@@ -115,9 +156,9 @@ export function ImageColumn({
         // Si no hay caja, iniciar potencial drag para nueva caja
         e.preventDefault()
         e.stopPropagation()
-        const rect = e.currentTarget.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        const y = e.clientY - rect.top
+        const imgRect = getImageRect()
+        const x = imgRect ? (e.clientX - imgRect.left) : (e.clientX - e.currentTarget.getBoundingClientRect().left)
+        const y = imgRect ? (e.clientY - imgRect.top) : (e.clientY - e.currentTarget.getBoundingClientRect().top)
         setDragStart({ x, y })
         setDragEnd({ x, y })
         setIsDragging(false) // Se activa solo si hay movimiento
@@ -131,12 +172,12 @@ export function ImageColumn({
       // Redimensionamiento de arista
       e.preventDefault()
       e.stopPropagation()
-      const rect = containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 }
-      const containerWidth = rect.width
-      const containerHeight = rect.height
+      const imgRect = getImageRect() || (containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 })
+      const containerWidth = imgRect.width
+      const containerHeight = imgRect.height
 
-      const deltaX = (e.clientX - resizeStart.x) / zoom / containerWidth
-      const deltaY = (e.clientY - resizeStart.y) / zoom / containerHeight
+      const deltaX = (e.clientX - resizeStart.x) / containerWidth
+      const deltaY = (e.clientY - resizeStart.y) / containerHeight
 
       // Mover los dos puntos extremos de la arista seleccionada
       const newPoints = [...cropPoints]
@@ -173,12 +214,12 @@ export function ImageColumn({
       // Drag de caja completa: mover todos los puntos
       e.preventDefault()
       e.stopPropagation()
-      const rect = containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 }
-      const containerWidth = rect.width
-      const containerHeight = rect.height
+      const imgRect = getImageRect() || (containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 })
+      const containerWidth = imgRect.width
+      const containerHeight = imgRect.height
       
-      const deltaX = (e.clientX - boxDragStart.x) / zoom / containerWidth
-      const deltaY = (e.clientY - boxDragStart.y) / zoom / containerHeight
+      const deltaX = (e.clientX - boxDragStart.x) / containerWidth
+      const deltaY = (e.clientY - boxDragStart.y) / containerHeight
       
       // Mover todos los puntos
       const newPoints = cropPoints.map(point => ({
@@ -195,9 +236,9 @@ export function ImageColumn({
       // En crop mode, actualizar drag
       e.preventDefault()
       e.stopPropagation()
-      const rect = e.currentTarget.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
+      const imgRect = getImageRect() || e.currentTarget.getBoundingClientRect()
+      const x = e.clientX - imgRect.left
+      const y = e.clientY - imgRect.top
       setDragEnd({ x, y })
       
       // Activar drag si hay movimiento significativo
@@ -236,33 +277,33 @@ export function ImageColumn({
       setIsDraggingBox(false)
       setBoxDragStart(null)
     } else if (cropMode && dragStart && dragEnd) {
-      const rect = containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 }
-      const containerWidth = rect.width
-      const containerHeight = rect.height
-      
+      const imgRect = getImageRect() || (containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 })
+      const containerWidth = imgRect.width
+      const containerHeight = imgRect.height
+
       const dx = Math.abs(dragEnd.x - dragStart.x)
       const dy = Math.abs(dragEnd.y - dragStart.y)
-      
+
       if (isDragging && dx > 10 && dy > 10) {
         // Fue drag significativo: crear puntos del rectángulo
         const minX = Math.min(dragStart.x, dragEnd.x)
         const maxX = Math.max(dragStart.x, dragEnd.x)
         const minY = Math.min(dragStart.y, dragEnd.y)
         const maxY = Math.max(dragStart.y, dragEnd.y)
-        
-        // Normalizar coordenadas
-        const points = normalizeRectanglePoints(minX, maxX, minY, maxY, pan, zoom, containerWidth, containerHeight)
-        
+
+        // Normalizar coordenadas relativas al <img>
+        const points = normalizeRectanglePoints(minX, maxX, minY, maxY)
+
         if (onCropPointsChange) {
           onCropPointsChange(points)
         }
       } else if (!isDragging) {
         // Fue click (sin movimiento): agregar punto individual
         const normalizedPoint = {
-          x: (dragStart.x - pan.x) / zoom / containerWidth,
-          y: (dragStart.y - pan.y) / zoom / containerHeight
+          x: dragStart.x / (containerWidth || 1),
+          y: dragStart.y / (containerHeight || 1)
         }
-        
+
         if (onCropPointsChange) {
           onCropPointsChange(prev => {
             // Limit to 4 points maximum
@@ -347,15 +388,7 @@ export function ImageColumn({
     return null
   }
   
-  // Función para normalizar coordenadas de rectángulo a puntos
-  const normalizeRectanglePoints = (minX, maxX, minY, maxY, pan, zoom, containerWidth, containerHeight) => {
-    return [
-      { x: (minX - pan.x) / zoom / containerWidth, y: (minY - pan.y) / zoom / containerHeight }, // top-left
-      { x: (maxX - pan.x) / zoom / containerWidth, y: (minY - pan.y) / zoom / containerHeight }, // top-right
-      { x: (maxX - pan.x) / zoom / containerWidth, y: (maxY - pan.y) / zoom / containerHeight }, // bottom-right
-      { x: (minX - pan.x) / zoom / containerWidth, y: (maxY - pan.y) / zoom / containerHeight }  // bottom-left
-    ]
-  }
+
   
   // Función para actualizar el cursor basado en la posición del mouse
   const updateCursor = (e) => {
@@ -363,17 +396,17 @@ export function ImageColumn({
       setCurrentCursor('crosshair')
       return
     }
-    
-    const rect = e.currentTarget.getBoundingClientRect()
-    const containerWidth = rect.width
-    const containerHeight = rect.height
-    const mouseX = (e.clientX - rect.left - pan.x) / zoom / containerWidth
-    const mouseY = (e.clientY - rect.top - pan.y) / zoom / containerHeight
-    
-    const edge = getEdgeNearPoint(mouseX, mouseY, cropPoints)
+
+    const normalized = clientToNormalized(e.clientX, e.clientY)
+    if (!normalized) {
+      setCurrentCursor('crosshair')
+      return
+    }
+
+    const edge = getEdgeNearPoint(normalized.x, normalized.y, cropPoints)
     if (edge) {
       setCurrentCursor('grab')
-    } else if (isPointInRectangle(mouseX, mouseY, cropPoints)) {
+    } else if (isPointInRectangle(normalized.x, normalized.y, cropPoints)) {
       setCurrentCursor('move')
     } else {
       setCurrentCursor('crosshair')
@@ -577,20 +610,18 @@ export function ImageColumn({
               {(() => {
                 let tempPoints = cropPoints;
                 if (isDragging && dragStart && dragEnd) {
-                  const rect = containerRef.current ? containerRef.current.getBoundingClientRect() : { width: 100, height: 100 };
-                  const containerWidth = rect.width;
-                  const containerHeight = rect.height;
-                  
+                  const imgRect = getImageRect() || { width: 100, height: 100 };
                   const minX = Math.min(dragStart.x, dragEnd.x);
                   const maxX = Math.max(dragStart.x, dragEnd.x);
                   const minY = Math.min(dragStart.y, dragEnd.y);
                   const maxY = Math.max(dragStart.y, dragEnd.y);
                   
-                  // Normalizar coordenadas usando la función helper
-                  tempPoints = normalizeRectanglePoints(minX, maxX, minY, maxY, pan, zoom, containerWidth, containerHeight);
+                  // Normalizar coordenadas usando la función helper (ya trabajan en coordenadas relativas a <img>)
+                  tempPoints = normalizeRectanglePoints(minX, maxX, minY, maxY);
                 }
                 return (
                   <ImageViewer
+                    ref={viewerRef}
                     src={carouselItems && carouselItems.length > 0 && carouselIndex < carouselItems.length
                       ? carouselItems[carouselIndex].url
                       : (showOriginal && originalPreview ? originalPreview : preview)}
@@ -598,7 +629,7 @@ export function ImageColumn({
                     pan={pan}
                     points={tempPoints}
                     cropMode={cropMode}
-                    onPointAdd={null}
+                    onPointAdd={handlePointAdd}
                     onPointUpdate={handlePointUpdate}
                     onImageClick={() => onImageClick && onImageClick()}
                     className="shadow-lg rounded-lg pointer-events-auto"
@@ -623,17 +654,28 @@ export function ImageColumn({
               })()}
               
               {/* Rectángulo preview durante drag */}
-              {isDragging && dragStart && dragEnd && (
-                <div
-                  className="absolute border-2 border-blue-500 bg-blue-200 bg-opacity-30 pointer-events-none"
-                  style={{
-                    left: Math.min(dragStart.x, dragEnd.x),
-                    top: Math.min(dragStart.y, dragEnd.y),
-                    width: Math.abs(dragEnd.x - dragStart.x),
-                    height: Math.abs(dragEnd.y - dragStart.y),
-                  }}
-                />
-              )}
+              {isDragging && dragStart && dragEnd && (() => {
+                const imgRect = getImageRect() || { left: 0, top: 0, width: 0, height: 0 }
+                const containerRect = containerRef.current ? containerRef.current.getBoundingClientRect() : { left: 0, top: 0 }
+                const offsetLeft = imgRect.left - containerRect.left
+                const offsetTop = imgRect.top - containerRect.top
+                const left = offsetLeft + Math.min(dragStart.x, dragEnd.x)
+                const top = offsetTop + Math.min(dragStart.y, dragEnd.y)
+                const width = Math.abs(dragEnd.x - dragStart.x)
+                const height = Math.abs(dragEnd.y - dragStart.y)
+
+                return (
+                  <div
+                    className="absolute border-2 border-blue-500 bg-blue-200 bg-opacity-30 pointer-events-none"
+                    style={{
+                      left,
+                      top,
+                      width,
+                      height,
+                    }}
+                  />
+                )
+              })()}
             </div>
           )}
 

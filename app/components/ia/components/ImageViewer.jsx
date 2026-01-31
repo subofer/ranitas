@@ -1,6 +1,7 @@
 "use client"
 import React, { forwardRef, useState, useEffect, useRef, useCallback } from 'react'
 import OptimizedImage from '@/app/components/ia/components/OptimizedImage'
+import { normalizePointFromRect, normalizedToContainerPixels } from '../utils/cropUtils'
 
 // Presentation-only ImageViewer
 // Props:
@@ -22,49 +23,49 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
 
   // Get container dimensions after mount
   useEffect(() => {
-    if (ref?.current) {
-      const updateDimensions = () => {
-        if (ref.current) {
-          // Use container dimensions directly - assume image fills container
-          const containerWidth = ref.current.clientWidth
-          const containerHeight = ref.current.clientHeight
-          
-          console.log('Setting container dimensions to:', { containerWidth, containerHeight, zoom })
-          
-          setContainerDimensions({
-            width: containerWidth,
-            height: containerHeight
-          })
-        }
+    // Use the displayed image dimensions (offsetWidth/offsetHeight) so overlays match rendered image
+    const updateDimensions = () => {
+      if (localImageRef?.current) {
+        // Save unscaled image dimensions (original image coordinate space)
+        const containerWidth = localImageRef.current.offsetWidth / zoom
+        const containerHeight = localImageRef.current.offsetHeight / zoom
+
+        console.log('Setting container (unscaled) dimensions to:', { containerWidth, containerHeight, zoom })
+
+        setContainerDimensions({
+          width: containerWidth,
+          height: containerHeight
+        })
+      } else if (ref?.current) {
+        // Fallback to container size
+        const containerWidth = ref.current.clientWidth
+        const containerHeight = ref.current.clientHeight
+        setContainerDimensions({ width: containerWidth, height: containerHeight })
       }
-      updateDimensions()
-      // Also listen for resize events
-      window.addEventListener('resize', updateDimensions)
-      return () => window.removeEventListener('resize', updateDimensions)
     }
-  }, [ref, zoom])
+
+    updateDimensions()
+    window.addEventListener('resize', updateDimensions)
+    return () => window.removeEventListener('resize', updateDimensions)
+  }, [ref, zoom, localImageRef])
 
   // Also update dimensions when image loads
   useEffect(() => {
     if (localImageRef?.current) {
       const updateImageDimensions = () => {
         if (localImageRef.current) {
-          // When image loads, ensure container dimensions are up to date
-          if (ref?.current) {
-            const containerWidth = ref.current.clientWidth
-            const containerHeight = ref.current.clientHeight
+          const containerWidth = localImageRef.current.offsetWidth / zoom
+          const containerHeight = localImageRef.current.offsetHeight / zoom
 
-            
-            setContainerDimensions({
-              width: containerWidth,
-              height: containerHeight
-            })
-          }
+          setContainerDimensions({
+            width: containerWidth,
+            height: containerHeight
+          })
         }
       }
       updateImageDimensions()
     }
-  }, [localImageRef, ref])
+  }, [localImageRef, ref, zoom])
 
   // Handle clicks on the image when in crop mode
   const handleImageClick = (e) => {
@@ -96,12 +97,9 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
 
     // CORRECTED APPROACH: getBoundingClientRect() gives us the bounds of the transformed image
     // To get normalized coordinates, we need to account for the zoom scaling
-    const rawX = e.clientX - rect.left
-    const rawY = e.clientY - rect.top
-    const normalizedX = rawX / (rect.width / zoom)
-    const normalizedY = rawY / (rect.height / zoom)
-    const x = Math.max(0, Math.min(1, normalizedX))
-    const y = Math.max(0, Math.min(1, normalizedY))
+    const normalized = normalizePointFromRect(e.clientX, e.clientY, rect)
+    if (!normalized) return
+    const { x, y } = normalized
 
     console.log('=== DETAILED COORDINATE CALCULATION ===')
     console.log('Raw click:', { clientX: e.clientX, clientY: e.clientY })
@@ -142,8 +140,9 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
 
     // CORRECTED APPROACH: getBoundingClientRect() gives us the bounds of the transformed image
     // To get normalized coordinates, we need to account for the zoom scaling
-    const x = Math.max(0, Math.min(1, (e.clientX - rect.left) / (rect.width / zoom)))
-    const y = Math.max(0, Math.min(1, (e.clientY - rect.top) / (rect.height / zoom)))
+    const normalized = normalizePointFromRect(e.clientX, e.clientY, rect)
+    if (!normalized) return
+    const { x, y } = normalized
 
     console.log('Drag corrected calculation:', { x, y, rectWidth: rect.width, rectHeight: rect.height, zoom })
     console.log('=== END DRAG DEBUG ===')
@@ -201,85 +200,83 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
             Pan: {pan.x.toFixed(0)},{pan.y.toFixed(0)}
           </div>
 
-          {/* Dark overlay with polygon cutout - DISABLED FOR DEBUG */}
-          {false && points.length >= 3 && (
-            <div className="absolute inset-0 pointer-events-none">
-              <svg className="absolute inset-0 w-full h-full">
-                {(() => {
-                  const maskId = `polygon-mask-${Math.random().toString(36).substr(2, 9)}`;
-                  const polygonPoints = points.map(p => `${p.x * 100}% ${p.y * 100}%`).join(' ');
-                  console.log('Creating mask with points:', polygonPoints);
-                  return (
-                    <>
-                      <defs>
-                        <mask id={maskId}>
-                          <rect width="100%" height="100%" fill="white" />
-                          <polygon points={polygonPoints} fill="black" />
-                        </mask>
-                      </defs>
-                      <rect width="100%" height="100%" fill="black" mask={`url(#${maskId})`} />
-                    </>
-                  );
-                })()}
-              </svg>
-            </div>
-          )}
+          {/* Dark overlay with polygon cutout */}
+          {points.length >= 3 && (() => {
+            const imgRect = localImageRef?.current?.getBoundingClientRect()
+            const containerRect = ref?.current?.getBoundingClientRect()
+            if (!imgRect || !containerRect) return null
+            const maskId = `polygon-mask-${Math.random().toString(36).substr(2, 9)}`
+            const polygonPoints = points.map(p => {
+              const pos = normalizedToContainerPixels(p, imgRect, containerRect)
+              if (!pos) return '0,0'
+              return `${pos.x},${pos.y}`
+            }).join(' ')
+
+            return (
+              <div className="absolute inset-0 pointer-events-none z-20">
+                <svg className="absolute inset-0 w-full h-full">
+                  <defs>
+                    <mask id={maskId}>
+                      <rect width="100%" height="100%" fill="white" />
+                      <polygon points={polygonPoints} fill="black" />
+                    </mask>
+                  </defs>
+                  <rect width="100%" height="100%" fill="black" mask={`url(#${maskId})`} opacity="0.75" />
+                </svg>
+              </div>
+            )
+          })()}
           
           {/* Polygon lines */}
           {points.length > 1 && (
-            <div className="absolute inset-0 pointer-events-none">
+            <div 
+              className="absolute inset-0 pointer-events-none z-30"
+            >
               <svg className="absolute inset-0 w-full h-full">
-                {/* Draw lines between consecutive points */}
-                {points.map((p, i) => {
-                  if (i === 0) return null // Don't draw line for first point
-                  const prev = points[i - 1]
-                  
-                  // Get image dimensions for calculations
-                  const img = localImageRef?.current
-                  const imgRect = img ? img.getBoundingClientRect() : null
-                  const baseWidth = imgRect ? imgRect.width / zoom : containerDimensions.width || 100
-                  const baseHeight = imgRect ? imgRect.height / zoom : containerDimensions.height || 100
-                  
-                  const prevX = prev.x * baseWidth * zoom + pan.x / zoom
-                  const prevY = prev.y * baseHeight * zoom + pan.y / zoom
-                  const currX = p.x * baseWidth * zoom + pan.x / zoom
-                  const currY = p.y * baseHeight * zoom + pan.y / zoom
-                  
-                  return (
-                    <line
-                      key={`line-${i}`}
-                      x1={`${prevX}px`}
-                      y1={`${prevY}px`}
-                      x2={`${currX}px`}
-                      y2={`${currY}px`}
-                      stroke="#2563eb"
-                      strokeWidth="3"
-                      opacity="0.8"
-                    />
-                  )
-                })}
+                {/* Draw lines between consecutive points using absolute pixel coords */}
+                {(() => {
+                  const imgRect = localImageRef?.current?.getBoundingClientRect()
+                  const containerRect = ref?.current?.getBoundingClientRect()
+                  if (!imgRect || !containerRect) return null
+
+                  return points.map((p, i) => {
+                    if (i === 0) return null
+                    const prev = points[i - 1]
+                    const prevPos = normalizedToContainerPixels(prev, imgRect, containerRect)
+                    const currPos = normalizedToContainerPixels(p, imgRect, containerRect)
+                    if (!prevPos || !currPos) return null
+
+                    return (
+                      <line
+                        key={`line-${i}`}
+                        x1={prevPos.x}
+                        y1={prevPos.y}
+                        x2={currPos.x}
+                        y2={currPos.y}
+                        stroke="#2563eb"
+                        strokeWidth="3"
+                        opacity="0.8"
+                      />
+                    )
+                  })
+                })()}
+
                 {/* Close the polygon if we have 4 points */}
                 {points.length === 4 && (() => {
-                  const first = points[0]
-                  const last = points[3]
-                  
-                  // Get image dimensions for calculations
-                  const img = localImageRef?.current
-                  const imgRect = img ? img.getBoundingClientRect() : null
-                  const baseWidth = imgRect ? imgRect.width / zoom : containerDimensions.width || 100
-                  const baseHeight = imgRect ? imgRect.height / zoom : containerDimensions.height || 100
-                  
-                  const firstX = first.x * baseWidth * zoom + pan.x / zoom
-                  const firstY = first.y * baseHeight * zoom + pan.y / zoom
-                  const lastX = last.x * baseWidth * zoom + pan.x / zoom
-                  const lastY = last.y * baseHeight * zoom + pan.y / zoom
-                  
+                  const imgRect = localImageRef?.current?.getBoundingClientRect()
+                  const containerRect = ref?.current?.getBoundingClientRect()
+                  if (!imgRect || !containerRect) return null
+
+                  const firstPos = normalizedToContainerPixels(points[0], imgRect, containerRect)
+                  const lastPos = normalizedToContainerPixels(points[3], imgRect, containerRect)
+                  if (!firstPos || !lastPos) return null
+
                   return (
                     <line
-                      x1={`${lastX}px`}
-                      y1={`${lastY}px`}
-                      x2={`${firstX}px`}
-                      y2={`${firstY}px`}
+                      x1={lastPos.x}
+                      y1={lastPos.y}
+                      x2={firstPos.x}
+                      y2={firstPos.y}
                       stroke="#2563eb"
                       strokeWidth="3"
                       opacity="0.8"
@@ -291,31 +288,30 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
           )}
           
           {/* Interactive Points - OUTSIDE pointer-events-none container */}
-          {points.map((p, i) => {
-            // Calculate position considering zoom and pan transformations
-            // Use consistent base dimensions
-            const img = localImageRef?.current
-            const imgRect = img ? img.getBoundingClientRect() : null
-            const baseWidth = imgRect ? imgRect.width / zoom : containerDimensions.width || 100
-            const baseHeight = imgRect ? imgRect.height / zoom : containerDimensions.height || 100
-            
-            const scaledX = p.x * baseWidth * zoom + pan.x / zoom
-            const scaledY = p.y * baseHeight * zoom + pan.y / zoom
-            
-            const left = `${scaledX}px`
-            const top = `${scaledY}px`
-            
-            return (
-              <div 
-                key={i} 
-                style={{ left, top }} 
-                className="absolute -translate-x-1/2 -translate-y-1/2 cursor-move hover:scale-110 transition-transform z-10"
-                onMouseDown={(e) => handlePointMouseDown(e, i)}
-              >
-                <div className="h-4 w-4 rounded-full bg-blue-900 ring-2 ring-white shadow-lg" />
-              </div>
-            )
-          })}
+          {(() => {
+            const imgRect = localImageRef?.current?.getBoundingClientRect()
+            const containerRect = ref?.current?.getBoundingClientRect()
+            if (!imgRect || !containerRect) return null
+
+            return points.map((p, i) => {
+              const pos = normalizedToContainerPixels(p, imgRect, containerRect)
+              if (!pos) return null
+
+              const left = `${pos.x}px`
+              const top = `${pos.y}px`
+
+              return (
+                <div
+                  key={i}
+                  style={{ left, top }}
+                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-move hover:scale-110 transition-transform z-40"
+                  onMouseDown={(e) => handlePointMouseDown(e, i)}
+                >
+                  <div className="h-4 w-4 rounded-full bg-blue-900 ring-2 ring-white shadow-lg" />
+                </div>
+              )
+            })
+          })()}
         </>
       )}
     </div>
