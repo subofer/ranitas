@@ -54,6 +54,9 @@ export function ImageColumn({
   // Prop entrante con puntos detectados (puede ser pixel coords o normalizados)
   incomingCropPoints = null,
   incomingPointsAreNormalized = true,
+  // Saved points (for debugging / comparison)
+  detectedSavedPoints = null,
+  manualSavedPoints = null,
 
 }) {
   const containerRef = useRef(null)
@@ -684,43 +687,72 @@ export function ImageColumn({
                 )
               })()}
 
-              {/* Floating expanded JSON viewer for incoming detected points */}
-              {incomingCropPoints && cropMode && (
+              {/* Floating expanded JSON viewer for incoming detected points and saved comparisons */}
+              {( (incomingCropPoints && incomingCropPoints.length>0) || (detectedSavedPoints) || (manualSavedPoints) ) && cropMode && (
                 <div className="absolute right-3 top-3 bg-white/95 border rounded-lg p-2 shadow-lg z-50 max-w-xs text-xs">
                   <details>
-                    <summary className="font-semibold">Puntos detectados ({incomingCropPoints.length})</summary>
-                    <pre className="mt-2 whitespace-pre-wrap overflow-auto max-h-40">{JSON.stringify(incomingCropPoints, null, 2)}</pre>
-                    <div className="flex gap-2 mt-2">
-                      <button
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard.writeText(JSON.stringify(incomingCropPoints, null, 2))
-                          } catch (e) {
-                            console.warn('Clipboard write failed', e)
-                          }
-                        }}
-                        className="px-2 py-1 bg-gray-100 border rounded text-xs"
-                      >Copiar</button>
+                    <summary className="font-semibold">Puntos detectados (preview / guardados)</summary>
 
-                      <button
-                        onClick={() => {
-                          // Apply points taking into account whether they are normalized or pixel coords
-                          if (incomingPointsAreNormalized) {
-                            onCropPointsChange && onCropPointsChange(incomingCropPoints)
-                          } else {
-                            const rect = getImageRect()
-                            if (rect) {
-                              const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
-                              onCropPointsChange && onCropPointsChange(normalized)
-                            } else {
-                              // If we can't get rect, still attempt to apply raw points
-                              onCropPointsChange && onCropPointsChange(incomingCropPoints)
-                            }
-                          }
-                        }}
-                        className="px-2 py-1 bg-green-50 border rounded text-xs"
-                      >Aplicar puntos</button>
-                    </div>
+                    {/* Current suggestion (incoming) */}
+                    {incomingCropPoints && (
+                      <div className="mt-2">
+                        <div className="font-medium">Sugerencia actual</div>
+                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(incomingCropPoints, null, 2)}</pre>
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            onClick={async () => {
+                              try { await navigator.clipboard.writeText(JSON.stringify(incomingCropPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) }
+                            }}
+                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
+                          >Copiar</button>
+                          <button
+                            onClick={() => {
+                              if (incomingPointsAreNormalized) {
+                                onCropPointsChange && onCropPointsChange(incomingCropPoints)
+                              } else {
+                                const rect = getImageRect()
+                                if (rect) {
+                                  const normalized = incomingCropPoints.map(p => ({ x: Math.max(0, Math.min(1, p.x / rect.width)), y: Math.max(0, Math.min(1, p.y / rect.height)) }))
+                                  onCropPointsChange && onCropPointsChange(normalized)
+                                } else {
+                                  onCropPointsChange && onCropPointsChange(incomingCropPoints)
+                                }
+                              }
+                            }}
+                            className="px-2 py-1 bg-green-50 border rounded text-xs"
+                          >Aplicar</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Detected saved */}
+                    {detectedSavedPoints && (
+                      <div className="mt-3">
+                        <div className="font-medium">Detectado guardado</div>
+                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(detectedSavedPoints, null, 2)}</pre>
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(detectedSavedPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
+                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
+                          >Copiar</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Manual saved */}
+                    {manualSavedPoints && (
+                      <div className="mt-3">
+                        <div className="font-medium">Manual guardado</div>
+                        <pre className="mt-1 whitespace-pre-wrap overflow-auto max-h-28">{JSON.stringify(manualSavedPoints, null, 2)}</pre>
+                        <div className="flex gap-2 mt-1">
+                          <button
+                            onClick={async () => { try { await navigator.clipboard.writeText(JSON.stringify(manualSavedPoints, null, 2)) } catch (e) { console.warn('Clipboard write failed', e) } }}
+                            className="px-2 py-1 bg-gray-100 border rounded text-xs"
+                          >Copiar</button>
+                        </div>
+                      </div>
+                    )}
+
                   </details>
                 </div>
               )}
