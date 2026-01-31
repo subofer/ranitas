@@ -359,10 +359,11 @@ export default function IaImage({ model }) {
     setCropMode(false);
     setShowOriginalPreview(false);
     setCropPoints([]); // Limpiar puntos del polígono
+    setDetectedCropPoints(null);
   };
 
   // Aplicar crop usando los puntos marcados manualmente
-  const handleApplyCrop = async (points) => {
+  const handleApplyCrop = async (points, options = { useBackendWarp: false }) => {
     if (!points || points.length < 3) {
       console.warn("Se necesitan al menos 3 puntos para hacer crop");
       return;
@@ -377,7 +378,34 @@ export default function IaImage({ model }) {
       setLoading(true);
       setErrorMessage(null);
 
-      // Hacer crop básico con canvas
+      // If requested, try to use backend warp to compute perspective-corrected crop
+      if (options.useBackendWarp) {
+        try {
+          const form = new FormData();
+          form.append('image', file);
+          form.append('action', 'warp');
+          form.append('points', JSON.stringify(points));
+
+          const resp = await fetch('/api/ai/image', { method: 'POST', body: form });
+          const data = await resp.json();
+          if (data.ok && data.enhanced) {
+            // Convert dataURL to blob
+            const res = await fetch(data.enhanced);
+            const blob = await res.blob();
+            const croppedFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
+            const croppedUrl = URL.createObjectURL(blob);
+
+            // Use existing handleCrop to set images and run post-process
+            await handleCrop({ cropped: { file: croppedFile, preview: croppedUrl }, original: { file, preview } });
+            return;
+          }
+        } catch (e) {
+          console.warn('Backend warp failed, falling back to client crop:', e);
+          // continue to client-side crop
+        }
+      }
+
+      // Fallback: do client-side polygon crop (as before)
       const tempCanvas = document.createElement('canvas');
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -483,16 +511,21 @@ export default function IaImage({ model }) {
     }
   };
 
+  // State to hold detected suggestion points
+  const [detectedCropPoints, setDetectedCropPoints] = useState(null)
+
   // Autodetectar puntos de crop usando YOLO
-  const handleAutoDetectCrop = async (autoApply = false) => {
+  const handleAutoDetectCrop = async (autoApply = false, silent = false) => {
     if (!file || !preview) {
-      setErrorMessage("No hay imagen para procesar");
+      if (!silent) setErrorMessage("No hay imagen para procesar");
       return;
     }
 
     try {
-      setLoading(true);
-      setErrorMessage(null);
+      if (!silent) {
+        setLoading(true);
+        setErrorMessage(null);
+      }
 
       // Crear FormData con la imagen actual
       const formData = new FormData();
@@ -513,36 +546,39 @@ export default function IaImage({ model }) {
 
       // Procesar los puntos detectados
       if (result.corners && Array.isArray(result.corners) && result.corners.length >= 4) {
-        // Usar coordenadas normalizadas directamente
-        const detectedPoints = result.corners.slice(0, 4).map(corner => ({
-          x: corner.x, // Ya normalizado 0-1
-          y: corner.y, // Ya normalizado 0-1
+        // Usar los puntos directamente como los devuelve YOLO
+        const points = result.corners.slice(0, 4).map(corner => ({
+          x: corner[0], // Ya normalizado 0-1
+          y: corner[1], // Ya normalizado 0-1
         }));
 
-        // Ordenar puntos en sentido horario (empezando desde arriba-izquierda)
-        const sortedPoints = sortPointsClockwise(detectedPoints);
+
+
+        setDetectedCropPoints(points)
 
         if (autoApply) {
-          // Aplicar crop automáticamente
-          await handleApplyCrop(sortedPoints);
+          // Aplicar crop automáticamente (use warp on backend to generate final image)
+          await handleApplyCrop(points, { useBackendWarp: true });
         } else {
-          // Mostrar puntos para edición manual
-          setCropPoints(sortedPoints);
+          // Mostrar puntos para edición manual and show suggestion preview
+          setCropPoints(points);
           setCropMode(true);
         }
 
-        console.log('✅ Puntos detectados automáticamente:', sortedPoints);
+        console.log('✅ Puntos detectados automáticamente:', points);
       } else {
-        setErrorMessage("No se pudieron detectar esquinas en la imagen");
+        if (!silent) setErrorMessage("No se pudieron detectar esquinas en la imagen");
       }
 
     } catch (error) {
       console.error("Error en autodetección con YOLO:", error);
-      setErrorMessage(`Error detectando esquinas: ${error.message}`);
+      if (!silent) setErrorMessage(`Error detectando esquinas: ${error.message}`);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
+
+
 
   // Función auxiliar para ordenar puntos en sentido horario
   const sortPointsClockwise = (points) => {
@@ -1380,6 +1416,8 @@ export default function IaImage({ model }) {
                 onAutoDetectCrop={handleAutoDetectCrop}
                 headerText={computedHeaderText}
                 originalPreview={previewOriginal}
+                incomingCropPoints={detectedCropPoints}
+                incomingPointsAreNormalized={true}
                 extraHeaderButtons={cropMode ? (
                   <div className="flex gap-2">
                     <button
@@ -1402,7 +1440,7 @@ export default function IaImage({ model }) {
                   </div>
                 ) : null}
                 cropPoints={cropPoints}
-                onCropPointsChange={setCropPoints}
+                onCropPointsChange={(next) => { setCropPoints(next); }}
                 showOriginal={showOriginalPreview}
                 onToggleShowOriginal={(v) => setShowOriginalPreview(!!v)}
                 onImageClick={() => {

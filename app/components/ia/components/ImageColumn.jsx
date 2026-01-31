@@ -54,6 +54,7 @@ export function ImageColumn({
   // Prop entrante con puntos detectados (puede ser pixel coords o normalizados)
   incomingCropPoints = null,
   incomingPointsAreNormalized = true,
+
 }) {
   const containerRef = useRef(null)
   const viewerRef = useRef(null)
@@ -676,6 +677,8 @@ export function ImageColumn({
                   />
                 )
               })()}
+
+
             </div>
           )}
 
