@@ -202,6 +202,50 @@ export async function GET() {
       try { fs.appendFileSync('/tmp/status.debug.log', JSON.stringify({ ts: new Date().toISOString(), hasData: !!data, dataSample: data && (data.service || data.ok || 'hasData'), containerInfoSnippet: { docker_probe: containerInfo.docker_probe, container_candidate: containerInfo.container_candidate, db: containerInfo.db && { candidate: containerInfo.db.container_candidate, running: containerInfo.db.container_running } } }) + '\n') } catch(e){}
     } catch(e){}
 
+    // Heuristic: if vision's own status reports Ollama missing but the container is running, try probing Ollama API directly
+    try {
+      if (containerInfo.container_candidate) {
+        try {
+          const { stdout } = await execP(`docker exec ${containerInfo.container_candidate} curl -sS http://127.0.0.1:11434/api/tags`, { timeout: 4000 })
+          if (stdout && stdout.trim()) {
+            try {
+              const tagsJson = JSON.parse(stdout)
+              // Normalize: tagsJson may have shape { models: [...] } or an array
+              const tagModels = Array.isArray(tagsJson) ? tagsJson : (Array.isArray(tagsJson.models) ? tagsJson.models : null)
+              if (tagModels && tagModels.length > 0) {
+                // Ensure data.ollama exists and reflect present models
+                data = data || {}
+                data.ollama = data.ollama || {}
+                data.ollama.models = (tagModels.map(m => (m && (m.name || m.model)) || String(m))).filter(Boolean)
+                data.ollama.present = true
+                // If model list non-empty, mark ready for UI purposes
+                data.ollama.ready = data.ollama.ready || (data.ollama.models && data.ollama.models.length > 0)
+                // Also ensure `services` array reflects this probe so downstream mappers show Ollama models
+                data.services = Array.isArray(data.services) ? data.services : []
+                const existing = data.services.find(s => s.name === 'ollama')
+                if (existing) {
+                  existing.models = data.ollama.models
+                  existing.ready = existing.ready || data.ollama.ready
+                } else {
+                  data.services.push({ name: 'ollama', source: 'ranitas-vision', type: 'llm', models: data.ollama.models, ready: Boolean(data.ollama.ready), since: null })
+                }
+
+                // Record probe info for debugging
+                containerInfo.ollama_probe = { ok: true, found: data.ollama.models.length }
+              }
+            } catch (jsErr) {
+              // ignore JSON parse errors
+            }
+          }
+        } catch (probeErr) {
+          // Non-fatal: Ollama probe failed; include debug hint
+          containerInfo.ollama_probe = containerInfo.ollama_probe || { ok: false, error: String(probeErr) }
+        }
+      }
+    } catch (e) {
+      // ignore any unexpected errors here
+    }
+
     // Minimal mapping: use the raw vision-ai payload directly (we control the service), but expose a small mapper
     const { mapStatusData } = await import('../../../../lib/statusMapper.js')
     const { loadedModels, status } = mapStatusData(data, containerInfo)
