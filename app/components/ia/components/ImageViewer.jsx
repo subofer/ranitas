@@ -67,6 +67,20 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
     }
   }, [localImageRef, ref, zoom])
 
+  // Debug: log incoming points mapping to container pixels (helps detect shifts)
+  useEffect(() => {
+    if (!points || points.length === 0) return
+    if (!localImageRef?.current || !ref?.current) return
+    try {
+      const imgRect = localImageRef.current.getBoundingClientRect()
+      const containerRect = ref.current.getBoundingClientRect()
+      const mapped = points.map(p => ({ x: p.x, y: p.y, pos: normalizedToContainerPixels(p, imgRect, containerRect) }))
+      console.log('AUTO-DETECT-DEBUG: points mapping', { mapped, imgRect, containerRect, zoom, pan })
+    } catch (e) {
+      console.warn('AUTO-DETECT-DEBUG error mapping points', e)
+    }
+  }, [points, zoom, pan])
+
   // Handle clicks on the image when in crop mode
   const handleImageClick = (e) => {
     // Don't add new points if we're dragging
