@@ -224,6 +224,9 @@ export default function IaImage({ model }) {
   // Estado para crop points
   const [cropPoints, setCropPoints] = useState([])
   const [savedCropPoints, setSavedCropPoints] = useState([])
+  // Guardados para debugging/comparación: puntos detectados por la IA y puntos movidos manualmente
+  const [lastDetectedPoints, setLastDetectedPoints] = useState(null)
+  const [lastManualPoints, setLastManualPoints] = useState(null)
 
   // Handler compartido para procesamiento de capturas de cámara
   const handleCameraCapture = async (dataUrl) => {
@@ -555,6 +558,8 @@ export default function IaImage({ model }) {
 
 
         setDetectedCropPoints(points)
+        // Guardar los puntos detectados para comparación
+        setLastDetectedPoints(points)
 
         if (autoApply) {
           // Aplicar crop automáticamente (use warp on backend to generate final image)
@@ -1418,6 +1423,9 @@ export default function IaImage({ model }) {
                 originalPreview={previewOriginal}
                 incomingCropPoints={detectedCropPoints}
                 incomingPointsAreNormalized={true}
+                // Saved points for comparison
+                detectedSavedPoints={lastDetectedPoints}
+                manualSavedPoints={lastManualPoints}
                 extraHeaderButtons={cropMode ? (
                   <div className="flex gap-2">
                     <button
@@ -1440,7 +1448,11 @@ export default function IaImage({ model }) {
                   </div>
                 ) : null}
                 cropPoints={cropPoints}
-                onCropPointsChange={(next) => { setCropPoints(next); }}
+                onCropPointsChange={(nextOrUpdater) => {
+                  const nextPoints = typeof nextOrUpdater === 'function' ? nextOrUpdater(cropPoints) : nextOrUpdater
+                  setCropPoints(nextPoints)
+                  setLastManualPoints(nextPoints)
+                }}
                 showOriginal={showOriginalPreview}
                 onToggleShowOriginal={(v) => setShowOriginalPreview(!!v)}
                 onImageClick={() => {
