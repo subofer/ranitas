@@ -18,10 +18,29 @@ export default function DockerStatusDisplay({ target = 'vision', compact = false
   // - orange = starting
   // - blue = running healthy
   // - red = docker reports 'unhealthy' (explicit Docker health status)
+  // - yellow = docker reports 'restarting' (container is being restarted)
   let iconClass = 'text-gray-400'
   if (isRunning) {
     const health = svc?.health ? String(svc.health) : ''
-    if (/unhealthy/i.test(health)) {
+    const psRaw = svc?.ps_raw ? String(svc.ps_raw) : ''
+    const containerName = svc?.name || svc?.container_candidate || ''
+
+    // Detectar 'restarting' sólo cuando la línea correspondiente al contenedor actual indica reinicio
+    let psIsRestarting = false
+    if (psRaw && containerName) {
+      psIsRestarting = psRaw
+        .split('\n')
+        .some(line => line && line.includes(containerName) && /restarting|restart|reiniciando/i.test(line))
+    } else {
+      // Fallback: si no hay nombre, caer a la detección global
+      psIsRestarting = /restarting|restart|reiniciando/i.test(psRaw)
+    }
+
+    if (psIsRestarting || /restarting|restart|reiniciando/i.test(health)) {
+      // 'Reiniciando' -> color celeste tenue, más grisáceo que el azul de 'running'
+      iconClass = 'text-[#86AFCB]'
+    } else if (/unhealthy/i.test(health)) {
+      // Si no hay indicio de 'restarting' en la línea del contenedor, mantenemos 'unhealthy' como rojo
       iconClass = 'text-red-500'
     } else if (/starting|start/i.test(health)) {
       iconClass = 'text-orange-500'
