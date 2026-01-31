@@ -17,7 +17,7 @@ services:
 
   vision:
     build:
-      context: ./services/yolo
+      context: ./services/vision
       dockerfile: Dockerfile
     container_name: ranitas-vision
     ports:
@@ -30,7 +30,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      - YOLO_MODEL_PATH=/app/models/yolov26l-seg.pt
+      - YOLO_MODEL_PATH=/app/models/yoloe-26x-seg.pt
       - YOLO_CONF=0.25
       - MASK_THRESHOLD=0.5
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
@@ -41,13 +41,19 @@ services:
       - TZ=${TZ:-UTC}
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # Reduce verbosity
+      - OLLAMA_DEBUG=ERROR
+      - PYTHONWARNINGS=ignore
+      - PYTHONUNBUFFERED=0
+      - YOLO_CONFIG_DIR=/tmp/ultralytics
+    # Use container ENTRYPOINT (entrypoint.sh) to start Ollama + FastAPI
     runtime: nvidia
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:11434/api/tags >/dev/null && curl -sf http://localhost:8000/status | python3 -c 'import sys,json; o=json.load(sys.stdin); sys.exit(0 if o.get(\"yolo\",{}).get(\"status\")==\"ready\" else 1)'"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 120s
+      retries: 5
+      start_period: 180s
     restart: unless-stopped
 
 volumes:
