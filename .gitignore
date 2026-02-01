@@ -74,6 +74,10 @@ services/**/*.log
 services/yolo/models/*.pt
 services/yolo/models/*.pth
 services/yolo/models/*.onnx
+services/vision/models/*.pt
+services/vision/models/*.pth
+services/vision/models/*.ts
+services/vision/models/*.onnx
 *.pt
 *.pth
 *.onnx
