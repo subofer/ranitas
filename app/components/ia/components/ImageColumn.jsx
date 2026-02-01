@@ -55,6 +55,10 @@ export function ImageColumn({
   // Prop entrante con puntos detectados (puede ser pixeles o normalizados)
   incomingCropPoints = null,
   incomingPointsAreNormalized = true,
+  // Vision debug payload (boxes, masks, confs)
+  visionDebug = null,
+  // Callback to remove the cropped image (origin saved in parent)
+  onRemoveCroppedImage = null,
 
 }) {
   const containerRef = useRef(null)
@@ -275,7 +279,7 @@ export function ImageColumn({
   }
   
   // Terminar pan o procesar drag/click en crop mode
-  const handleMouseUp = () => {
+const handleMouseUp = (e) => {
     if (isResizing) {
       // Terminar redimensionamiento
       setIsResizing(false)
@@ -308,6 +312,17 @@ export function ImageColumn({
         }
       } else if (!isDragging) {
         // Fue click (sin movimiento): agregar punto individual
+        // Si el click ocurrió dentro del viewer child, el viewer ya maneja el click
+        // y añadirá el punto. Evitamos duplicados comprobando el origen del evento.
+        if (e && viewerRef && viewerRef.current && viewerRef.current.contains(e.target)) {
+          // Dejar que el viewer maneje el click
+          setIsDragging(false)
+          setDragStart(null)
+          setDragEnd(null)
+          setIsPanning(false)
+          return
+        }
+
         const normalizedPoint = {
           x: dragStart.x / (containerWidth || 1),
           y: dragStart.y / (containerHeight || 1)
@@ -450,7 +465,47 @@ export function ImageColumn({
           logger.warn('Maximum 4 points reached, ignoring new point', '[ImageColumn]')
           return prev
         }
-        const newPoints = [...prev, point]
+
+        // Ensure new point is not placed directly on top of an existing one.
+        // If it's too close, nudge it away slightly so it can be grabbed independently.
+        const MIN_DIST = 0.03; // normalized units (~3% of image)
+        let newPt = { x: point.x, y: point.y };
+
+        if (prev && prev.length > 0) {
+          // find closest existing point
+          let minIdx = -1;
+          let minD = Infinity;
+          prev.forEach((p, idx) => {
+            const dx = newPt.x - p.x;
+            const dy = newPt.y - p.y;
+            const d = Math.hypot(dx, dy);
+            if (d < minD) {
+              minD = d;
+              minIdx = idx;
+            }
+          })
+
+          if (minD < MIN_DIST) {
+            logger.debug({ action: 'nudge_point', from: point, nearestIdx: minIdx, nearest: prev[minIdx], dist: minD }, '[ImageColumn]')
+            // push newPt away from nearest point
+            const nearest = prev[minIdx]
+            let dx = newPt.x - nearest.x
+            let dy = newPt.y - nearest.y
+            if (dx === 0 && dy === 0) {
+              // exact overlap - push horizontally right if possible, else left
+              dx = MIN_DIST
+              dy = 0
+            }
+            const angle = Math.atan2(dy, dx)
+            newPt.x = nearest.x + Math.cos(angle) * MIN_DIST
+            newPt.y = nearest.y + Math.sin(angle) * MIN_DIST
+            // clamp to [0,1]
+            newPt.x = Math.max(0, Math.min(1, newPt.x))
+            newPt.y = Math.max(0, Math.min(1, newPt.y))
+          }
+        }
+
+        const newPoints = [...prev, newPt]
         logger.debug({ newPoints }, '[ImageColumn]')
         return newPoints
       })
@@ -479,8 +534,13 @@ export function ImageColumn({
             {carouselItems && carouselItems.length > 0 ? (
               // Mostrar pestañas dinámicas basadas en carousel
               carouselItems.map((item, index) => (
-                <button
+                <div
                   key={item.type}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors flex items-center gap-2 ${
+                    index === carouselIndex
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
                   onClick={() => {
                     if (onPrev && onNext) {
                       // Usar carousel navigation
@@ -492,17 +552,30 @@ export function ImageColumn({
                       }
                     }
                   }}
-                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                    index === carouselIndex
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
                 >
-                  {item.type === 'original' ? 'Original' :
-                   item.type === 'recortada' ? 'Recortada' :
-                   item.type === 'mejorada' ? 'Recortada' : // Unificar recortada y mejorada
-                   item.type}
-                </button>
+                  <span>
+                    {item.type === 'original' ? 'Original' :
+                     item.type === 'recortada' ? 'Recortada' :
+                     item.type === 'mejorada' ? 'Recortada' : // Unificar recortada y mejorada
+                     item.type}
+                  </span>
+
+                  {/* Small remove 'x' for cropped items */}
+                  {item.type === 'recortada' && onRemoveCroppedImage && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        onRemoveCroppedImage()
+                      }}
+                      title="Eliminar imagen recortada"
+                      className="ml-1 text-red-600 hover:text-red-800 cursor-pointer text-xs"
+                      aria-label="Eliminar imagen recortada"
+                    >
+                      ✖
+                    </span>
+                  )}
+                </div>
               ))
             ) : (
               // Fallback al sistema antiguo si no hay carousel
@@ -644,6 +717,7 @@ export function ImageColumn({
                     // Show current suggestion (incoming) vs current manual points as comparison
                     detectedPoints={incomingCropPoints}
                     manualPoints={cropPoints}
+                    visionDebug={visionDebug}
                     cropMode={cropMode}
                     onPointAdd={handlePointAdd}
                     onPointUpdate={handlePointUpdate}

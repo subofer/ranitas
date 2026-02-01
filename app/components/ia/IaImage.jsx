@@ -118,6 +118,8 @@ export default function IaImage({ model }) {
   // Refs
   const canvasRef = useRef(null);
   const imgOriginalRef = useRef(null);
+  // Abort controller for in-flight analysis request (so user can cancel)
+  const analysisControllerRef = useRef(null);
 
   // Hooks personalizados
   const autoEnfocar = useImageAutoFocus();
@@ -364,8 +366,8 @@ export default function IaImage({ model }) {
     setDetectedCropPoints(null);
   };
 
-  // Aplicar crop usando los puntos marcados manualmente
-  const handleApplyCrop = async (points, options = { useBackendWarp: false }) => {
+  // Aplicar crop usando los puntos marcados manualmente (siempre via backend warp)
+  const handleApplyCrop = async (points, options = { useBackendWarp: true }) => {
     if (!points || points.length < 3) {
       logger.warn('Se necesitan al menos 3 puntos para hacer crop', '[IaImage]');
       return;
@@ -376,145 +378,177 @@ export default function IaImage({ model }) {
       return;
     }
 
+    setLoading(true);
+    setErrorMessage(null);
+
     try {
-      setLoading(true);
-      setErrorMessage(null);
+      // Enviar solicitud de warp al backend (siempre)
+      const form = new FormData();
+      form.append('image', file);
+      form.append('action', 'warp');
+      // Ensure points are sent as an array of [x,y]
+      const ptsToSend = (points || []).map(p => Array.isArray(p) ? p : [p.x, p.y]);
+      form.append('points', JSON.stringify(ptsToSend));
 
-      // If requested, try to use backend warp to compute perspective-corrected crop
-      if (options.useBackendWarp) {
+      const resp = await fetch('/api/ai/image', { method: 'POST', body: form });
+      const data = await resp.json().catch(() => null);
+
+      if (!resp.ok) {
+        logger.error('Backend warp returned error', '[IaImage]', resp.status, data);
+        setErrorMessage((data && data.error) ? `Warp error: ${data.error}` : 'El servidor no pudo generar el recorte.');
+        return;
+      }
+
+      if (!data || !data.enhanced) {
         try {
-          const form = new FormData();
-          form.append('image', file);
-          form.append('action', 'warp');
-          form.append('points', JSON.stringify(points));
-
-          const resp = await fetch('/api/ai/image', { method: 'POST', body: form });
-          const data = await resp.json();
-          if (data.ok && data.enhanced) {
-            // Convert dataURL to blob
-            const res = await fetch(data.enhanced);
-            const blob = await res.blob();
-            const croppedFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
-            const croppedUrl = URL.createObjectURL(blob);
-
-            // Use existing handleCrop to set images and run post-process
-            await handleCrop({ cropped: { file: croppedFile, preview: croppedUrl }, original: { file, preview } });
-            return;
-          }
-        } catch (e) {
-          console.warn('Backend warp failed, falling back to client crop:', e);
-          // continue to client-side crop
-        }
+          logger.error('Backend warp did not return enhanced image', '[IaImage]', { status: resp && resp.status, data_preview: data && (data.enhanced ? String(data.enhanced).substring(0,100) : JSON.stringify(data).substring(0,200)), full_data: data });
+          console.groupCollapsed('⚠️ Warp response debug');
+          console.log('status:', resp && resp.status, 'ok:', resp && resp.ok);
+          console.log('data:', data);
+          console.groupEnd();
+        } catch (e) {}
+        setErrorMessage('El servidor no devolvió la imagen recortada. Revisa los logs del servicio.');
+        return;
       }
 
-      // Fallback: do client-side polygon crop (as before)
-      const tempCanvas = document.createElement('canvas');
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      
-      // Usar la imagen que se está mostrando actualmente
-      const imageSrc = showOriginalPreview && previewOriginal ? previewOriginal : preview;
-      
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-        img.src = imageSrc;
-      });
-      
-      // Convertir coordenadas normalizadas a absolutas
-      const absolutePoints = points.map(p => ({
-        x: p.x * img.naturalWidth,
-        y: p.y * img.naturalHeight,
-      }));
-
-      // Calcular bounding box del polígono
-      const minX = Math.min(...absolutePoints.map(p => p.x));
-      const minY = Math.min(...absolutePoints.map(p => p.y));
-      const maxX = Math.max(...absolutePoints.map(p => p.x));
-      const maxY = Math.max(...absolutePoints.map(p => p.y));
-      
-      const width = maxX - minX;
-      const height = maxY - minY;
-      
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-      const tempCtx = tempCanvas.getContext('2d');
-      
-      // Crear path del polígono
-      tempCtx.beginPath();
-      tempCtx.moveTo(absolutePoints[0].x - minX, absolutePoints[0].y - minY);
-      for (let i = 1; i < absolutePoints.length; i++) {
-        tempCtx.lineTo(absolutePoints[i].x - minX, absolutePoints[i].y - minY);
+      // Convertir enhanced (data URL) a blob y aplicar
+      const resFetch = await fetch(data.enhanced);
+      if (!resFetch.ok) {
+        logger.error('Failed to fetch enhanced image from backend', '[IaImage]', resFetch.status);
+        setErrorMessage('No se pudo descargar la imagen recortada desde el servidor.');
+        return;
       }
-      tempCtx.closePath();
-      tempCtx.clip();
-      
-      // Dibujar la imagen recortada
-      tempCtx.drawImage(img, -minX, -minY);
-      
-      // Convertir a blob y crear nuevo file
-      tempCanvas.toBlob(async (blob) => {
-        if (!blob) {
-          console.error("No se pudo crear blob del crop");
-          return;
-        }
-        
-        const croppedFile = new File([blob], `cropped-${file.name}`, { type: file.type });
-        const croppedUrl = URL.createObjectURL(blob);
-        
-        // Lógica simplificada: guardar original y mostrar recortada
+
+      const blob = await resFetch.blob();
+
+      // Crear una versión cuadrada (esquadrada) centrada con fondo blanco
+      try {
+        const img = await new Promise((res, rej) => {
+          const i = new Image();
+          i.onload = () => res(i);
+          i.onerror = rej;
+          // Usar una URL temporal para poder cargar el blob
+          i.src = URL.createObjectURL(blob);
+        });
+
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+        const size = Math.max(width, height);
+
+        const canvasSquare = document.createElement('canvas');
+        canvasSquare.width = size;
+        canvasSquare.height = size;
+        const ctx = canvasSquare.getContext('2d');
+        // Relleno blanco para mantener estética de documento
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+
+        const dx = Math.round((size - width) / 2);
+        const dy = Math.round((size - height) / 2);
+        ctx.drawImage(img, dx, dy, width, height);
+
+        // Liberar URL temporal
+        URL.revokeObjectURL(img.src);
+
+        const newBlob = await new Promise((resolve) => canvasSquare.toBlob(resolve, blob.type || 'image/jpeg', 0.95));
+        const croppedFile = new File([newBlob], `cropped-${file.name}`, { type: newBlob.type || file.type });
+        const croppedUrl = URL.createObjectURL(newBlob);
+
+        // Guardar original si no existe
         if (!previewOriginal) {
           const originalUrl = URL.createObjectURL(file);
           setPreviewOriginal(originalUrl);
           setImagenOriginal(file);
         }
-        
+
         if (preview) URL.revokeObjectURL(preview);
         setFile(croppedFile);
         setPreview(croppedUrl);
         setImageBlobs(prev => ({ ...prev, [croppedUrl]: croppedFile }));
-        setImagenMejorada(null); // No hay versión mejorada por ahora
-        setImagenStatus("recortada");
+        setImagenMejorada(null);
+        setImagenStatus('recortada');
         setShowOriginalPreview(true);
-        setCropMode(false); // Cerrar el modo crop después de aplicar
-        // Do not persist saved crop points. Clear current crop points after applying.
+        setCropMode(false);
         setCropPoints([]);
-        
-        // Auditoría del crop manual
+
+        // Auditoría
         try {
           await guardarAuditoriaEdicion({
-            campo: "IMAGEN_RECORTADA",
+            campo: 'IMAGEN_RECORTADA',
             valorAnterior: null,
             valorNuevo: croppedFile.name,
-            contexto: { source: "manual_points_crop", pointsCount: absolutePoints.length },
+            contexto: { source: 'manual_points_crop', pointsCount: points.length },
           });
-        } catch (e) {
-          console.warn("No se pudo guardar auditoría de crop manual:", e);
+        } catch (audErr) {
+          logger.warn('No se pudo guardar auditoría de crop manual:', audErr);
         }
-        
+
         // Re-aplicar auto-enfoque
         setTimeout(() => {
           try {
             autoEnfocar(croppedFile, croppedUrl, setFile, setPreview, croppedUrl);
             setAutoEnfoqueAplicado(true);
           } catch (e) {
-            console.warn("No se pudo re-aplicar auto-enfoque en la imagen recortada:", e);
+            logger.warn('No se pudo re-aplicar auto-enfoque en la imagen recortada:', e);
           }
         }, 100);
-        
-      }, file.type, 0.95);
-      
+      } catch (e) {
+        // Si falla el proceso de cuadrado, caer al flujo simple con el blob original
+        logger.warn('Fallo al convertir recorte a cuadrado, aplicando blob original:', e, '[IaImage]');
+        const fallbackFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
+        const fallbackUrl = URL.createObjectURL(blob);
+
+        if (!previewOriginal) {
+          const originalUrl = URL.createObjectURL(file);
+          setPreviewOriginal(originalUrl);
+          setImagenOriginal(file);
+        }
+
+        if (preview) URL.revokeObjectURL(preview);
+        setFile(fallbackFile);
+        setPreview(fallbackUrl);
+        setImageBlobs(prev => ({ ...prev, [fallbackUrl]: fallbackFile }));
+        setImagenMejorada(null);
+        setImagenStatus('recortada');
+        setShowOriginalPreview(true);
+        setCropMode(false);
+        setCropPoints([]);
+
+        try {
+          await guardarAuditoriaEdicion({
+            campo: 'IMAGEN_RECORTADA',
+            valorAnterior: null,
+            valorNuevo: fallbackFile.name,
+            contexto: { source: 'manual_points_crop', pointsCount: points.length, fallback: true },
+          });
+        } catch (audErr) {
+          logger.warn('No se pudo guardar auditoría de crop manual (fallback):', audErr);
+        }
+
+        setTimeout(() => {
+          try {
+            autoEnfocar(fallbackFile, fallbackUrl, setFile, setPreview, fallbackUrl);
+            setAutoEnfoqueAplicado(true);
+          } catch (e) {
+            logger.warn('No se pudo re-aplicar auto-enfoque en la imagen recortada (fallback):', e);
+          }
+        }, 100);
+      }
+
     } catch (error) {
-      console.error("Error aplicando crop manual:", error);
-      setErrorMessage("Error al aplicar el recorte manual. Intenta nuevamente.");
+      logger.error('Error aplicando warp en backend:', error);
+      setErrorMessage('Error al solicitar el recorte al servidor. Intenta de nuevo.');
     } finally {
       setLoading(false);
-      setCropMode(false); // Cerrar el modo crop después de aplicar
     }
+
   };
 
   // Flag to avoid double / concurrent auto-detect calls
   const [autoDetectInFlight, setAutoDetectInFlight] = useState(false)
+
+  // Raw debug data returned by vision (boxes, masks, etc.) for inspection
+  const [visionDebug, setVisionDebug] = useState(null)
 
   // Autodetectar puntos de crop usando YOLO
   const handleAutoDetectCrop = async (autoApply = false, silent = false) => {
@@ -548,41 +582,86 @@ export default function IaImage({ model }) {
         body: formData,
       });
 
-      const result = await response.json();
-
-      if (!result.ok) {
-        throw new Error(result.error || 'Error detectando esquinas');
+      let result = null;
+      try {
+        result = await response.json();
+      } catch (jsonErr) {
+        const text = await response.text().catch(() => null);
+        logger.warn('detect-corners returned non-JSON response', { status: response.status, text }, '[IaImage]');
+        // Exponer raw payload for debugging
+        setVisionDebug(text ? { raw: text } : null);
+        if (!silent) setErrorMessage('Error en detección: respuesta inválida del servicio de visión');
+        return;
       }
 
-      // Procesar los puntos detectados
-      if (result.corners && Array.isArray(result.corners) && result.corners.length >= 4) {
-        // Usar los puntos directamente como los devuelve YOLO
-        const points = result.corners.slice(0, 4).map(corner => ({
-          x: corner[0], // Ya normalizado 0-1
-          y: corner[1], // Ya normalizado 0-1
-        }));
+      if (!response.ok || !result.ok) {
+        // Prefer vision-specific error payload if present
+        const errMsg = (result && (result.error || result.vision?.error)) || `Error detectando esquinas (status ${response.status})`;
+        logger.error('detect-corners failed', { status: response.status, errMsg, result }, '[IaImage]');
+        setVisionDebug(result || null);
+        if (!silent) setErrorMessage(errMsg);
+        return;
+      }
 
+      // Store any raw vision debug info for inspection
+      setVisionDebug(result.debug || result.vision_raw || result.vision || null);
 
+      // Debug logging of detected coords
+      try {
+        logger.info('detect-corners result', { src_preview: (result.src_coords || result.corners) ? (Array.isArray(result.src_coords || result.corners) ? (result.src_coords || result.corners).slice(0,4) : (result.src_coords || result.corners)) : null, coords_are_pixels: result.coords_are_pixels || false }, '[IaImage]');
+      } catch (e) {}
+
+      // Procesar los puntos detectados (admitir contratos antiguos y nuevos)
+      const srcCoords = result.src_coords || result.corners || null;
+      if (srcCoords && Array.isArray(srcCoords) && srcCoords.length >= 4) {
+        // Normalize points to 0..1 coordinates. If coords_are_pixels is true, convert using image natural size
+        let pointsPx = srcCoords.slice(0,4).map(pt => (Array.isArray(pt) ? pt : [pt.x ?? pt[0], pt.y ?? pt[1]]));
+        let normalizedPoints;
+
+        if (result.coords_are_pixels) {
+          // Need to know the image dimensions for conversion
+          try {
+            const img = new Image();
+            const imgLoad = new Promise((resolve, reject) => {
+              img.onload = () => resolve();
+              img.onerror = reject;
+            });
+            img.src = preview;
+            await imgLoad;
+            const imgW = img.naturalWidth || img.width;
+            const imgH = img.naturalHeight || img.height;
+            normalizedPoints = pointsPx.map(([x, y]) => ({ x: x / imgW, y: y / imgH }));
+          } catch (e) {
+            console.warn('No se pudo obtener dimensiones de la imagen para normalizar puntos:', e);
+            if (!silent) setErrorMessage('No se pudo normalizar puntos detectados');
+            normalizedPoints = pointsPx.map(([x, y]) => ({ x, y }));
+          }
+        } else {
+          // Assume coords already normalized 0..1
+          normalizedPoints = pointsPx.map(([x, y]) => ({ x, y }));
+        }
 
         // Keep the detected suggestion in temporary state; do not persist historic points
-        setDetectedCropPoints(points)
+        setDetectedCropPoints(normalizedPoints);
 
         if (autoApply) {
           // Aplicar crop automáticamente (use warp on backend to generate final image)
-          await handleApplyCrop(points, { useBackendWarp: true });
+          await handleApplyCrop(normalizedPoints, { useBackendWarp: true });
         } else {
           // Mostrar puntos para edición manual and show suggestion preview
-          setCropPoints(points);
+          setCropPoints(normalizedPoints);
           setCropMode(true);
         }
 
-        logger.info({ points }, '[IaImage:auto-detect]')
+        logger.info({ points: normalizedPoints }, '[IaImage:auto-detect]')
       } else {
+        logger.warn("No se pudieron detectar esquinas en la imagen", '[IaImage]');
         if (!silent) setErrorMessage("No se pudieron detectar esquinas en la imagen");
       }
 
     } catch (error) {
       console.error("Error en autodetección con YOLO:", error);
+      logger.error(`Error detectando esquinas: ${error.message}`, '[IaImage]');
       if (!silent) setErrorMessage(`Error detectando esquinas: ${error.message}`);
     } finally {
       if (!silent) setLoading(false);
@@ -690,7 +769,12 @@ export default function IaImage({ model }) {
 
   // Enviar ambas imágenes (original y recortada/mejorada) para comparar OCR
   const submit = async (mantenerResultados = false) => {
-    if (!file && !imagenOriginal) return;
+    logger.info('Starting submit function', '[IaImage]');
+    
+    if (!file && !imagenOriginal) {
+      logger.warn('No file or imagenOriginal available, returning early', '[IaImage]');
+      return;
+    }
 
     setLoading(true);
     setErrorMessage(null);
@@ -706,58 +790,168 @@ export default function IaImage({ model }) {
     }
 
     try {
-      logger.debug({ sending: '/api/ai/image', payload: { name: image?.name, size: image?.size } }, '[IaImage]')
-
       // Enviar la imagen actual y la original
       const fd = new FormData();
       const currentUrl = carouselItems && carouselItems.length > 0 ? carouselItems[carouselIndex].url : preview;
-      const currentBlob = imageBlobs[currentUrl];
+      const currentBlob = imageBlobs[currentUrl] || file || imagenOriginal;
+      
+      logger.info(`Submitting image analysis - blob: ${!!currentBlob}, size: ${currentBlob?.size || 'unknown'}, mode: ${mode}, model: ${model}, url: ${currentUrl}`, '[IaImage]');
+      
+      if (!currentBlob) {
+        logger.error('No image blob available for submission', '[IaImage]');
+        setErrorMessage("No hay imagen para analizar. Sube una imagen primero.");
+        return;
+      }
+      
       if (currentBlob) fd.append("image", currentBlob);
       if (imagenOriginal) fd.append("original", imagenOriginal);
+
+      // Include crop points (manual or detected suggestion) if present so the analyze endpoint
+      // /vision/analyze can be informed about the region of interest.
+      const pointsToSend = (cropPoints && cropPoints.length === 4) ? cropPoints : (detectedCropPoints && detectedCropPoints.length === 4 ? detectedCropPoints : null)
+      if (pointsToSend) {
+        fd.append('src_coords', JSON.stringify(pointsToSend))
+        fd.append('coords_are_pixels', 'false')
+      }
+
       fd.append("model", model || "llava:latest");
       fd.append("mode", mode);
 
       // Nuevo endpoint que soporta comparar ambas imágenes (ajustar backend si es necesario)
-      const res = await fetch("/api/ai/image", { method: "POST", body: fd });
-      const data = await res.json();
+      const controller = new AbortController();
+      analysisControllerRef.current = controller;
+      const timeoutId = setTimeout(() => {
+        logger.warn('Aborting request due to 60s timeout', '[IaImage]');
+        controller.abort();
+      }, 60000); // 60 segundos timeout
 
-      logger.debug({ endpoint: '/api/ai/image', status: resp.status, ok: resp.ok }, '[IaImage]')
+      const tReqStart = Date.now();
+      logger.debug(`Starting fetch to /api/ai/image at ${new Date().toISOString()}`, '[IaImage]');
+      const res = await fetch("/api/ai/image", { 
+        method: "POST", 
+        body: fd,
+        signal: controller.signal
+      });
+      const tReqEnd = Date.now();
+      clearTimeout(timeoutId);
+      analysisControllerRef.current = null;
+      logger.debug(`Fetch completed in ${tReqEnd - tReqStart}ms, status: ${res.status}`, '[IaImage]');
+
+      let data = null;
+      try {
+        data = await res.json();
+      } catch (e) {
+        logger.warn('No se pudo parsear JSON de /api/ai/image', '[IaImage]')
+        data = { ok: false, error: 'invalid_json_response' }
+      }
+
+      const latencyMs = tReqEnd - tReqStart;
+      logger.info({ endpoint: '/api/ai/image', status: res.status, ok: res.ok, latencyMs }, '[IaImage]')
+      try {
+        const rawText = data.text || (data.vision && data.vision.result) || '';
+        logger.debug({ response_preview: rawText ? String(rawText).substring(0, 200) : 'no text', full_response: data }, '[IaImage:api-response]')
+      } catch (e) {
+        logger.warn('No se pudo serializar respuesta de IA', '[IaImage]')
+      }
+
+      // También mostrar en console para facilitar debug manual
+      try {
+        console.groupCollapsed('🖼️ /api/ai/image response')
+        console.log('status:', res.status, 'ok:', res.ok, 'latencyMs:', latencyMs)
+        console.log('data:', data)
+        console.groupEnd()
+      } catch (e) {}
+
+      // Si vision devolvió un error específico, mostrarlo claramente en UI y logs
+      if (data && data.vision && data.vision.ok === false) {
+        const vmsg = data.vision.error || 'vision_error';
+        logger.warn(`Vision microservice reported error: ${vmsg}`, '[IaImage]');
+        // Mostrar banner de error para que el usuario lo vea inmediatamente
+        setErrorMessage(`Vision error: ${vmsg}`);
+        // Guardar payload raw para inspección en el panel de Vision debug
+        setVisionDebug(data.vision);
+      }
 
       if (data.ok) {
-        setResult(data.text);
+        // Handle both old format (data.text) and new format (data.vision.result)
+        const rawText = data.text || (data.vision && data.vision.result) || '';
+        setResult(rawText);
         setMetadata(data.metadata);
 
+        // Try to parse the JSON data from the response
+        let parsedJson = null;
+        try {
+          // Extract JSON from markdown code blocks if present
+          let jsonText = rawText;
+          if (jsonText.includes('```json')) {
+            const match = jsonText.match(/```json\s*([\s\S]*?)\s*```/);
+            if (match) jsonText = match[1];
+          }
+          parsedJson = JSON.parse(jsonText);
+          logger.debug('Successfully parsed JSON from AI response', '[IaImage]');
+        } catch (e) {
+          logger.warn(`Could not parse JSON from AI response: ${e.message}`, '[IaImage]');
+          parsedJson = null;
+        }
+
         if (mantenerResultados && parsedData) {
-          const merged = mergeParsedDataKeepEdits(parsedData, data.data);
+          const merged = mergeParsedDataKeepEdits(parsedData, parsedJson);
           setParsedData(merged);
           console.log(
             "📊 Datos recibidos y mergeados con ediciones locales:",
             merged,
           );
         } else {
-          setParsedData(data.data);
-          logger.debug({ data_preview: data.data ? (Array.isArray(data.data.items) ? { items: data.data.items.length } : {}) : null }, '[IaImage]')
+          setParsedData(parsedJson);
+          logger.debug({ data_preview: parsedJson ? (Array.isArray(parsedJson.items) ? { items: parsedJson.items.length } : {}) : null }, '[IaImage]')
         }
 
         setErrorMessage(null);
 
         if (
           mode === "factura" &&
-          (mantenerResultados ? parsedData || data.data : data.data)
+          (mantenerResultados ? parsedData || parsedJson : parsedJson)
         ) {
           buscarDatosRelacionados(
-            mantenerResultados && parsedData ? parsedData : data.data,
+            mantenerResultados && parsedData ? parsedData : parsedJson,
           );
         }
       } else {
         const msg = data.error || "Respuesta inválida";
-        setErrorMessage(msg + (data.retryable ? " • Puedes reintentar." : ""));
+        logger.error(`Error en respuesta de IA: ${msg}`, '[IaImage]');
+
+        // Si la respuesta incluye información de vision, priorizarla y exponerla para debug
+        if (data && data.vision && data.vision.ok === false) {
+          const vmsg = data.vision.error || 'vision_error';
+          logger.warn(`Vision reported: ${vmsg}`, '[IaImage]');
+          setVisionDebug(data.vision);
+          setErrorMessage(`Vision: ${vmsg}` + (data.retryable ? " • Puedes reintentar." : ""));
+          setResult(null);
+          return;
+        }
+        
+        // Improve error messages for better user experience
+        let displayMsg = msg;
+        if (msg.includes('No hay modelos LLM disponibles') || msg.includes('Ollama no está corriendo')) {
+          displayMsg = "No hay modelos de IA disponibles. Ollama no está corriendo en el contenedor. Usa el botón 'Arrancar servicio' para iniciar el microservicio.";
+        } else if (msg.includes('microservicio de visión') || msg.includes('ranitas-vision')) {
+          displayMsg = "El microservicio de visión no está disponible. Verifica que el contenedor Docker esté corriendo.";
+        }
+        
+        setErrorMessage(displayMsg + (data.retryable ? " • Puedes reintentar." : ""));
         setResult(null);
       }
     } catch (e) {
-      setErrorMessage(`Error de conexión: ${e.message}`);
+      if (e.name === 'AbortError') {
+        logger.warn('Análisis abortado/timeout esperando respuesta del servicio de IA', '[IaImage]');
+        setErrorMessage("Análisis cancelado o timeout. Si el problema persiste, verifica el estado del servicio de IA.");
+      } else {
+        logger.error(`Error de conexión: ${e.message}`, '[IaImage]');
+        setErrorMessage(`Error de conexión: ${e.message}`);
+      }
       setResult(null);
     } finally {
+      analysisControllerRef.current = null;
       setLoading(false);
     }
   };
@@ -1415,28 +1609,38 @@ export default function IaImage({ model }) {
                 originalPreview={previewOriginal}
                 incomingCropPoints={detectedCropPoints}
                 incomingPointsAreNormalized={true}
+                visionDebug={visionDebug}
                 // We no longer persist saved points; ImageViewer will compare current suggestion and current manual points
-                extraHeaderButtons={cropMode ? (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        handleApplyCrop(cropPoints);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-green-50 text-green-800 hover:bg-green-100 text-sm"
-                    >
-                      ✅ Aplicar
-                    </button>
-                    <button
-                      onClick={() => {
-                        setCropMode(false);
-                        setCropPoints([]);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm"
-                    >
-                      ❌ Cancelar
-                    </button>
-                  </div>
-                ) : null}
+                extraHeaderButtons={cropMode ? (() => {
+                  const manualOk = cropPoints && cropPoints.length >= 3;
+                  const detectedOk = detectedCropPoints && detectedCropPoints.length >= 3;
+                  const canApply = manualOk || detectedOk;
+                  const pointsToApply = manualOk ? cropPoints : (detectedOk ? detectedCropPoints : cropPoints);
+                  return (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          if (!canApply) return;
+                          handleApplyCrop(pointsToApply);
+                        }}
+                        disabled={!canApply}
+                        className={`px-3 py-1.5 rounded-lg ${canApply ? 'bg-green-50 text-green-800 hover:bg-green-100' : 'bg-gray-100 text-gray-400 cursor-not-allowed'} text-sm`}
+                        title={!canApply ? 'Se necesitan al menos 3 puntos para aplicar el recorte' : 'Aplicar recorte usando puntos actuales (manual o detectados)'}
+                      >
+                        ✅ Aplicar
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCropMode(false);
+                          setCropPoints([]);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm"
+                      >
+                        ❌ Cancelar
+                      </button>
+                    </div>
+                  )
+                })() : null}
                 cropPoints={cropPoints}
                 onCropPointsChange={(nextOrUpdater) => {
                   const nextPoints = typeof nextOrUpdater === 'function' ? nextOrUpdater(cropPoints) : nextOrUpdater
@@ -1462,6 +1666,51 @@ export default function IaImage({ model }) {
                 }}
                 onPrev={onPrev}
                 onNext={onNext}
+                onRemoveCroppedImage={() => {
+                  // Remove cropped image and revert to original preview
+                  try {
+                    const croppedUrl = preview;
+                    const originalUrl = previewOriginal;
+                    const originalFile = imagenOriginal;
+
+                    if (originalFile && originalUrl) {
+                      // Revoke the cropped preview URL if it was an object URL and different from original
+                      try {
+                        if (croppedUrl && croppedUrl !== originalUrl && croppedUrl.startsWith('blob:')) {
+                          URL.revokeObjectURL(croppedUrl);
+                        }
+                      } catch (e) {
+                        // ignore revoke errors
+                      }
+
+                      // Restore original file and preview so subsequent crops operate on the original
+                      setFile(originalFile);
+                      setPreview(originalUrl);
+
+                      // Remove cropped entry from imageBlobs map
+                      setImageBlobs(prev => {
+                        const copy = { ...(prev || {}) };
+                        if (croppedUrl && copy[croppedUrl]) delete copy[croppedUrl];
+                        return copy;
+                      });
+                    } else if (originalUrl) {
+                      // If we only have the original URL, fall back to using it
+                      setPreview(originalUrl);
+                    }
+
+                    // Clear stored "original as backup" state and any enhanced preview
+                    setPreviewOriginal(null);
+                    setImagenOriginal(null);
+                    setImagenMejorada(null);
+                    setImagenStatus('original');
+
+                    // Reset carousel so original becomes the visible item
+                    setCarouselItems(prev => prev ? prev.filter(it => it.type !== 'recortada' && it.type !== 'mejorada') : []);
+                    setCarouselIndex(0);
+                  } catch (err) {
+                    logger.warn('Error removing cropped image:', err, '[IaImage]');
+                  }
+                }}
                 carouselCount={carouselItems.length}
                 carouselIndex={carouselIndex}
                 carouselItems={carouselItems}
@@ -1887,13 +2136,37 @@ export default function IaImage({ model }) {
               </div>
             </div>
           ) : (
-            <button
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold text-base shadow-lg"
-              onClick={submit}
-              disabled={loading}
-            >
-              {loading ? "⏳ Analizando..." : "🚀 Analizar Factura"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold text-base shadow-lg"
+                onClick={submit}
+                disabled={loading}
+              >
+                {loading ? "⏳ Analizando..." : "🚀 Analizar Factura"}
+              </button>
+
+              {loading && (
+                <button
+                  onClick={() => {
+                    try {
+                      if (analysisControllerRef.current) {
+                        analysisControllerRef.current.abort();
+                        analysisControllerRef.current = null;
+                        logger.info('User cancelled analysis', '[IaImage]');
+                        setErrorMessage('Análisis cancelado por usuario');
+                        setLoading(false);
+                        setResult(null);
+                      }
+                    } catch (err) {
+                      logger.warn(`Error cancelling analysis: ${err}`, '[IaImage]');
+                    }
+                  }}
+                  className="px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-bold text-base shadow-lg"
+                >
+                  ✖ Cancelar
+                </button>
+              )}
+            </div>
           )}
 
           {file && (
@@ -1920,6 +2193,33 @@ export default function IaImage({ model }) {
                   🤖 Auto-detectar
                 </button>
               </div>
+
+              <div className="mt-2">
+                <button
+                  onClick={() => setVisionDebug({
+                    boxes_xyxy: [[50,30,300,400],[320,50,600,420]],
+                    boxes_cls: ['text','logo'],
+                    boxes_conf: [0.95,0.87],
+                    masks_present: false,
+                    src_coords: [[10,10],[500,10],[500,700],[10,700]],
+                    coords_are_pixels: true,
+                    image_meta: { original: { w: 600, h: 800 }, warped: { w: 580, h: 780 } }
+                  })}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-800 rounded text-xs"
+                >
+                  💉 Inject mock vision
+                </button>
+              </div>
+
+              {visionDebug && (
+                <details className="text-xs mt-2">
+                  <summary className="cursor-pointer text-gray-600 hover:text-gray-900">🧪 Vision debug</summary>
+                  <pre className="mt-2 bg-gray-900 text-green-300 p-2 rounded text-xs max-h-64 overflow-auto">
+                    {JSON.stringify(visionDebug, null, 2)}
+                  </pre>
+                </details>
+              )}
+
             </details>
           )}
         </div>

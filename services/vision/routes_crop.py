@@ -35,10 +35,12 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
   targets = set([s.lower() for s in state.get('TARGETS', set())]) if state.get('TARGETS') else set()
   prompt_phrases = set([s.lower() for s in state.get('PROMPT_PHRASES', [])])
   name_map_lower = {i: (v.lower() if isinstance(v,str) else v) for i,v in name_map.items()}
+  # If the user configured target classes, restrict prediction to them; otherwise allow all classes
   target_idxs = [i for i,n in name_map_lower.items() if n in targets or n in prompt_phrases]
   predict_kwargs = {'source':img, 'imgsz':1024, 'conf':0.3}
   if target_idxs:
     predict_kwargs['classes'] = target_idxs
+  apply_name_filter = True if (targets or prompt_phrases) else False
   results = await loop.run_in_executor(None, lambda: model.predict(**predict_kwargs))
   r = results[0]
   # Prepare a raw debug summary from YOLO results (boxes, classes, confs, masks presence)
@@ -97,7 +99,8 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
       name = name_map.get(int(cls))
       conf = float(confs[i])
       nlower = name.lower() if isinstance(name, str) else name
-      if nlower in targets or nlower in prompt_phrases:
+      # If no name filter configured, accept all detected classes as candidates
+    if (not apply_name_filter) or nlower in targets or nlower in prompt_phrases:
         area = 0
         m_arr = None
         if masks is not None:
@@ -117,6 +120,7 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
   # Debug: cuantos candidatos se encontraron
   try:
     print(f"INFO /crop candidates found: {len(candidates)}")
+    print(f"INFO /crop apply_name_filter={apply_name_filter} targets_sample={list(targets)[:5]} prompt_phrases_sample={list(prompt_phrases)[:5]}")
   except Exception as e:
     print('INFO /crop candidates log failed:', e)
 
@@ -141,7 +145,8 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
       print(f"INFO /crop result: no_target_detected (elapsed_ms={t_elapsed})")
     except Exception:
       pass
-    return {'ok':False,'error':'no_target_detected', 'debug': raw_debug if debug_flag else None}
+    h,w = img.shape[:2]
+    return {'ok':False,'error':'no_target_detected', 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}}}
 
   # If detection has no mask, return bbox crop as a fallback
   if chosen['mask'] is None and chosen['box'] is not None:
@@ -151,7 +156,10 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
       print(f"INFO /crop returning bbox crop: box=({x1},{y1},{x2},{y2}), bytes={len(buf)}")
     except Exception:
       pass
-    return {'ok':True,'image_b64':base64.b64encode(buf).decode(),'src_coords':[[int(x1),int(y1)],[int(x2),int(y2)]],'detected_class':chosen['name'], 'debug': raw_debug if debug_flag else None}
+    # Expand bbox to 4-point polygon (tl,tr,br,bl) to keep contract consistent
+    src_coords = [[int(x1),int(y1)],[int(x2),int(y1)],[int(x2),int(y2)],[int(x1),int(y2)]]
+    h,w = img.shape[:2]
+    return {'ok':True,'image_b64':base64.b64encode(buf).decode(),'src_coords':src_coords,'detected_class':chosen['name'], 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}, 'warped': {'w': x2-x1, 'h': y2-y1}}}
 
   # otherwise use the chosen mask
   mask = chosen['mask']
@@ -174,7 +182,15 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
     print(f"INFO /crop returning warped image: warped_size={maxW}x{maxH}, src_coords={src.tolist()}, elapsed_ms={t_elapsed}")
   except Exception:
     pass
-  return {'ok':True,'image_b64':base64.b64encode(buf).decode(),'src_coords':src.tolist(),'detected_class': chosen['name'] if 'chosen' in locals() and chosen else None, 'debug': raw_debug if debug_flag else None}
+  h,w = img.shape[:2]
+  return {
+    'ok':True,
+    'image_b64':base64.b64encode(buf).decode(),
+    'src_coords':src.tolist(),
+    'detected_class': chosen['name'] if 'chosen' in locals() and chosen else None,
+    'debug': raw_debug if debug_flag else None,
+    'image_meta': {'original': {'w': w, 'h': h}, 'warped': {'w': maxW, 'h': maxH}},
+  }
 
 @router.post('/warp')
 @audit('warp')
@@ -208,4 +224,10 @@ async def warp(file: UploadFile = File(...), points: str = Form(None)):
   M = cv2.getPerspectiveTransform(src, dst)
   warped = cv2.warpPerspective(img, M, (maxW, maxH))
   _,buf = cv2.imencode('.jpg', warped)
-  return {'ok':True,'image': base64.b64encode(buf).decode(), 'src_coords': src.tolist()}
+  try:
+    print(f"INFO /warp encoded image bytes={len(buf)}")
+  except Exception:
+    pass
+  b64 = base64.b64encode(buf).decode()
+  # Return both 'image' and 'image_b64' for compatibility with frontend proxy
+  return {'ok':True,'image': b64, 'image_b64': b64, 'image_len': len(buf), 'src_coords': src.tolist()}

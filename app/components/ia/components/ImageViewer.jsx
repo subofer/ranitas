@@ -14,11 +14,13 @@ import logger from '@/lib/logger'
 // - onPointAdd: callback when a point is added (receives {x, y} in pixels)
 // - zoom: current zoom level
 // - pan: current pan {x, y}
-function ImageViewer({ src, points = [], mode = 'default', className = '', cropMode = false, onPointAdd, onPointUpdate, zoom = 1, pan = {x: 0, y: 0}, imageRef, detectedPoints = null, manualPoints = null }, ref) {
+function ImageViewer({ src, points = [], mode = 'default', className = '', cropMode = false, onPointAdd, onPointUpdate, zoom = 1, pan = {x: 0, y: 0}, imageRef, detectedPoints = null, manualPoints = null, visionDebug = null }, ref) {
   const isNormalized = points && points.length > 0 && points[0].x <= 1 && points[0].y <= 1
   const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
   const localImageRef = useRef(null)
   const [draggedPointIndex, setDraggedPointIndex] = useState(null)
+  // Toggle to show/hide vision debug overlay (bounding boxes / masks info)
+  const [showVisionDebug, setShowVisionDebug] = useState(false)
 
   logger.info({ cropMode, points: points.length, onPointAdd: !!onPointAdd, zoom, pan }, '[ImageViewer]')
 
@@ -78,12 +80,15 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
       const mapped = points.map(p => ({ x: p.x, y: p.y, pos: normalizedToContainerPixels(p, imgRect, containerRect) }))
       logger.debug({ mapped, imgRect, containerRect, zoom, pan }, '[AUTO-DETECT]')
     } catch (e) {
-      logger.warn(`AUTO-DETECT-DEBUG error mapping points: ${e}`, '[AUTO-DETECT]')
+      logger.warn({ error: e }, '[AUTO-DETECT-DEBUG]')
     }
   }, [points, zoom, pan, ref])
 
   // Handle clicks on the image when in crop mode
   const handleImageClick = (e) => {
+    // Prevent click events from bubbling up to parent container (avoid duplicate point adds)
+    try { e.stopPropagation(); e.preventDefault(); } catch (err) {}
+
     // Don't add new points if we're dragging
     if (draggedPointIndex !== null) return
 
@@ -182,6 +187,48 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
     }
   }, [draggedPointIndex, updateDraggedPoint, stopDragging])
 
+  // Helper: get image and container rects and map points to container pixel positions
+  const getRects = () => {
+    const imgRect = localImageRef?.current?.getBoundingClientRect()
+    const containerRect = ref?.current?.getBoundingClientRect()
+    return { imgRect, containerRect }
+  }
+
+  const pointsToPositions = (pts) => {
+    const { imgRect, containerRect } = getRects()
+    if (!imgRect || !containerRect) return null
+    return pts.map(p => normalizedToContainerPixels(p, imgRect, containerRect))
+  }
+
+  const renderEdgeLines = (positions) => {
+    if (!positions) return null
+    return positions.map((pos, i) => {
+      if (i === 0) return null
+      const prev = positions[i - 1]
+      if (!prev || !pos) return null
+
+      return (
+        <line
+          key={`line-${i}`}
+          x1={prev.x}
+          y1={prev.y}
+          x2={pos.x}
+          y2={pos.y}
+          stroke="#2563eb"
+          strokeWidth="3"
+          opacity="0.8"
+        />
+      )
+    })
+  }
+
+  // Compute mapped positions once per render to avoid repeated getBoundingClientRect() calls
+  const positions = (() => {
+    const { imgRect, containerRect } = getRects()
+    if (!imgRect || !containerRect) return null
+    return points.map(p => normalizedToContainerPixels(p, imgRect, containerRect))
+  })()
+
   return (
     <div 
       ref={ref} 
@@ -205,23 +252,18 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
       {points && points.length > 0 && (
         <>
           {/* Debug info */}
-          <div className="absolute top-0 left-0 bg-black bg-opacity-50 text-white text-xs p-1 z-50">
-            Image: {localImageRef?.current ? `${Math.round(localImageRef.current.offsetWidth)}x${Math.round(localImageRef.current.offsetHeight)}` : '0x0'} |
-            Zoom: {zoom} |
-            Pan: {pan.x.toFixed(0)},{pan.y.toFixed(0)}
+          <div className="absolute top-0 left-0 bg-black bg-opacity-50 text-white text-xs p-1 z-50 flex items-center gap-2">
+            <div>Image: {localImageRef?.current ? `${Math.round(localImageRef.current.offsetWidth)}x${Math.round(localImageRef.current.offsetHeight)}` : '0x0'} | Zoom: {zoom} | Pan: {pan.x.toFixed(0)},{pan.y.toFixed(0)}</div>
+            <button onClick={() => setShowVisionDebug(s => !s)} className="ml-2 bg-white text-black px-2 py-0.5 rounded text-[11px]">{showVisionDebug ? 'Hide Vision' : 'Show Vision'}</button>
+            {visionDebug && visionDebug.masks_present && (
+              <div className="ml-2 bg-yellow-400 text-black px-2 py-0.5 rounded text-[11px]">Masks</div>
+            )}
           </div>
 
           {/* Dark overlay with polygon cutout */}
-          {points.length >= 3 && (() => {
-            const imgRect = localImageRef?.current?.getBoundingClientRect()
-            const containerRect = ref?.current?.getBoundingClientRect()
-            if (!imgRect || !containerRect) return null
+          {points.length >= 3 && positions && (() => {
             const maskId = `polygon-mask-${Math.random().toString(36).substr(2, 9)}`
-            const polygonPoints = points.map(p => {
-              const pos = normalizedToContainerPixels(p, imgRect, containerRect)
-              if (!pos) return '0,0'
-              return `${pos.x},${pos.y}`
-            }).join(' ')
+            const polygonPoints = positions.map(pos => pos ? `${pos.x},${pos.y}` : '0,0').join(' ')
 
             return (
               <div className="absolute inset-0 pointer-events-none z-20">
@@ -244,50 +286,22 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
               className="absolute inset-0 pointer-events-none z-30"
             >
               <svg className="absolute inset-0 w-full h-full">
-                {/* Draw lines between consecutive points using absolute pixel coords */}
-                {(() => {
-                  const imgRect = localImageRef?.current?.getBoundingClientRect()
-                  const containerRect = ref?.current?.getBoundingClientRect()
-                  if (!imgRect || !containerRect) return null
-
-                  return points.map((p, i) => {
-                    if (i === 0) return null
-                    const prev = points[i - 1]
-                    const prevPos = normalizedToContainerPixels(prev, imgRect, containerRect)
-                    const currPos = normalizedToContainerPixels(p, imgRect, containerRect)
-                    if (!prevPos || !currPos) return null
-
-                    return (
-                      <line
-                        key={`line-${i}`}
-                        x1={prevPos.x}
-                        y1={prevPos.y}
-                        x2={currPos.x}
-                        y2={currPos.y}
-                        stroke="#2563eb"
-                        strokeWidth="3"
-                        opacity="0.8"
-                      />
-                    )
-                  })
-                })()}
+                {renderEdgeLines(pointsToPositions(points))}
 
                 {/* Close the polygon if we have 4 points */}
                 {points.length === 4 && (() => {
-                  const imgRect = localImageRef?.current?.getBoundingClientRect()
-                  const containerRect = ref?.current?.getBoundingClientRect()
-                  if (!imgRect || !containerRect) return null
-
-                  const firstPos = normalizedToContainerPixels(points[0], imgRect, containerRect)
-                  const lastPos = normalizedToContainerPixels(points[3], imgRect, containerRect)
-                  if (!firstPos || !lastPos) return null
+                  const positions = pointsToPositions(points)
+                  if (!positions) return null
+                  const first = positions[0]
+                  const last = positions[3]
+                  if (!first || !last) return null
 
                   return (
                     <line
-                      x1={lastPos.x}
-                      y1={lastPos.y}
-                      x2={firstPos.x}
-                      y2={firstPos.y}
+                      x1={last.x}
+                      y1={last.y}
+                      x2={first.x}
+                      y2={first.y}
                       stroke="#2563eb"
                       strokeWidth="3"
                       opacity="0.8"
@@ -295,6 +309,42 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
                   )
                 })()}
 
+                {/* Vision debug: YOLO boxes & labels (pixels → normalized using image natural size) */}
+                {showVisionDebug && visionDebug && visionDebug.boxes_xyxy && (() => {
+                  const img = localImageRef.current
+                  if (!img || !img.naturalWidth || !img.naturalHeight) return null
+                  const w = img.naturalWidth
+                  const h = img.naturalHeight
+
+                  // Map boxes to normalized polygons then to positions
+                  const boxes = visionDebug.boxes_xyxy.map((b, idx) => {
+                    const [x1,y1,x2,y2] = b
+                    return [
+                      { x: x1 / w, y: y1 / h },
+                      { x: x2 / w, y: y1 / h },
+                      { x: x2 / w, y: y2 / h },
+                      { x: x1 / w, y: y2 / h }
+                    ]
+                  })
+
+                  return boxes.map((poly, i) => {
+                    const pos = pointsToPositions(poly)
+                    if (!pos) return null
+                    // Get label/conf if present
+                    const label = (visionDebug.boxes_cls && visionDebug.boxes_cls[i] !== undefined) ? visionDebug.boxes_cls[i] : null
+                    const conf = (visionDebug.boxes_conf && visionDebug.boxes_conf[i] !== undefined) ? (visionDebug.boxes_conf[i] || 0).toFixed(2) : null
+
+                    return (
+                      <g key={`vision-box-${i}`}>
+                        {/* Draw rectangle - use first two edges */}
+                        <polygon points={pos.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke="#84cc16" strokeWidth="2" opacity="0.9" />
+                        {/* Label background */}
+                        <rect x={pos[0].x} y={pos[0].y - 18} width="80" height="16" rx="3" fill="#84cc16" opacity="0.9" />
+                        <text x={pos[0].x + 4} y={pos[0].y - 6} fontSize="12" fill="#000">{label}{conf ? ` ${conf}` : ''}</text>
+                      </g>
+                    )
+                  })
+                })()}
 
               </svg>
             </div>
@@ -302,12 +352,10 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
           
           {/* Interactive Points - OUTSIDE pointer-events-none container */}
           {(() => {
-            const imgRect = localImageRef?.current?.getBoundingClientRect()
-            const containerRect = ref?.current?.getBoundingClientRect()
-            if (!imgRect || !containerRect) return null
+            const positions = pointsToPositions(points)
+            if (!positions) return null
 
-            return points.map((p, i) => {
-              const pos = normalizedToContainerPixels(p, imgRect, containerRect)
+            return positions.map((pos, i) => {
               if (!pos) return null
 
               const left = `${pos.x}px`

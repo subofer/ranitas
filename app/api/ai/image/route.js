@@ -55,8 +55,25 @@ export async function POST(req) {
 
       const vResp = await fetch(`${VISION_HOST}/crop`, { method: 'POST', body: form });
       const vData = await vResp.json().catch(() => null);
+      try { logger.info('Vision /crop response', { status: vResp.status, keys: vData ? Object.keys(vData) : null, src_coords_preview: vData && vData.src_coords ? (Array.isArray(vData.src_coords) ? vData.src_coords.slice(0,4) : vData.src_coords) : null }, '[image-route]'); } catch (e) {}
       if (!vResp.ok) return NextResponse.json({ ok: false, error: vData?.error || 'vision/crop_error', vision_raw: vData }, { status: vResp.status || 500 });
-      return NextResponse.json({ ok: true, src_coords: vData?.src_coords || null, detected_class: vData?.detected_class || vData?.detected || null, image_b64: vData?.image_b64 ? `data:image/jpeg;base64,${vData.image_b64}` : null, debug: vData?.debug || null, metadata: { timing: { totalMs: Date.now() - tStart, human: `${Date.now() - tStart}ms` } } });
+
+      // detect if returned src_coords are in pixel coordinates (values > 1) so frontend knows to normalize
+      let coordsArePixels = false;
+      try {
+        const sc = vData?.src_coords;
+        if (sc && Array.isArray(sc)) {
+          coordsArePixels = sc.some(pt => {
+            if (Array.isArray(pt)) return (typeof pt[0] === 'number' && pt[0] > 1) || (typeof pt[1] === 'number' && pt[1] > 1);
+            if (pt && typeof pt.x === 'number') return pt.x > 1 || pt.y > 1;
+            return false;
+          });
+        }
+      } catch (e) {
+        coordsArePixels = false;
+      }
+
+      return NextResponse.json({ ok: true, src_coords: vData?.src_coords || null, coords_are_pixels: coordsArePixels, detected_class: vData?.detected_class || vData?.detected || null, image_b64: vData?.image_b64 ? `data:image/jpeg;base64,${vData.image_b64}` : null, debug: vData?.debug || null, metadata: { timing: { totalMs: Date.now() - tStart, human: `${Date.now() - tStart}ms` } } });
     }
 
     if (action === 'warp') {
@@ -70,13 +87,33 @@ export async function POST(req) {
 
       const vResp = await fetch(`${VISION_HOST}/warp`, { method: 'POST', body: form });
       const vData = await vResp.json().catch(() => null);
+      try { logger.info('Vision /warp response:', { status: vResp.status, keys: vData ? Object.keys(vData) : null, has_image: !!(vData && (vData.image || vData.enhanced)), image_len: vData && (vData.image || vData.enhanced) ? (vData.image || vData.enhanced).length : null }, '[image-route]'); } catch (e) {}
       if (!vResp.ok) return NextResponse.json({ ok: false, error: vData?.detail || 'vision/warp_error' }, { status: vResp.status || 500 });
-      return NextResponse.json({ ok: true, enhanced: vData?.image ? `data:image/jpeg;base64,${vData.image}` : null, metadata: { timing: { totalMs: Date.now() - tStart, human: `${Date.now() - tStart}ms` } }, vision_meta: vData });
+      const enhancedRaw = vData?.image || vData?.image_b64 || vData?.enhanced || null;
+      const tEndWarp = Date.now();
+      return NextResponse.json({ ok: true, enhanced: enhancedRaw ? `data:image/jpeg;base64,${enhancedRaw}` : null, metadata: { timing: { totalMs: tEndWarp - tStart, human: `${tEndWarp - tStart}ms` } }, vision_meta: vData });
     }
 
     // Default analyze path
     const payloadImageBase64 = Buffer.from(buffer).toString('base64');
     const payload = { image: payloadImageBase64, model: model || undefined, mode: mode || undefined };
+
+    // If the client provided src_coords (from crop), forward them to the vision analyze endpoint
+    try {
+      const srcCoordsParam = formData.get('src_coords') || null;
+      const coordsArePixelsParam = String(formData.get('coords_are_pixels') || '').toLowerCase();
+      if (srcCoordsParam) {
+        try {
+          payload.src_coords = typeof srcCoordsParam === 'string' ? JSON.parse(srcCoordsParam) : srcCoordsParam;
+          payload.coords_are_pixels = coordsArePixelsParam === 'true' || coordsArePixelsParam === '1' ? true : false;
+        } catch (e) {
+          // leave absent if parsing failed
+          logger.warn('Could not parse src_coords param, ignoring', '[image-route]');
+        }
+      }
+    } catch (e) {
+      logger.warn('Error reading src_coords from formData', e);
+    }
 
     let resp;
     try {
