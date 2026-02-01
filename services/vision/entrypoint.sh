@@ -43,7 +43,7 @@ print_info() {
   
   printf "${BOLD}Paquetes:${NC}\n"
   for pkg in ultralytics torch pynvml requests fastapi uvicorn; do
-    status=$(python3 -c "import importlib; m=importlib.util.find_spec('$pkg'); print('ok' if m else 'missing')" 2>/dev/null || echo "error")
+    status=$(python3 -c "import importlib.util; m=importlib.util.find_spec('$pkg'); print('ok' if m else 'missing')" 2>/dev/null || echo "error")
     if [ "$status" = "ok" ]; then
       printf "  ${GREEN}✓${NC} %-15s\n" "$pkg"
     else
@@ -53,25 +53,88 @@ print_info() {
   echo
   
   printf "${BOLD}Modelos:${NC}\n"
+  total_size=0
+  total_file=$(mktemp)
+  echo "$total_size" > "$total_file"
   if [ -d /app/models ]; then
-    ls -lah /app/models | tail -n +4 | head -n 20 | awk -v g="$GREEN" -v nc="$NC" '{printf "  %-25s %8s\n", $9, $5}' || true
+    models_output=$(ls -lah /app/models | tail -n +4 | head -n 20 | awk '
+    BEGIN { total = 0; models = "" }
+    {
+      name = $9
+      size_str = $5
+      if (size_str ~ /M$/) {
+        sub(/M$/, "", size_str)
+        size_mb = size_str + 0
+      } else if (size_str ~ /K$/) {
+        sub(/K$/, "", size_str)
+        size_mb = size_str / 1024
+      } else {
+        size_mb = 0
+      }
+      total += size_mb
+      models = models "MODEL: " name " " size_mb "\n"
+    }
+    END {
+      print models "TOTAL_VISION: " total
+    }
+    ')
+    total_vision=$(echo "$models_output" | grep "TOTAL_VISION:" | cut -d':' -f2 | tr -d '\n')
+    printf "  ${GREEN}✓${NC} VISION_MODEL OK (%.1fMB)\n" "$total_vision"
+    echo "$total_vision" > "$total_file"
+    echo "$models_output" | grep "MODEL:" | sed 's/MODEL: //' | while read name size; do
+      printf "  ${GREEN}✓${NC} %-25s %8.1fMB\n" "$name" "$size"
+    done
   else
     printf "  ${RED}✗${NC} /app/models no encontrado\n"
+    total_vision=0
   fi
   
-  # Check configured model presence
-  if [ -n "${VISION_MODEL:-}" ] && [ -f "${VISION_MODEL}" ]; then
-    printf "  ${GREEN}✓${NC} VISION_MODEL OK\n"
-  else
-    printf "  ${YELLOW}⚠${NC} VISION_MODEL NO existe\n"
+  # Ollama binary
+  if command -v ollama >/dev/null 2>&1; then
+    ollama_size=$(du -b /usr/local/bin/ollama 2>/dev/null | awk '{print $1 / 1024 / 1024}' 2>/dev/null || echo "0.0")
+    printf "  ${GREEN}✓${NC} %-25s %8.1fMB\n" "ollama" "$ollama_size"
+    total_size=$(cat "$total_file")
+    new_total=$(python3 -c "print($total_size + $ollama_size)" 2>/dev/null || echo $total_size)
+    echo "$new_total" > "$total_file"
   fi
+  
+  # Ollama models
+  if command -v ollama >/dev/null 2>&1; then
+    models_info=$(curl -s --max-time 2 ${OLLAMA_HOST:-http://127.0.0.1:11434}/api/tags 2>/dev/null | python3 -c "
+import sys, json
+try:
+  data = json.load(sys.stdin)
+  for m in data.get('models', []):
+    size_mb = m.get('size', 0) / (1024**2)
+    print(f'{m[\"name\"]} {size_mb:.1f}')
+except:
+  pass
+" 2>/dev/null || echo "")
+    if [ -n "$models_info" ]; then
+      echo "$models_info" | while read line; do
+        model_name=$(echo "$line" | awk '{print $1}')
+        model_size=$(echo "$line" | awk '{print $2}')
+        total_size=$(cat "$total_file")
+        new_total=$(python3 -c "print($total_size + $model_size)" 2>/dev/null || echo $total_size)
+        echo "$new_total" > "$total_file"
+        printf "  ${GREEN}✓${NC} %-25s %8sMB\n" "$model_name" "$model_size"
+      done
+    fi
+  fi
+  
+  total_size=$(cat "$total_file")
+  rm "$total_file"
+  printf "  ${GREEN}✓${NC} Total modelos: %.1fMB\n" "$total_size"
   echo
   
   # GPU check
   printf "${BOLD}Hardware:${NC}\n"
   if command -v nvidia-smi >/dev/null 2>&1; then
     nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | head -n 5 | while read gpu_info; do
-      printf "  ${GREEN}✓${NC} GPU: %s\n" "$gpu_info"
+      name=$(echo "$gpu_info" | cut -d',' -f1)
+      mem_mb=$(echo "$gpu_info" | cut -d',' -f2)
+      mem_gb=$(echo "scale=1; $mem_mb / 1024" | bc 2>/dev/null || echo $mem_mb)
+      printf "  ${GREEN}✓${NC} GPU: %s, VRAM: %sGB\n" "$name" "$mem_gb"
     done
   else
     python3 - <<'PY' 2>/dev/null || printf "  ${YELLOW}⚠${NC} GPU no detectada\n"

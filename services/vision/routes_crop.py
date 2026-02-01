@@ -5,6 +5,40 @@ from audit import audit
 
 router = APIRouter()
 
+import cv2
+import numpy as np
+
+def enhance_document(image):
+    # 1. Detectar ángulo usando una copia en gris
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Binarización para resaltar masa de texto
+    thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    coords = np.column_stack(np.where(thresh > 0))
+
+    if len(coords) == 0: 
+        return image
+
+    angle = cv2.minAreaRect(coords)[-1]
+
+    # Ajuste para corregir la rotación de OpenCV
+    if angle < -45:
+        angle = -(90 + angle)
+    else:
+        angle = -angle
+
+    # 2. Aplicar rotación a la imagen original (Color)
+    (h, w) = image.shape[:2]
+    M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
+    rotated = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+    # 3. Limpieza de fondo (White Balance dinámico)
+    # Dilatamos para promediar el color del papel y restarlo
+    dilated = cv2.dilate(rotated, np.ones((7, 7), np.uint8))
+    bg_img = cv2.medianBlur(dilated, 21)
+    diff_img = 255 - cv2.absdiff(rotated, bg_img)
+
+    return cv2.normalize(diff_img, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
 def _order_pts(pts):
   s = pts.sum(axis=1); diff = np.diff(pts, axis=1)
   tl = pts[np.argmin(s)]; br = pts[np.argmax(s)]; tr = pts[np.argmin(diff)]; bl = pts[np.argmax(diff)];
@@ -314,6 +348,9 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None), orig_len: 
   hA = np.linalg.norm(tr-br); hB = np.linalg.norm(tl-bl); maxH = max(int(hA), int(hB))
   dst = np.array([[0,0],[maxW-1,0],[maxW-1,maxH-1],[0,maxH-1]], dtype='float32')
   M = cv2.getPerspectiveTransform(src, dst); warped = cv2.warpPerspective(img, M, (maxW, maxH))
+  # --- INSERCIÓN AQUÍ ---
+  warped = enhance_document(warped)
+  # ----------------------
   _,buf = cv2.imencode('.jpg', warped)
   try:
     t_elapsed = round((time.time() - t_start) * 1000)

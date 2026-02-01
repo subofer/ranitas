@@ -73,7 +73,7 @@ El JSON debe tener esta estructura exacta:
   },
   "observaciones": "",
   "tiene_escrito_a_mano": false,
-  "escritos_a_mano": ["]
+  "escritos_a_mano": [""]
 }
 
 IMPORTANTE:
