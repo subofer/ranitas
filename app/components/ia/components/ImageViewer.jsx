@@ -261,7 +261,7 @@ function ImageViewer({ src, points = [], mode = 'default', className = '', cropM
           </div>
 
           {/* Dark overlay with polygon cutout */}
-          {points.length >= 3 && positions && (() => {
+          {points.length >= 4 && positions && (() => {
             const maskId = `polygon-mask-${Math.random().toString(36).substr(2, 9)}`
             const polygonPoints = positions.map(pos => pos ? `${pos.x},${pos.y}` : '0,0').join(' ')
 

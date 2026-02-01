@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONPATH=/app \
     VISION_MODEL=/app/models/yoloe-26x-seg.pt \
     LLM_MODEL=qwen2.5vl:7b \
-    OLLAMA_HOST=http://127.0.0.1:11434
+    OLLAMA_HOST=http://127.0.0.1:11434 
 
 # --------------------------------------------------
 # 1) Dependencias de sistema (poco volátiles) ✅
@@ -24,38 +24,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://ollama.com/install.sh | sh
 
 # --------------------------------------------------
-# 3) Dependencias Python: copia SOLO requirements.txt
-#    e instala paquetes en una capa dedicada
-#    - Si usás BuildKit, podés habilitar cache con --mount
-#    - Si no, la sección comentada no afectará (descomentar manualmente)
+# 3) Dependencias Python: usar requirements.txt para cache óptimo
+#    - Copiar solo requirements.txt primero para maximizar cache
+#    - Si requirements.txt no cambia, esta capa se reutiliza
 # --------------------------------------------------
+RUN pip3 install --no-cache-dir -U pip setuptools wheel
+
+# Copiar requirements.txt antes de instalar para aprovechar cache de Docker
 COPY requirements.txt /app/requirements.txt
-
-# Crear cache dir (útil si usás --mount=type=cache,target=/root/.cache/pip)
-RUN mkdir -p /root/.cache/pip
-
-# BuildKit optimized (descomentá si usás BuildKit):
-# RUN --mount=type=cache,target=/root/.cache/pip pip3 install --no-cache-dir -U pip setuptools wheel && \
-#     pip3 install --no-cache-dir "numpy<2" && \
-#     pip3 install --no-cache-dir -r /app/requirements.txt && \
-#     pip3 install --no-cache-dir ultralytics pynvml
-
-# Fallback (compatible con Docker clásico):
-RUN pip3 install --no-cache-dir -U pip setuptools wheel && \
-    pip3 install --no-cache-dir "numpy<2" && \
-    pip3 install --no-cache-dir -r /app/requirements.txt && \
-    pip3 install --no-cache-dir ultralytics pynvml
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
 
 # --------------------------------------------------
 # 4) Código (MUY volátil) - copiar AL FINAL para minimizar
 #    invalidación de cache cuando editás main.py / entrypoint.sh
 # --------------------------------------------------
-COPY main.py /app/main.py
-COPY entrypoint.sh /app/entrypoint.sh
-COPY audit.py state.py routes_*.py /app/
-
-# Copy remaining service files (routes_*, audit, state, etc.) so the container has all source modules
-COPY . /app
+COPY main.py entrypoint.sh audit.py state.py /app/
+COPY routes_*.py /app/
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
@@ -67,9 +51,7 @@ LABEL org.opencontainers.image.title="ranitas-vision" \
       org.opencontainers.image.licenses="MIT" \
       maintainer="Ranitas Team"
 
-# Docker healthcheck uses the service /status endpoint; requires curl (installed above)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:8000/ready || exit 1
+# HEALTHCHECK definido en docker-compose.yml para mayor flexibilidad
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8000","--workers","1"]
+# CMD removido - el entrypoint maneja el inicio de uvicorn

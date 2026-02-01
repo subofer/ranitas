@@ -155,6 +155,8 @@ export default function IaImage({ model }) {
       // No configurar previewOriginal aquí - solo se configura después del primer crop
       setPreviewOriginal(null);
       setShowOriginalPreview(false); // Reset para mostrar la nueva imagen como original
+      setImagenMejorada(null);
+      setImagenStatus('original');
       setFile(f);
       setPreview(previewUrl);
       setImageBlobs({ [previewUrl]: f });
@@ -165,6 +167,8 @@ export default function IaImage({ model }) {
       setPan({ x: 0, y: 0 });
       setCropMode(false); // Reset crop mode
       setCropPoints([]); // Limpiar puntos del crop
+      setDetectedCropPoints(null); // Limpiar puntos detectados
+      setVisionDebug(null); // Limpiar debug de vision
       setMetadata({
         fileName: f.name,
         fileSize: f.size,
@@ -411,8 +415,9 @@ export default function IaImage({ model }) {
         return;
       }
 
-      // Convertir enhanced (data URL) a blob y aplicar
-      const resFetch = await fetch(data.enhanced);
+      // Convertir enhanced (data URL o base64) a blob y aplicar
+      const dataUrl = data.enhanced.startsWith('data:') ? data.enhanced : `data:image/jpeg;base64,${data.enhanced}`;
+      const resFetch = await fetch(dataUrl);
       if (!resFetch.ok) {
         logger.error('Failed to fetch enhanced image from backend', '[IaImage]', resFetch.status);
         setErrorMessage('No se pudo descargar la imagen recortada desde el servidor.');
@@ -421,38 +426,9 @@ export default function IaImage({ model }) {
 
       const blob = await resFetch.blob();
 
-      // Crear una versión cuadrada (esquadrada) centrada con fondo blanco
-      try {
-        const img = await new Promise((res, rej) => {
-          const i = new Image();
-          i.onload = () => res(i);
-          i.onerror = rej;
-          // Usar una URL temporal para poder cargar el blob
-          i.src = URL.createObjectURL(blob);
-        });
-
-        const width = img.naturalWidth || img.width;
-        const height = img.naturalHeight || img.height;
-        const size = Math.max(width, height);
-
-        const canvasSquare = document.createElement('canvas');
-        canvasSquare.width = size;
-        canvasSquare.height = size;
-        const ctx = canvasSquare.getContext('2d');
-        // Relleno blanco para mantener estética de documento
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, size, size);
-
-        const dx = Math.round((size - width) / 2);
-        const dy = Math.round((size - height) / 2);
-        ctx.drawImage(img, dx, dy, width, height);
-
-        // Liberar URL temporal
-        URL.revokeObjectURL(img.src);
-
-        const newBlob = await new Promise((resolve) => canvasSquare.toBlob(resolve, blob.type || 'image/jpeg', 0.95));
-        const croppedFile = new File([newBlob], `cropped-${file.name}`, { type: newBlob.type || file.type });
-        const croppedUrl = URL.createObjectURL(newBlob);
+      // Usar el blob original sin modificar para mantener compatibilidad
+      const croppedFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
+      const croppedUrl = URL.createObjectURL(blob);
 
         // Guardar original si no existe
         if (!previewOriginal) {
@@ -491,49 +467,15 @@ export default function IaImage({ model }) {
           } catch (e) {
             logger.warn('No se pudo re-aplicar auto-enfoque en la imagen recortada:', e);
           }
-        }, 100);
-      } catch (e) {
-        // Si falla el proceso de cuadrado, caer al flujo simple con el blob original
-        logger.warn('Fallo al convertir recorte a cuadrado, aplicando blob original:', e, '[IaImage]');
-        const fallbackFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
-        const fallbackUrl = URL.createObjectURL(blob);
-
-        if (!previewOriginal) {
-          const originalUrl = URL.createObjectURL(file);
-          setPreviewOriginal(originalUrl);
-          setImagenOriginal(file);
-        }
-
-        if (preview) URL.revokeObjectURL(preview);
-        setFile(fallbackFile);
-        setPreview(fallbackUrl);
-        setImageBlobs(prev => ({ ...prev, [fallbackUrl]: fallbackFile }));
-        setImagenMejorada(null);
-        setImagenStatus('recortada');
-        setShowOriginalPreview(true);
-        setCropMode(false);
-        setCropPoints([]);
-
+      // Re-aplicar auto-enfoque
+      setTimeout(() => {
         try {
-          await guardarAuditoriaEdicion({
-            campo: 'IMAGEN_RECORTADA',
-            valorAnterior: null,
-            valorNuevo: fallbackFile.name,
-            contexto: { source: 'manual_points_crop', pointsCount: points.length, fallback: true },
-          });
-        } catch (audErr) {
-          logger.warn('No se pudo guardar auditoría de crop manual (fallback):', audErr);
+          autoEnfocar(croppedFile, croppedUrl, setFile, setPreview, croppedUrl);
+          setAutoEnfoqueAplicado(true);
+        } catch (e) {
+          logger.warn('No se pudo re-aplicar auto-enfoque en la imagen recortada:', e);
         }
-
-        setTimeout(() => {
-          try {
-            autoEnfocar(fallbackFile, fallbackUrl, setFile, setPreview, fallbackUrl);
-            setAutoEnfoqueAplicado(true);
-          } catch (e) {
-            logger.warn('No se pudo re-aplicar auto-enfoque en la imagen recortada (fallback):', e);
-          }
-        }, 100);
-      }
+      }, 100);
 
     } catch (error) {
       logger.error('Error aplicando warp en backend:', error);
@@ -605,6 +547,9 @@ export default function IaImage({ model }) {
 
       // Store any raw vision debug info for inspection
       setVisionDebug(result.debug || result.vision_raw || result.vision || null);
+      if (result.received_orig) {
+        setVisionDebug(prev => ({ ...(prev || {}), received_orig: result.received_orig }))
+      }
 
       // Debug logging of detected coords
       try {
@@ -613,6 +558,41 @@ export default function IaImage({ model }) {
 
       // Procesar los puntos detectados (admitir contratos antiguos y nuevos)
       const srcCoords = result.src_coords || result.corners || null;
+      
+      // Si el backend ya devolvió la imagen croppeada, usarla directamente
+      if (result.image_b64 && autoApply) {
+        try {
+          // Convertir data URL o base64 a blob
+          const dataUrl = result.image_b64.startsWith('data:') ? result.image_b64 : `data:image/jpeg;base64,${result.image_b64}`;
+          const resFetch = await fetch(dataUrl);
+          const blob = await resFetch.blob();
+          const croppedFile = new File([blob], `cropped-${file.name}`, { type: blob.type || 'image/jpeg' });
+          const croppedUrl = URL.createObjectURL(blob);
+          
+          // Guardar original si no existe
+          if (!previewOriginal) {
+            const originalUrl = URL.createObjectURL(file);
+            setPreviewOriginal(originalUrl);
+            setImagenOriginal(file);
+          }
+          
+          if (preview) URL.revokeObjectURL(preview);
+          setFile(croppedFile);
+          setPreview(croppedUrl);
+          setImageBlobs(prev => ({ ...prev, [croppedUrl]: croppedFile }));
+          setImagenMejorada(null);
+          setImagenStatus('recortada');
+          setShowOriginalPreview(true);
+          setCropMode(false);
+          setCropPoints([]);
+          
+          logger.info('Auto-crop applied from /crop response image_b64', '[IaImage]');
+          return;
+        } catch (e) {
+          logger.warn('Failed to use image_b64 from /crop, falling back to warp', e, '[IaImage]');
+        }
+      }
+      
       if (srcCoords && Array.isArray(srcCoords) && srcCoords.length >= 4) {
         // Normalize points to 0..1 coordinates. If coords_are_pixels is true, convert using image natural size
         let pointsPx = srcCoords.slice(0,4).map(pt => (Array.isArray(pt) ? pt : [pt.x ?? pt[0], pt.y ?? pt[1]]));
@@ -793,9 +773,20 @@ export default function IaImage({ model }) {
       // Enviar la imagen actual y la original
       const fd = new FormData();
       const currentUrl = carouselItems && carouselItems.length > 0 ? carouselItems[carouselIndex].url : preview;
-      const currentBlob = imageBlobs[currentUrl] || file || imagenOriginal;
       
-      logger.info(`Submitting image analysis - blob: ${!!currentBlob}, size: ${currentBlob?.size || 'unknown'}, mode: ${mode}, model: ${model}, url: ${currentUrl}`, '[IaImage]');
+      // Prefer imageBlobs map entry, then file, then imagenOriginal
+      let currentBlob = null;
+      if (currentUrl && imageBlobs && imageBlobs[currentUrl]) {
+        currentBlob = imageBlobs[currentUrl];
+      } else if (currentUrl === previewOriginal && imagenOriginal) {
+        currentBlob = imagenOriginal;
+      } else if (file) {
+        currentBlob = file;
+      } else if (imagenOriginal) {
+        currentBlob = imagenOriginal;
+      }
+      
+      logger.info(`Submitting image analysis - blob: ${!!currentBlob}, size: ${currentBlob?.size || 'unknown'}, mode: ${mode}, model: ${model}, url: ${currentUrl}, preview: ${preview}, has_file: ${!!file}, has_original: ${!!imagenOriginal}`, '[IaImage]');
       
       if (!currentBlob) {
         logger.error('No image blob available for submission', '[IaImage]');
@@ -821,9 +812,9 @@ export default function IaImage({ model }) {
       const controller = new AbortController();
       analysisControllerRef.current = controller;
       const timeoutId = setTimeout(() => {
-        logger.warn('Aborting request due to 60s timeout', '[IaImage]');
+        logger.warn('Aborting request due to 5min timeout', '[IaImage]');
         controller.abort();
-      }, 60000); // 60 segundos timeout
+      }, 300000); // 5 minutos timeout (Qwen puede tardar)
 
       const tReqStart = Date.now();
       logger.debug(`Starting fetch to /api/ai/image at ${new Date().toISOString()}`, '[IaImage]');
@@ -1633,6 +1624,8 @@ export default function IaImage({ model }) {
                         onClick={() => {
                           setCropMode(false);
                           setCropPoints([]);
+                          setDetectedCropPoints(null); // ensure next time we re-enter crop it will request new detection
+                          setVisionDebug(null); // clear vision debug from previous detection
                         }}
                         className="px-3 py-1.5 rounded-lg bg-white text-gray-800 text-sm"
                       >
@@ -1703,6 +1696,10 @@ export default function IaImage({ model }) {
                     setImagenOriginal(null);
                     setImagenMejorada(null);
                     setImagenStatus('original');
+
+                    // Clear any saved crop points so they don't persist
+                    setCropPoints([]);
+                    setDetectedCropPoints(null);
 
                     // Reset carousel so original becomes the visible item
                     setCarouselItems(prev => prev ? prev.filter(it => it.type !== 'recortada' && it.type !== 'mejorada') : []);

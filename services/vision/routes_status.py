@@ -80,40 +80,6 @@ async def status():
     if events:
       payload['events'] = events
 
-@router.get('/logs')
-async def logs(n: int = 200, container: str | None = None, tail: int = 200):
-  """Return last n logs from local buffer; if container param is provided and docker CLI exists, return docker logs too.
-     container: 'vision' or 'postgres' (maps to ranitas-vision / ranitas-postgres)
-  """
-  try:
-    # local buffer from state
-    local_logs = []
-    try:
-      local_logs = get_logs(n)
-    except Exception:
-      local_logs = []
-
-    # Optionally fetch docker logs (non-blocking with timeout)
-    docker_logs = None
-    if container in ('vision','postgres'):
-      import subprocess, shlex
-      container_name = 'ranitas-vision' if container == 'vision' else 'ranitas-postgres'
-      try:
-        cmd = f"docker logs --tail {tail} {container_name}"
-        proc = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=4)
-        if proc.returncode == 0:
-          docker_logs = proc.stdout.splitlines()[-tail:]
-        else:
-          docker_logs = [proc.stderr or f'docker logs failed with code {proc.returncode}']
-      except Exception as e:
-        docker_logs = [f'Error fetching docker logs: {e}']
-
-    return {'ok': True, 'logs': local_logs, 'docker_logs': docker_logs}
-  except Exception as e:
-    import traceback
-    tb = traceback.format_exc()
-    return {'ok': False, 'error': str(e), 'traceback': tb}
-
     # Build a light-weight `services` array so external status mappers (docker/status) can rely on a
     # consistent structure with `name`, `source`, `type`, `models`, `ready` and an optional `since`.
     # This is additive and does not change existing fields, ensuring backward compatibility.
@@ -253,6 +219,43 @@ async def logs(n: int = 200, container: str | None = None, tail: int = 200):
       import traceback
       tb = traceback.format_exc()
       return {'ok': False, 'error': f'unexpected serializaton diagnostics error: {outer_e}', 'traceback': tb}
+
+    # All good: return status payload
+    return payload
+  except Exception as e:
+    import traceback
+    tb = traceback.format_exc()
+    return {'ok': False, 'error': str(e), 'traceback': tb}
+
+@router.get('/logs')
+async def logs(n: int = 200, container: str | None = None, tail: int = 200):
+  """Return last n logs from local buffer; if container param is provided and docker CLI exists, return docker logs too.
+     container: 'vision' or 'postgres' (maps to ranitas-vision / ranitas-postgres)
+  """
+  try:
+    # local buffer from state
+    local_logs = []
+    try:
+      local_logs = get_logs(n)
+    except Exception:
+      local_logs = []
+
+    # Optionally fetch docker logs (non-blocking with timeout)
+    docker_logs = None
+    if container in ('vision','postgres'):
+      import subprocess, shlex
+      container_name = 'ranitas-vision' if container == 'vision' else 'ranitas-postgres'
+      try:
+        cmd = f"docker logs --tail {tail} {container_name}"
+        proc = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=4)
+        if proc.returncode == 0:
+          docker_logs = proc.stdout.splitlines()[-tail:]
+        else:
+          docker_logs = [proc.stderr or f'docker logs failed with code {proc.returncode}']
+      except Exception as e:
+        docker_logs = [f'Error fetching docker logs: {e}']
+
+    return {'ok': True, 'logs': local_logs, 'docker_logs': docker_logs}
   except Exception as e:
     import traceback
     tb = traceback.format_exc()

@@ -1,6 +1,108 @@
 import { NextResponse } from "next/server";
 import logger from '@/lib/logger';
 import { guardarAuditoriaIaFailure } from "@/prisma/serverActions/facturaActions";
+import crypto from 'crypto';
+
+// Prompts específicos por modo
+const PROMPTS = {
+  factura: `Analiza esta imagen de factura/comprobante de compra y extrae TODA la información visible.
+Responde ÚNICAMENTE con un JSON válido (sin texto adicional, sin markdown).
+
+El JSON debe tener esta estructura exacta:
+{
+  "proveedor": {
+    "nombre": "",
+    "cuit": "",
+    "direccion": "",
+    "telefono": "",
+    "email": ""
+  },
+  "documento": {
+    "tipo": "FACTURA|REMITO|TICKET|RECIBO|NOTA_CREDITO|NOTA_DEBITO",
+    "letra": "A|B|C|X|M",
+    "numero": "",
+    "fecha": "DD/MM/AAAA",
+    "cae": "",
+    "vencimiento_cae": ""
+  },
+  "cliente": {
+    "nombre": "",
+    "cuit": "",
+    "direccion": ""
+  },
+  "items": [
+    {
+      "codigo": "",
+      "descripcion": "",
+      "cantidad": 0,
+      "unidad": "",
+      "precio_unitario": 0,
+      "descuento": 0,
+      "iva": 0,
+      "subtotal": 0
+    }
+  ],
+  "impuestos": [
+    {
+      "tipo": "IVA_21|IVA_10_5|IVA_27|PERCEPCION_IIBB|PERCEPCION_IVA|OTRO",
+      "descripcion": "",
+      "base_imponible": 0,
+      "alicuota": 0,
+      "monto": 0
+    }
+  ],
+  "descuentos": [
+    {
+      "descripcion": "",
+      "monto": 0
+    }
+  ],
+  "otros_cargos": [
+    {
+      "tipo": "FLETE|ENVIO|SEGURO|FINANCIACION|OTRO",
+      "descripcion": "",
+      "monto": 0
+    }
+  ],
+  "totales": {
+    "subtotal": 0,
+    "descuentos_total": 0,
+    "impuestos_total": 0,
+    "otros_cargos_total": 0,
+    "total": 0
+  },
+  "observaciones": "",
+  "tiene_escrito_a_mano": false,
+  "escritos_a_mano": ["]
+}
+
+IMPORTANTE:
+- Los números deben ser números (no strings)
+- Las fechas en formato DD/MM/AAAA
+- Si un campo no está visible, dejarlo como "" o 0
+- Incluir TODOS los items/productos visibles
+- Calcular subtotales si no están explícitos
+- Si hay descuentos por item, incluirlos en cada item`,
+
+  producto: `Analiza esta imagen de producto y extrae la información visible.
+Responde ÚNICAMENTE con un JSON válido:
+{
+  "nombre": "",
+  "marca": "",
+  "descripcion": "",
+  "codigo_barras": "",
+  "contenido": "",
+  "unidad_medida": "",
+  "ingredientes": "",
+  "informacion_nutricional": {},
+  "precio": 0,
+  "observaciones": ""
+}`,
+
+  general: `Analiza esta imagen y describe su contenido en detalle.
+Si es un documento, extrae la información estructurada.
+Responde en formato JSON cuando sea posible.`
+};
 
 // Minimal proxy to vision microservice
 const VISION_HOST = process.env.VISION_HOST || (process.env.NODE_ENV === 'production' ? "http://vision:8000" : "http://localhost:8000");
@@ -39,6 +141,19 @@ export async function POST(req) {
     const debug = String(formData.get('debug') || '').toLowerCase() === 'true' || String(formData.get('debug') || '') === '1';
 
     const image = formData.get('image');
+    const originalImage = formData.get('original');
+    
+    // Log what we received
+    try {
+      logger.info('Received images', { 
+        has_image: !!image, 
+        image_size: image?.size || 'unknown',
+        has_original: !!originalImage,
+        original_size: originalImage?.size || 'unknown',
+        action
+      }, '[image-route]');
+    } catch (e) {}
+    
     if (!image) {
       const tNow = Date.now();
       return NextResponse.json({ ok: false, error: 'No se recibió imagen', metadata: { timing: { totalMs: tNow - tStart, human: `${tNow - tStart}ms` } } }, { status: 400 });
@@ -46,12 +161,24 @@ export async function POST(req) {
 
     const bytes = await image.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const md5 = crypto.createHash('md5').update(buffer).digest('hex');
+    try { logger.info('Image proxy - computed checksums', { bytes: buffer.length, md5, image_type: image?.type }, '[image-route]'); } catch (e) {}
 
     if (action === 'detect-corners') {
       const form = new FormData();
-      const blob = new Blob([buffer], { type: image.type || 'image/jpeg' });
-      form.append('file', blob, image.name || 'upload.jpg');
+      // Prefer appending the original File/Blob to avoid any re-encoding/truncation issues.
+      try {
+        form.append('file', image, image.name || 'upload.jpg');
+      } catch (e) {
+        // Fallback: rebuild from buffer
+        const blob = new Blob([buffer], { type: image.type || 'image/jpeg' });
+        form.append('file', blob, image.name || 'upload.jpg');
+      }
+      // Diagnostic metadata to help detect truncation or transport issues
+      form.append('orig_len', String(buffer.length));
+      form.append('orig_md5', md5);
       if (debug) form.append('debug', 'true');
+      try { logger.info('Forwarding image to vision /crop', { bytes: buffer.length, md5, image_type: image?.type }, '[image-route]'); } catch (e) {}
 
       const vResp = await fetch(`${VISION_HOST}/crop`, { method: 'POST', body: form });
       const vData = await vResp.json().catch(() => null);
@@ -81,9 +208,17 @@ export async function POST(req) {
       if (!pointsParam) return NextResponse.json({ ok: false, error: 'Se requieren puntos para enderezar la imagen' }, { status: 400 });
       const points = JSON.parse(String(pointsParam));
       const form = new FormData();
-      const blob = new Blob([buffer], { type: image.type || 'image/jpeg' });
-      form.append('file', blob, image.name || 'upload.jpg');
+      try {
+        form.append('file', image, image.name || 'upload.jpg');
+      } catch (e) {
+        const blob = new Blob([buffer], { type: image.type || 'image/jpeg' });
+        form.append('file', blob, image.name || 'upload.jpg');
+      }
+      // Diagnostic metadata
+      form.append('orig_len', String(buffer.length));
+      form.append('orig_md5', md5);
       form.append('points', JSON.stringify(points));
+      try { logger.info('Forwarding image to vision /warp', { bytes: buffer.length, md5, image_type: image?.type, points }, '[image-route]'); } catch (e) {}
 
       const vResp = await fetch(`${VISION_HOST}/warp`, { method: 'POST', body: form });
       const vData = await vResp.json().catch(() => null);
@@ -96,7 +231,18 @@ export async function POST(req) {
 
     // Default analyze path
     const payloadImageBase64 = Buffer.from(buffer).toString('base64');
-    const payload = { image: payloadImageBase64, model: model || undefined, mode: mode || undefined };
+    
+    // Generar prompt basado en el modo
+    const promptForMode = PROMPTS[mode] || PROMPTS.general;
+    
+    const payload = { 
+      image: payloadImageBase64, 
+      model: model || undefined, 
+      mode: mode || undefined,
+      prompt: promptForMode  // Enviar el prompt específico al backend
+    };
+    
+    logger.info('Sending analyze request', { mode, prompt_length: promptForMode.length, has_model: !!model }, '[image-route]');
 
     // If the client provided src_coords (from crop), forward them to the vision analyze endpoint
     try {

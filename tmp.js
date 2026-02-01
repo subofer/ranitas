@@ -1,0 +1,1 @@
+try { let a=1; } catch(e) { console.log(e); }

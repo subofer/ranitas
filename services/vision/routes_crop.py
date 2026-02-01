@@ -12,11 +12,11 @@ def _order_pts(pts):
 
 @router.post('/crop')
 @audit('crop')
-async def crop(file: UploadFile = File(...), debug: str = Form(None)):
+async def crop(file: UploadFile = File(...), debug: str = Form(None), orig_len: str = Form(None), orig_md5: str = Form(None)):
   data = await file.read(); arr = np.frombuffer(data, np.uint8); img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
   # Log arrival
   try:
-    print(f"INFO /crop received file: {getattr(file, 'filename', getattr(file, 'filename', None))} bytes={len(data)} img_shape={tuple(img.shape) if img is not None else None}")
+    print(f"INFO /crop received file: {getattr(file, 'filename', getattr(file, 'filename', None))} bytes={len(data)} img_shape={tuple(img.shape) if img is not None else None} orig_len={orig_len} orig_md5={orig_md5}")
   except Exception:
     print("INFO /crop received file: <unable to log filename/shape>")
   t_start = time.time()
@@ -37,7 +37,53 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
   name_map_lower = {i: (v.lower() if isinstance(v,str) else v) for i,v in name_map.items()}
   # If the user configured target classes, restrict prediction to them; otherwise allow all classes
   target_idxs = [i for i,n in name_map_lower.items() if n in targets or n in prompt_phrases]
-  predict_kwargs = {'source':img, 'imgsz':1024, 'conf':0.3}
+  
+  # CRITICAL: Preserve aspect ratio; when image is significantly taller than wide, pad horizontally (black bars) symmetrically so YOLO receives a more balanced input
+  h_img, w_img = img.shape[:2]
+  pad_left = 0; pad_top = 0
+  padded_img = img
+  padded_h, padded_w = h_img, w_img
+
+  # Only pad when image is notably taller than wide to avoid unnecessary padding
+  try:
+    tall_ratio_threshold = float(state.get('TALL_RATIO_THRESHOLD', 1.25))
+  except Exception:
+    tall_ratio_threshold = 1.25
+
+  if h_img / float(max(1, w_img)) > tall_ratio_threshold:
+    new_w = h_img
+    pad_left = (new_w - w_img) // 2
+    pad_right = new_w - w_img - pad_left
+    padded_img = np.zeros((h_img, new_w, 3), dtype=img.dtype)
+    padded_img[:, pad_left:pad_left + w_img] = img
+    padded_h, padded_w = padded_img.shape[:2]
+    try:
+      print(f"INFO /crop applied horizontal padding: pad_left={pad_left}, pad_right={pad_right}, padded_size={padded_w}x{padded_h}")
+    except Exception:
+      pass
+
+  # Scale down only if padded image exceeds a max allowed size (preserve ratio)
+  max_allowed = int(state.get('MAX_IMG_DIM', 1280))
+  scale_to_predict = 1.0
+  predict_img = padded_img
+  if max(padded_h, padded_w) > max_allowed:
+    scale_to_predict = float(max_allowed) / float(max(padded_h, padded_w))
+    new_h = max(1, int(round(padded_h * scale_to_predict)))
+    new_w = max(1, int(round(padded_w * scale_to_predict)))
+    predict_img = cv2.resize(padded_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    try:
+      print(f"INFO /crop scaled padded image to predict size: {new_w}x{new_h} (scale={scale_to_predict:.4f})")
+    except Exception:
+      pass
+
+  # Do not force imgsz here; let the model use the provided image shape and its internal letterbox handling
+  predict_kwargs = {
+    'source': predict_img,
+    'conf': 0.3,
+    'augment': False,
+    'half': False,
+    'verbose': False
+  }
   if target_idxs:
     predict_kwargs['classes'] = target_idxs
   apply_name_filter = True if (targets or prompt_phrases) else False
@@ -100,7 +146,7 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
       conf = float(confs[i])
       nlower = name.lower() if isinstance(name, str) else name
       # If no name filter configured, accept all detected classes as candidates
-    if (not apply_name_filter) or nlower in targets or nlower in prompt_phrases:
+      if (not apply_name_filter) or nlower in targets or nlower in prompt_phrases:
         area = 0
         m_arr = None
         if masks is not None:
@@ -146,32 +192,124 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
     except Exception:
       pass
     h,w = img.shape[:2]
-    return {'ok':False,'error':'no_target_detected', 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}}}
+    return {'ok':False,'error':'no_target_detected', 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}}, 'received_orig': {'len': orig_len, 'md5': orig_md5}}
 
   # If detection has no mask, return bbox crop as a fallback
   if chosen['mask'] is None and chosen['box'] is not None:
     x1,y1,x2,y2 = chosen['box']
-    crop = img[y1:y2,x1:x2]; _,buf=cv2.imencode('.jpg', crop)
+    # Map coords from predict image space back to padded/original image space
     try:
-      print(f"INFO /crop returning bbox crop: box=({x1},{y1},{x2},{y2}), bytes={len(buf)}")
+      # If we scaled before predict, reverse scale
+      if 'scale_to_predict' in locals() and scale_to_predict != 1.0:
+        inv_scale = 1.0 / scale_to_predict
+        x1 = int(round(x1 * inv_scale)); x2 = int(round(x2 * inv_scale)); y1 = int(round(y1 * inv_scale)); y2 = int(round(y2 * inv_scale))
+      # If padding was applied, remove left offset
+      if 'pad_left' in locals() and pad_left:
+        x1 = x1 - pad_left; x2 = x2 - pad_left
+      # Clamp to original image bounds
+      x1 = max(0, min(x1, img.shape[1]-1)); x2 = max(0, min(x2, img.shape[1]));
+      y1 = max(0, min(y1, img.shape[0]-1)); y2 = max(0, min(y2, img.shape[0]));
+    except Exception:
+      pass
+
+    # Fallback crop on original image coordinates
+    crop = img[y1:y2, x1:x2]
+    _,buf=cv2.imencode('.jpg', crop)
+    try:
+      print(f"INFO /crop returning bbox crop (mapped to orig): box=({x1},{y1},{x2},{y2}), bytes={len(buf)}")
     except Exception:
       pass
     # Expand bbox to 4-point polygon (tl,tr,br,bl) to keep contract consistent
     src_coords = [[int(x1),int(y1)],[int(x2),int(y1)],[int(x2),int(y2)],[int(x1),int(y2)]]
     h,w = img.shape[:2]
-    return {'ok':True,'image_b64':base64.b64encode(buf).decode(),'src_coords':src_coords,'detected_class':chosen['name'], 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}, 'warped': {'w': x2-x1, 'h': y2-y1}}}
+    return {'ok':True,'image_b64':base64.b64encode(buf).decode(),'src_coords':src_coords,'detected_class':chosen['name'], 'debug': raw_debug if debug_flag else None, 'image_meta': {'original': {'w': w, 'h': h}, 'warped': {'w': x2-x1, 'h': y2-y1}}, 'received_orig': {'len': orig_len, 'md5': orig_md5}}
 
   # otherwise use the chosen mask
   mask = chosen['mask']
   if mask is None: return {'ok':False,'error':'no_segmentation_found'}
+
+  # CRITICAL: Scale mask to padded image dimensions (YOLO returns mask at model resolution), then crop to original image region if padding was applied
+  h_orig, w_orig = img.shape[:2]
+  # padded_img, padded_h/padded_w and pad_left may have been set earlier
+  try:
+    padded_h
+  except NameError:
+    padded_h, padded_w = h_orig, w_orig
+    pad_left = 0
+  h_mask, w_mask = mask.shape[:2]
+  # Resize mask to padded dimensions first
+  if (h_mask, w_mask) != (padded_h, padded_w):
+    mask = cv2.resize(mask, (padded_w, padded_h), interpolation=cv2.INTER_NEAREST)
+    try:
+      print(f"INFO /crop resized mask from {w_mask}x{h_mask} to padded {padded_w}x{padded_h}")
+    except Exception:
+      pass
+  # If we padded horizontally, crop mask back to original image width
+  if padded_w != w_orig:
+    try:
+      mask = mask[:, pad_left:pad_left + w_orig]
+      print(f"INFO /crop cropped mask to original region with pad_left={pad_left}, result={mask.shape}")
+    except Exception:
+      pass
+  # Ensure final mask matches original image dims
+  h_mask2, w_mask2 = mask.shape[:2]
+  if (h_mask2, w_mask2) != (h_orig, w_orig):
+    try:
+      mask = cv2.resize(mask, (w_orig, h_orig), interpolation=cv2.INTER_NEAREST)
+      print(f"INFO /crop final resized mask to original {w_orig}x{h_orig}")
+    except Exception:
+      pass
+
+  # Add richer debug info so caller can inspect padding/scale/mask and contour details
+  try:
+    debug_extras = {
+      'pad_left': int(pad_left) if 'pad_left' in locals() else 0,
+      'padded_size': {'w': int(padded_w), 'h': int(padded_h)},
+      'predict_scale': float(scale_to_predict) if 'scale_to_predict' in locals() else 1.0,
+      'predict_size': {'w': int(predict_img.shape[1]), 'h': int(predict_img.shape[0])} if 'predict_img' in locals() else None,
+      'mask_original_shape': {'w': int(w_mask), 'h': int(h_mask)},
+      'mask_final_shape': {'w': int(mask.shape[1]), 'h': int(mask.shape[0])}
+    }
+    raw_debug = raw_debug or {}
+    raw_debug.update({'pipeline': debug_extras})
+  except Exception as e:
+    print('DEBUG extras failed', e)
+  
   cnts,_ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
   cnt = max(cnts, key=cv2.contourArea)
-  eps = 0.02*cv2.arcLength(cnt, True); approx = cv2.approxPolyDP(cnt, eps, True)
+  try:
+    print(f"INFO /crop contour area={cv2.contourArea(cnt)}, points={len(cnt)}")
+  except Exception:
+    pass
+  eps = 0.01*cv2.arcLength(cnt, True); approx = cv2.approxPolyDP(cnt, eps, True)
+  try:
+    print(f"INFO /crop approx polygon: {len(approx)} vertices (target=4)")
+  except Exception:
+    pass
   if len(approx)==4:
     pts = approx.reshape(4,2).astype('float32')
   else:
     rect = cv2.minAreaRect(cnt); pts = cv2.boxPoints(rect).astype('float32')
+  try:
+    print(f"INFO /crop raw points before ordering: {pts.tolist()}")
+  except Exception:
+    pass
   src = _order_pts(pts); (tl,tr,br,bl)=src
+  try:
+    print(f"INFO /crop ordered points: tl={tl.tolist()}, tr={tr.tolist()}, br={br.tolist()}, bl={bl.tolist()}")
+  except Exception:
+    pass
+
+  # Compute contour bbox for extra diagnostics
+  try:
+    x_coords = src[:,0]
+    y_coords = src[:,1]
+    contour_bbox = {'min_x': int(x_coords.min()), 'max_x': int(x_coords.max()), 'min_y': int(y_coords.min()), 'max_y': int(y_coords.max())}
+    raw_debug = raw_debug or {}
+    raw_debug.update({'contour_bbox': contour_bbox})
+  except Exception:
+    pass
+
   wA = np.linalg.norm(br-bl); wB = np.linalg.norm(tr-tl); maxW = max(int(wA), int(wB))
   hA = np.linalg.norm(tr-br); hB = np.linalg.norm(tl-bl); maxH = max(int(hA), int(hB))
   dst = np.array([[0,0],[maxW-1,0],[maxW-1,maxH-1],[0,maxH-1]], dtype='float32')
@@ -190,15 +328,16 @@ async def crop(file: UploadFile = File(...), debug: str = Form(None)):
     'detected_class': chosen['name'] if 'chosen' in locals() and chosen else None,
     'debug': raw_debug if debug_flag else None,
     'image_meta': {'original': {'w': w, 'h': h}, 'warped': {'w': maxW, 'h': maxH}},
+    'received_orig': {'len': orig_len, 'md5': orig_md5},
   }
 
 @router.post('/warp')
 @audit('warp')
-async def warp(file: UploadFile = File(...), points: str = Form(None)):
+async def warp(file: UploadFile = File(...), points: str = Form(None), orig_len: str = Form(None), orig_md5: str = Form(None)):
   # points is expected as JSON string list of 4 points [[x,y],...]
   data = await file.read(); arr = np.frombuffer(data, np.uint8); img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
   try:
-    print(f"INFO /warp received file bytes={len(data)} img_shape={tuple(img.shape) if img is not None else None} points_param={str(points)[:200]}")
+    print(f"INFO /warp received file bytes={len(data)} img_shape={tuple(img.shape) if img is not None else None} points_param={str(points)[:200]} orig_len={orig_len} orig_md5={orig_md5}")
   except Exception:
     pass
   if not points:

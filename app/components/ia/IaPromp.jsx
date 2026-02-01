@@ -36,10 +36,12 @@ function TabSelector({ activeTab, onChange }) {
 }
 
 // Mensaje de bienvenida cuando no hay modelos
-function NoModelsMessage() {
+function NoModelsMessage({ onContinue, onStartService }) {
   const [showStatus, setShowStatus] = useState(false);
   const [status, setStatus] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [startingService, setStartingService] = useState(false);
+  const [startOutput, setStartOutput] = useState(null);
 
   const fetchStatus = useCallback(async () => {
     setLoadingStatus(true);
@@ -55,6 +57,21 @@ function NoModelsMessage() {
       setLoadingStatus(false);
     }
   }, []);
+
+  const handleStartService = async () => {
+    setStartingService(true);
+    setStartOutput(null);
+    try {
+      const r = await onStartService();
+      if (!r || !r.ok) throw new Error(r?.error || 'Error al iniciar servicio');
+      setStartOutput((r.data && r.data.output) || (r.data && r.data.message) || 'Servicio iniciado correctamente');
+      // Refresh podría ser necesario, pero como es un componente, quizás no
+    } catch (e) {
+      setStartOutput(String(e));
+    } finally {
+      setStartingService(false);
+    }
+  };
 
   return (
     <div className="bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-200 rounded-xl p-8 text-center shadow-sm">
@@ -72,7 +89,7 @@ function NoModelsMessage() {
         como disponible.
       </p>
 
-      <div className="flex justify-center gap-2 mb-4">
+      <div className="flex flex-wrap justify-center gap-2 mb-4">
         <button
           onClick={fetchStatus}
           disabled={loadingStatus}
@@ -88,7 +105,31 @@ function NoModelsMessage() {
         >
           Documentación
         </button>
+        <button
+          onClick={handleStartService}
+          disabled={startingService}
+          className="px-3 py-1 rounded bg-green-600 text-white text-sm hover:bg-green-700"
+        >
+          {startingService ? "Iniciando…" : "Arrancar servicio"}
+        </button>
+        <button
+          onClick={onContinue}
+          className="px-3 py-1 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
+        >
+          Continuar de todos modos
+        </button>
       </div>
+
+      {startOutput && (
+        <div className="bg-white rounded-lg p-4 text-left font-mono text-sm border-2 border-gray-200 max-w-lg mx-auto shadow-inner mb-4">
+          <div className="text-xs text-gray-500 mb-2">
+            Resultado del inicio de servicio:
+          </div>
+          <pre className="whitespace-pre-wrap text-xs text-gray-800">
+            {startOutput}
+          </pre>
+        </div>
+      )}
 
       {showStatus && status && (
         <div className="bg-white rounded-lg p-4 text-left font-mono text-sm border-2 border-gray-200 max-w-lg mx-auto shadow-inner">
@@ -205,8 +246,9 @@ function ControlHeader({ tab, setTab, minimalHeader = true }) {
 // ========== COMPONENTE PRINCIPAL ==========
 const IaPrompt = () => {
   const { model } = useAiContext();
-  const { loadedModels, probeState, statusInfo } = useVisionStatusContext();
+  const { loadedModels, probeState, statusInfo, startService, refresh } = useVisionStatusContext();
   const [tab, setTab] = useState("image");
+  const [showUIAnyway, setShowUIAnyway] = useState(false);
 
   return (
     <div className="grid gap-5 p-4">
@@ -214,16 +256,16 @@ const IaPrompt = () => {
 
       <div className="bg-white shadow-lg rounded-xl border-2 border-gray-200 p-6">
         {/* Show NoModelsMessage only when the service is not running and we're not waiting for a response */}
-        {!model &&
+        {!showUIAnyway && !model &&
           !(
             probeState === "waiting" ||
             (statusInfo &&
               statusInfo.container &&
               statusInfo.container.container_running)
-          ) && <NoModelsMessage />}
+          ) && <NoModelsMessage onContinue={() => setShowUIAnyway(true)} onStartService={async () => { const r = await startService('vision'); await refresh(); return r; }} />}
 
-        {/* If we have a model selected or the service is up, render the tabs so the page can load */}
-        {(model ||
+        {/* Render the tabs if we have models, service is running, or user chose to continue anyway */}
+        {(showUIAnyway || model ||
           (statusInfo &&
             statusInfo.container &&
             statusInfo.container.container_running)) && (

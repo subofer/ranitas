@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
+import { createHash } from 'crypto' 
 
 let yoloProcess = null
 let startingPromise = null
@@ -66,10 +67,20 @@ export async function POST(req) {
       }
     }
 
-    // Proxy the image to the YOLO service
+    // Proxy the image to the YOLO service (compute checksum/length for diagnostics)
     const proxyForm = new FormData()
-    // The incoming File / Blob can be appended directly
-    proxyForm.append('file', image, image.name || 'upload.jpg')
+    const bytes = await image.arrayBuffer()
+    const buf = Buffer.from(bytes)
+    const md5 = createHash('md5').update(buf).digest('hex')
+    try {
+      // Prefer original File object when possible
+      proxyForm.append('file', image, image.name || 'upload.jpg')
+    } catch (e) {
+      proxyForm.append('file', new Blob([buf], { type: image.type || 'image/jpeg' }), image.name || 'upload.jpg')
+    }
+    proxyForm.append('orig_len', String(buf.length))
+    proxyForm.append('orig_md5', md5)
+    console.info('Proxying image to YOLO service', { bytes: buf.length, md5, filename: image.name || null })
 
     const resp = await fetch(YOLO_URL + '/vision/yolo', { method: 'POST', body: proxyForm })
     const data = await resp.json().catch(async (e) => {

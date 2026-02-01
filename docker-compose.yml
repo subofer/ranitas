@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: ranitas-postgres
     environment:
       POSTGRES_DB: las_ranitas
       POSTGRES_USER: postgres
@@ -23,24 +24,25 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./services/yolo/models:/app/models
-      - vision-cache:/root/.cache
-      - vision-ollama:/root/.ollama
+      # Modelos YOLO locales persistidos en host (yoloe-26x-seg.pt y mobileclip2_b.ts)
+      - ./services/vision/models:/app/models
+      # Modelos Ollama persistidos en host (evita re-descarga de qwen2.5vl:7b ~4GB)
+      - ./services/vision/models/ollama:/root/.ollama
       # Mount host timezone so container logs/timestamps match host
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      - YOLO_MODEL_PATH=/app/models/yoloe-26x-seg.pt
+      - VISION_MODEL=/app/models/yoloe-26x-seg.pt
       - YOLO_CONF=0.25
       - MASK_THRESHOLD=0.5
+      - LLM_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5vl:7b}
       - OLLAMA_HOST=http://127.0.0.1:11434
       # Avoid auto-pulling the configured OLLAMA model on every container start
       - OLLAMA_AUTO_PULL=${OLLAMA_AUTO_PULL:-0}
       # Where ultralytics and other libs should place caches (persisted to docker volume)
       - XDG_CACHE_HOME=/root/.cache
-      # Optional explicit path for a pre-downloaded mobileclip: set to /app/models/mobileclip2_b.ts or a mounted path
-      - MOBILECLIP_PATH=/app/models/mobileclip2_b.ts
+      - ULTRALYTICS_CACHE_DIR=/root/.cache/ultralytics
       # Container timezone (set TZ in your environment or .env to match host timezone, default UTC)
       - TZ=${TZ:-UTC}
       - NVIDIA_VISIBLE_DEVICES=all
@@ -48,8 +50,8 @@ services:
       # Reduce verbosity
       - OLLAMA_DEBUG=ERROR
       - PYTHONWARNINGS=ignore
-      - PYTHONUNBUFFERED=0
-      - YOLO_CONFIG_DIR=/tmp/ultralytics
+      - PYTHONUNBUFFERED=1
+      - YOLO_CONFIG_DIR=/tmp
     # Use container ENTRYPOINT (entrypoint.sh) to start Ollama + FastAPI
     runtime: nvidia
     healthcheck:
@@ -63,4 +65,3 @@ services:
 volumes:
   dbdata:
   vision-cache:
-  vision-ollama:
